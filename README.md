@@ -1,14 +1,9 @@
-# Project
+# Azure RunCommand Extension Handler for Linux (1.3.0) 
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
-
-As the maintainer of this project, please make a few updates:
-
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+RunCommand extension handler runs scripts on VMs send by deploying a RunCommand resource to a Linux VM.
+These scripts can be used to bootstrap/install software, run administrative tasks, or run
+automation tasks. RunCommand can run an inline script you specify or
+download a script file from the Internet or Azure Storage.
 
 ## Contributing
 

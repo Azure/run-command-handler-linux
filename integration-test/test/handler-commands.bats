@@ -1,0 +1,366 @@
+#!/usr/bin/env bats
+
+IMAGE=run-command
+DOCKERFILE=test.Dockerfile
+TEST_CONTAINER=test
+ARCHITECTURE=linux/amd64
+
+load test_helper
+
+setup(){
+    build_docker_image
+}
+
+teardown(){
+    rm -rf "$certs_dir"
+}
+@test "multiconfig: passing parameters" {
+    # export ConfigExtensionName=extname && export ConfigSequenceNumber=99 will be read from the extension to determine the settings file name
+    mk_container sh -c "fake-waagent install && fake-waagent enable extname 99 && wait-for-enable "
+    push_settings '
+    {
+        "source": {
+            "script": "echo $@; echo $Variable1 $Variable2"
+        },
+        "parameters" : [
+            {"Name": "", "Value": "arg0"},
+            {"Name": "Variable1", "Value": "value1"}
+        ]
+    }' '{
+        "protectedParameters" : [
+            {"Name": "", "Value": "arg1"},
+            {"Name": "Variable2", "Value": "value2"}
+        ]
+    }' 'extname.99.settings'
+    run start_container
+    echo "$output"
+
+    # Validate contents of stdout/stderr files
+    stdout="$(container_read_file /var/lib/waagent/run-command-handler/download/extname/99/stdout)"
+    echo "stdout=$stdout" && [[ "$stdout" = *"arg0 arg1"* ]]
+    echo "stdout=$stdout" && [[ "$stdout" = *"value1 value2"* ]]
+}
+
+@test "multiconfig: partial status report" {
+    # export ConfigExtensionName=extname && export ConfigSequenceNumber=5 will be read from the extension to determine the settings file name
+    mk_container sh -c "fake-waagent install && fake-waagent enable extname 5 && wait-for-enable "
+    push_settings '
+    {
+        "source": {
+            "script": "echo First Part; sleep 31; cp /var/lib/waagent/Extension/status/extname.5.status /var/lib/waagent/Extension/status/partial.status ;echo Second Part"
+        }
+    }' '' 'extname.5.settings'
+    run start_container
+    echo "$output" && [[ "$output" = *'report partial status'* ]]
+
+    # Validate contents of stdout/stderr files
+    stdout="$(container_read_file /var/lib/waagent/run-command-handler/download/extname/5/stdout)"
+    echo "stdout=$stdout" && [[ "$stdout" = *'First Part'* ]]
+    echo "stdout=$stdout" && [[ "$stdout" = *'Second Part'* ]]
+
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/extname.5.status)"
+    echo "status_file=$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+    [[ "$status_file" = *'First Part'* ]]
+    [[ "$status_file" = *'Second Part'* ]]
+
+    partial_status_file="$(container_read_file /var/lib/waagent/Extension/status/partial.status)"
+    echo "partial_status_file=$partial_status_file"
+    [[ "$partial_status_file" = *'Execution in progress'* ]]
+    [[ "$partial_status_file" = *'First Part'* ]]
+    [[ "$partial_status_file" != *'Second Part'* ]]
+}
+
+@test "multiconfig: run two extensions in parallel" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable extname 5 && fake-waagent enable second 0 && wait-for-enable "
+    push_settings '
+    {
+        "source": {
+            "script": "echo HelloStdout>&1; echo HelloStderr>&2; sleep 2"
+        }
+    }' '' 'extname.5.settings'
+    push_settings '
+    {
+        "source": {
+            "script": "echo SecondOutput>&1; echo SecondError>&2; sleep 2"
+        }
+    }' '' 'second.0.settings'
+    run start_container
+    echo "$output"
+
+    # Validate contents of stdout/stderr files
+    stdout="$(container_read_file /var/lib/waagent/run-command-handler/download/extname/5/stdout)"
+    echo "stdout=$stdout" && [[ "$stdout" = "HelloStdout" ]]
+    stderr="$(container_read_file /var/lib/waagent/run-command-handler/download/extname/5/stderr)"
+    echo "stderr=$stderr" && [[ "$stderr" = "HelloStderr" ]]
+
+    config_file="$(container_read_file /var/lib/waagent/Extension/config/extname.5.settings)"
+    echo "config_file=$config_file"
+    [[ "$config_file" = *'echo HelloStdout>&1; echo HelloStderr>&2'* ]]
+
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/extname.5.status)"
+    echo "status_file=$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+    [[ "$status_file" = *'HelloStdout'* ]]
+    [[ "$status_file" = *'HelloStderr'* ]]
+
+    mrseq_file="$(container_read_file /var/lib/waagent/extname.mrseq)"
+    echo "mrseq_file=$mrseq_file"
+    [[ "$mrseq_file" = '5' ]]
+
+        # Validate contents of stdout/stderr files for second extension
+    stdout="$(container_read_file /var/lib/waagent/run-command-handler/download/second/0/stdout)"
+    echo "stdout=$stdout" && [[ "$stdout" = "SecondOutput" ]]
+    stderr="$(container_read_file /var/lib/waagent/run-command-handler/download/second/0/stderr)"
+    echo "stderr=$stderr" && [[ "$stderr" = "SecondError" ]]
+
+    config_file="$(container_read_file /var/lib/waagent/Extension/config/second.0.settings)"
+    echo "config_file=$config_file"
+    [[ "$config_file" = *'echo SecondOutput>&1; echo SecondError>&2'* ]]
+
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/second.0.status)"
+    echo "status_file=$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+    [[ "$status_file" = *'SecondOutput'* ]]
+    [[ "$status_file" = *'SecondError'* ]]
+
+    mrseq_file="$(container_read_file /var/lib/waagent/second.mrseq)"
+    echo "mrseq_file=$mrseq_file"
+    [[ "$mrseq_file" = '0' ]]
+}
+
+@test "multiconfig: captures stdout/stderr into file and extName.seqNo.status" {
+    # export ConfigExtensionName=extname && export ConfigSequenceNumber=5 will be read from the extension to determine the settings file name
+    mk_container sh -c "fake-waagent install && fake-waagent enable extname 5 && wait-for-enable "
+    push_settings '
+    {
+        "source": {
+            "script": "echo HelloStdout>&1; echo HelloStderr>&2"
+        }
+    }' '' 'extname.5.settings'
+    run start_container
+    echo "$output"
+
+    # Validate contents of stdout/stderr files
+    stdout="$(container_read_file /var/lib/waagent/run-command-handler/download/extname/5/stdout)"
+    echo "stdout=$stdout" && [[ "$stdout" = "HelloStdout" ]]
+    stderr="$(container_read_file /var/lib/waagent/run-command-handler/download/extname/5/stderr)"
+    echo "stderr=$stderr" && [[ "$stderr" = "HelloStderr" ]]
+
+    config_file="$(container_read_file /var/lib/waagent/Extension/config/extname.5.settings)"
+    echo "config_file=$config_file"
+    [[ "$config_file" = *'echo HelloStdout>&1; echo HelloStderr>&2'* ]]
+
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/extname.5.status)"
+    echo "status_file=$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+    [[ "$status_file" = *'HelloStdout'* ]]
+    [[ "$status_file" = *'HelloStderr'* ]]
+
+    mrseq_file="$(container_read_file /var/lib/waagent/extname.mrseq)"
+    echo "mrseq_file=$mrseq_file"
+    [[ "$mrseq_file" = '5' ]]
+}
+
+@test "handler command: install - creates the data dir" {
+    run in_container fake-waagent install
+    echo "$output"
+    [ "$status" -eq 0 ]
+    [[ "$output" = *event=installed* ]]
+
+    diff="$(container_diff)"
+    echo "$diff"
+    [[ "$diff" = *"A /var/lib/waagent/run-command-handler"* ]]
+}
+
+@test "handler command: enable - can process empty settings, but fails" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable"
+    push_settings '' ''
+
+    run start_container
+    echo "$output"
+    [[ "$output" == *"invalid configuration: Either 'source.script' or 'source.scriptUri' has to be specified"* ]]
+
+     # Validate .status file says enable failed
+     diff="$(container_diff)"; echo "$diff"
+    [[ "$diff" = *"A /var/lib/waagent/Extension/status/0.status"* ]]
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/0.status)"
+    echo "$status_file"
+    [[ "$status_file" = *'Execution failed'* ]]
+    [[ "$status_file" = *'Running'* ]]
+    [[ "$status_file" = *"invalid configuration: Either 'source.script' or 'source.scriptUri'"* ]]
+}
+
+@test "handler command: enable - validates json schema" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable"
+    push_settings '{"badElement":null, "source": {"script":"date"}}' ''
+   
+    run start_container
+    echo "$output"
+    [[ "$output" == *"json validation error: invalid public settings JSON: badElement"* ]]
+}
+
+@test "handler command: enable - captures stdout/stderr into file and .status" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable"
+    push_settings '
+    {
+        "source": {
+            "script": "echo HelloStdout>&1; echo HelloStderr>&2"
+        }
+    }' ''
+    run start_container
+    echo "$output"
+
+    # Validate contents of stdout/stderr files
+    stdout="$(container_read_file /var/lib/waagent/run-command-handler/download/0/stdout)"
+    echo "stdout=$stdout" && [[ "$stdout" = "HelloStdout" ]]
+    stderr="$(container_read_file /var/lib/waagent/run-command-handler/download/0/stderr)"
+    echo "stderr=$stderr" && [[ "$stderr" = "HelloStderr" ]]
+
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/0.status)"
+    echo "status_file=$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+    [[ "$status_file" = *'HelloStdout'* ]]
+    [[ "$status_file" = *'HelloStderr'* ]]
+}
+
+@test "handler command: enable - captures stdout/stderr into .status on error" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable"
+    push_settings '
+    {
+        "source": {
+            "script": "ls /does-not-exist"
+        }
+    }' ''
+    run start_container
+    echo "$output"
+
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/0.status)"
+    echo "status_file=$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+    [[ "$status_file" = *'ls: cannot access'* ]]
+}
+
+@test "handler command: enable - doesn't process the same sequence number again" {
+    mk_container sh -c \
+        "fake-waagent install && fake-waagent enable && wait-for-enable && fake-waagent enable && wait-for-enable"
+    push_settings '{"source": {"script":"date"}}' ''
+   
+    run start_container
+    echo "$output"
+    enable_count="$(echo "$output" | grep -c 'event=enabled')"
+    echo "Enable count=$enable_count"
+    [ "$enable_count" -eq 1 ]
+    [[ "$output" == *"the script configuration has already been processed, will not run again"* ]] # not processed again
+}
+
+@test "handler command: enable - parses public settings" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable"
+    push_settings '{"source": {"script":"touch /a.txt"}}' ''
+    run start_container
+    echo "$output"
+
+    diff="$(container_diff)"; echo "$diff"
+    [[ "$diff" == *"A /a.txt"* ]]
+}
+
+@test "handler command: asyncExecution is true" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable"
+    push_settings '
+    {
+        "asyncExecution": true,
+        "source": {"script": "echo Hello"}
+    }' ''
+    run start_container
+    echo "$output"
+
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/0.status)"
+    echo "status_file=$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+    [[ "$status_file" = *'Hello'* ]]
+}
+
+@test "handler command: enable - downloads files" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable"
+    # download an external script and run it
+    push_settings '{
+            "source": {
+                "scriptUri": "https://github.com/Azure/run-command-handler-linux/raw/master/integration-test/testdata/script.sh"
+            }
+        }'
+    run start_container
+    echo "$output"
+
+    diff="$(container_diff)"; echo "$diff"
+    [[ "$diff" == *"A /var/lib/waagent/run-command-handler/download/0/script.sh"* ]] # file downloaded
+    [[ "$diff" == *"A /b.txt"* ]] # created by script.sh
+}
+
+# @test "handler command: enable - download files from storage account" {
+#     if [[ -z  "$AZURE_STORAGE_ACCOUNT" ]] || [[ -z  "$AZURE_STORAGE_ACCESS_KEY" ]]; then
+#         skip "AZURE_STORAGE_ACCOUNT or AZURE_STORAGE_ACCESS_KEY not specified"
+#     fi
+
+#     # make random file
+#     tmp="$(mktemp)"
+#     dd if=/dev/urandom of="$tmp" bs=1k count=512
+
+#     # upload files to a storage container
+#     cnt="testcontainer"
+#     blob1="blob1-$RANDOM"
+#     blob2="blob2 with spaces-$RANDOM"
+#     azure storage container show  "$cnt" 1>/dev/null ||
+#         azure storage container create "$cnt" 1>/dev/null && echo "Azure Storage container created">&2
+#     azure storage blob upload -f "$tmp" "$cnt" "$blob1" 1>/dev/null  # upload blob1
+#     azure storage blob upload -f "$tmp" "$cnt" "$blob2" 1>/dev/null # upload blob2
+
+#     blob1_url="http://$AZURE_STORAGE_ACCOUNT.blob.core.windows.net/$cnt/$blob1" # over http
+#     blob2_url="https://$AZURE_STORAGE_ACCOUNT.blob.core.windows.net/$cnt/$blob2" # over https
+
+#     mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable" # add sleep for enable to finish in the background
+#     # download an external script and run it
+#     push_settings '{
+#             "source": {
+#                 "scriptUri": "$blob1_url"
+#             }
+#         }' ''
+#     run start_container
+#     echo "$output"
+#     [ "$status" -eq 0 ]
+#     [[ "$output" == *'file=0 event="download complete"'* ]]
+#     [[ "$output" == *'file=1 event="download complete"'* ]]
+
+#     diff="$(container_diff)"; echo "$diff"
+#     [[ "$diff" == *"A /var/lib/waagent/run-command-handler/download/0/$blob1"* ]] # file downloaded
+#     [[ "$diff" == *"A /var/lib/waagent/run-command-handler/download/0/$blob2"* ]] # file downloaded
+
+#     # compare checksum
+#     existing=$(md5 -q "$tmp")
+#     echo "Local file checksum: $existing"
+#     got=$(container_read_file "/var/lib/waagent/run-command-handler/download/0/$blob1" | md5 -q)
+#     echo "Downloaded file checksum: $got"
+#     [[ "$existing" == "$got" ]]
+# }
+
+
+@test "handler command: enable - forking into background does not overwrite existing status" {
+    mk_container sh -c "fake-waagent install && fake-waagent enable && wait-for-enable && fake-waagent enable && wait-for-enable"
+    push_settings '{"source": {"script": "date"}}' ''
+    run start_container
+    echo "$output"
+
+    # validate .status file still reads "Enable succeeded"
+    status_file="$(container_read_file /var/lib/waagent/Extension/status/0.status)"
+    echo "$status_file"
+    [[ "$status_file" = *'Execution completed'* ]]
+}
+
+@test "handler command: uninstall - deletes the data dir" {
+    run in_container sh -c \
+        "fake-waagent install && fake-waagent uninstall"
+    echo "$output"
+    [ "$status" -eq 0 ]
+
+    diff="$(container_diff)" && echo "$diff"
+    [[ "$diff" != */var/lib/waagent/run-command* ]]
+}
