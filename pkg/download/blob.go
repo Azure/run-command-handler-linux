@@ -68,11 +68,10 @@ func NewBlobDownload(accountName, accountKey string, blob blobutil.AzureBlobRef)
 // GetSASBlob download a blob with specified uri and sas authorization and saves it to the target directory
 // Returns the filePath where the blob was downloaded
 func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
-	bloburl, err := url.Parse(blobURI)
+	bloburl, err := url.Parse(blobURI + blobSas)
 	if err != nil {
 		return "", errors.Wrapf(err, "unable to parse URL: %q", blobURI)
 	}
-	bloburl.RawQuery = blobSas
 
 	containerRef, err := storage.GetContainerReferenceFromSASURI(*bloburl)
 	if err != nil {
@@ -112,11 +111,10 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 // CreateAppendBlob creates a reference to an append blob. If blob exists - it gets deleted first.
 func CreateAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 
-	bloburl, err := url.Parse(blobURI)
+	bloburl, err := url.Parse(blobURI + blobSas)
 	if err != nil {
 		return nil, err
 	}
-	bloburl.RawQuery = blobSas
 
 	containerRef, err := storage.GetContainerReferenceFromSASURI(*bloburl)
 	if err != nil {
