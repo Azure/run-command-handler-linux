@@ -233,6 +233,13 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		ctx.Log("event", "enable script failed")
 	}
 
+	err = cleanUpSettings(h.HandlerEnvironment.ConfigFolder)
+	if err != nil {
+		ctx.Log("message", "error clearing config folder")
+	} else {
+		ctx.Log("message", "config folder cleared successfully")
+	}
+
 	// Report the output streams to blobs
 	outputFilePosition, err = reportOutputToBlob(stdoutF, outputBlobRef, outputFilePosition)
 	errorFilePosition, err = reportOutputToBlob(stderrF, errorBlobRef, errorFilePosition)
