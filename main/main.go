@@ -37,6 +37,8 @@ var (
 
 	// configExtensionName environment variable should be set by VMAgent to extension name
 	configExtensionName = "ConfigExtensionName"
+
+	configFileExtension = ".settings"
 )
 
 func main() {
@@ -64,22 +66,23 @@ func main() {
 			os.Exit(cmd.failExitCode)
 		}
 	}
+
+	extensionName := os.Getenv(configExtensionName)
+	if extensionName != "" {
+		ctx = ctx.With("extensionName", extensionName)
+		downloadDir = downloadDir + "/" + extensionName
+		mostRecentSequence = extensionName + "." + mostRecentSequence
+		pidFilePath = extensionName + "." + pidFilePath
+	}
+
 	// Read the seqNum from latest config file in case VMAgent did not set it as env variable
 	if seqNum == -1 {
-		seqNum, err = FindSeqNumConfig(hEnv.HandlerEnvironment.ConfigFolder)
+		seqNum, err = FindSequenceNumberFromConfig(hEnv.HandlerEnvironment.ConfigFolder, configFileExtension, extensionName)
 		if err != nil {
 			ctx.Log("messsage", "failed to find sequence number", "error", err)
 		}
 	}
 	ctx = ctx.With("seq", seqNum)
-
-	extName := os.Getenv(configExtensionName)
-	if extName != "" {
-		ctx = ctx.With("extensionName", extName)
-		downloadDir = downloadDir + "/" + extName
-		mostRecentSequence = extName + "." + mostRecentSequence
-		pidFilePath = extName + "." + pidFilePath
-	}
 
 	// check sub-command preconditions, if any, before executing
 	ctx.Log("event", "start")
@@ -100,17 +103,17 @@ func main() {
 		EndTime:          "",
 	}
 
-	reportInstanceView(ctx, hEnv, extName, seqNum, StatusTransitioning, cmd, &instanceView)
+	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusTransitioning, cmd, &instanceView)
 
 	// execute the subcommand
-	stdout, stderr, err := cmd.invoke(ctx, hEnv, &instanceView, extName, seqNum)
+	stdout, stderr, err := cmd.invoke(ctx, hEnv, &instanceView, extensionName, seqNum)
 	if err != nil {
 		ctx.Log("event", "failed to handle", "error", err)
 		instanceView.ExecutionMessage = "Execution failed: " + err.Error()
 		instanceView.ExecutionState = Failed
 		instanceView.ExitCode = -1
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
-		reportInstanceView(ctx, hEnv, extName, seqNum, StatusSuccess, cmd, &instanceView)
+		reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 		os.Exit(cmd.failExitCode)
 	}
 	instanceView.ExecutionMessage = "Execution completed"
@@ -118,7 +121,7 @@ func main() {
 	instanceView.Output = stdout
 	instanceView.Error = stderr
 	instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
-	reportInstanceView(ctx, hEnv, extName, seqNum, StatusSuccess, cmd, &instanceView)
+	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 	ctx.Log("event", "end")
 }
 
