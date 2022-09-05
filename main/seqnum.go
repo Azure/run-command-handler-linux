@@ -17,29 +17,22 @@ const (
 	chmod = os.FileMode(0600)
 )
 
-// FindSeqNumConfig gets the laster seq no from config files
-func FindSeqNumConfig(path string) (int, error) {
-	return FindSeqNum(path, ".settings")
-}
-
-// FindSeqNumStatus gets the laster seq no from status files
-func FindSeqNumStatus(path string) (int, error) {
-	return FindSeqNum(path, ".status")
-}
-
-// FindSeqNum finds the file with the highest number under configFolder
-// named like 0.settings, 1.settings so on.
-func FindSeqNum(path, ext string) (int, error) {
-	g, err := filepath.Glob(filepath.Join(path, fmt.Sprintf("*%s", ext)))
+// FindSequenceNumberFromConfig finds the file with the highest sequence number for an extension under configFolder
+// named like <RunCommandName>.0.settings, <RunCommandName>.1.settings so on.
+func FindSequenceNumberFromConfig(path, fileExtension string, extensionName string) (int, error) {
+	g, err := filepath.Glob(filepath.Join(path, fmt.Sprintf("%s.*%s", extensionName, fileExtension)))
 	if err != nil {
 		return 0, err
 	}
 	seqs := make([]int, len(g))
 	for _, v := range g {
 		f := filepath.Base(v)
-		i, err := strconv.Atoi(strings.TrimSuffix(f, filepath.Ext(f)))
+		fileNameWithoutExtension := strings.TrimSuffix(f, filepath.Ext(f))
+		dotAndSequenceNumberString := filepath.Ext(fileNameWithoutExtension) // returns something like ".<sequenceNumber>"
+		sequenceNumberString := dotAndSequenceNumberString[1:]               // Remove '.' in the front
+		i, err := strconv.Atoi(sequenceNumberString)
 		if err != nil {
-			return 0, fmt.Errorf("Can't parse int from filename: %s", f)
+			continue // continue to the next filename if Atoi fails
 		}
 		seqs = append(seqs, i)
 	}
