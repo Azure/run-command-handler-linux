@@ -79,7 +79,9 @@ func main() {
 	if seqNum == -1 {
 		seqNum, err = FindSequenceNumberFromConfig(hEnv.HandlerEnvironment.ConfigFolder, configFileExtension, extensionName)
 		if err != nil {
-			ctx.Log("messsage", "failed to find sequence number", "error", err)
+			ctx.Log("FindSequenceNumberFromConfig", "failed to find sequence number from config folder.", "error", err)
+		} else {
+			ctx.Log("FindSequenceNumberFromConfig", fmt.Sprintf("Sequence number determined from config folder: %d", seqNum))
 		}
 	}
 	ctx = ctx.With("seq", seqNum)
