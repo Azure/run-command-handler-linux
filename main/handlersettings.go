@@ -59,6 +59,20 @@ type protectedSettings struct {
 	OutputBlobSASToken  string                `json:"outputBlobSASToken"`
 	ErrorBlobSASToken   string                `json:"errorBlobSASToken"`
 	ProtectedParameters []parameterDefinition `json:"protectedParameters"`
+
+	// Managed identity to use for reading the script if its not a SAS and if the VM doesn't have a system managed identity
+	SourceManagedIdentity *RunCommandManagedIdentity `json:"sourceManagedIdentity"`
+
+	// Managed identity to use for writing the output blob if the VM doesn't have a system managed identity
+	OutputBlobManagedIdentity *RunCommandManagedIdentity `json:"outputBlobManagedIdentity"`
+
+	// Managed identity to use for writing the error blob if the VM doesn't have a system managed identity
+	ErrorBlobManagedIdentity *RunCommandManagedIdentity `json:"errorBlobManagedIdentity"`
+}
+
+type RunCommandManagedIdentity struct {
+	ObjectId string `json:"objectId"`
+	ClientId string `json:"clientId"`
 }
 
 type scriptSource struct {

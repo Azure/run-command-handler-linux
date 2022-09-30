@@ -48,6 +48,12 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 				out.Close()
 			}
 
+			// If there is an access issue while downloading using this downloader, use next downloader
+			// For ex. User may have set up access to blob using managed identity, but not using public blob access or vice-versa.
+			if isAccessIssueHttpStatusCode(status) {
+				break
+			}
+
 			// status == -1 the value when there was no http request
 			if status != -1 && !isTransientHttpStatusCode(status) {
 				ctx.Log("info", fmt.Sprintf("downloader %T returned %v, skipping retries", d, status))
@@ -75,6 +81,18 @@ func isTransientHttpStatusCode(statusCode int) bool {
 		http.StatusServiceUnavailable,  // 503
 		http.StatusGatewayTimeout:      // 504
 		return true // timeout and too many requests
+	default:
+		return false
+	}
+}
+
+func isAccessIssueHttpStatusCode(statusCode int) bool {
+	switch statusCode {
+	case
+		http.StatusUnauthorized, // 401
+		http.StatusForbidden,    // 403
+		http.StatusNotFound:     // 404
+		return true
 	default:
 		return false
 	}
