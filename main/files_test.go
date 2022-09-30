@@ -27,20 +27,20 @@ func Test_getDownloader_azureBlob(t *testing.T) {
 }
 
 func Test_getDownloader_externalUrl(t *testing.T) {
-	d, err := getDownloaders("http://acct.blob.core.windows.net/")
+	d, err := getDownloaders("http://acct.blob.core.windows.net/", nil)
 	require.Nil(t, err)
 	require.NotNil(t, d)
 	require.NotEmpty(t, d)
 	require.Equal(t, 1, len(d))
 	require.Equal(t, "download.urlDownload", fmt.Sprintf("%T", d[0]), "got wrong type")
 
-	d, err = getDownloaders("http://acct.blob.core.windows.net/")
+	d, err = getDownloaders("http://acct.blob.core.windows.net/", nil)
 	require.Nil(t, err)
 	require.NotNil(t, d)
 	require.Equal(t, 1, len(d))
 	require.Equal(t, "download.urlDownload", fmt.Sprintf("%T", d[0]), "got wrong type")
 
-	d, err = getDownloaders("http://acct.blob.core.windows.net/")
+	d, err = getDownloaders("http://acct.blob.core.windows.net/", nil)
 	require.Nil(t, err)
 	require.NotNil(t, d)
 	require.Equal(t, 1, len(d))

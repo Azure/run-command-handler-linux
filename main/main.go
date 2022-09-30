@@ -120,6 +120,8 @@ func main() {
 	if cmdInvokeError != nil {
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instanceView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
+		instanceView.ExecutionState = Failed
+		instanceView.ExitCode = -1
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
 		instanceView.ExitCode = cmd.failExitCode
 		instanceView.ExecutionState = Failed
