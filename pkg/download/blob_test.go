@@ -164,7 +164,7 @@ func Test_blobAppend_actualBlob(t *testing.T) {
 		t.Skipf("Skipping: AZURE_STORAGE_BLOB or SASTOKEN not specified to run this test")
 	}
 
-	blobref, err := CreateAppendBlob(blobURI, sasToken)
+	blobref, err := CreateOrReplaceAppendBlob(blobURI, sasToken)
 	require.Nil(t, err)
 
 	err = blobref.AppendBlock([]byte("First line\n"), nil)

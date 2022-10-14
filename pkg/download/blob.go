@@ -108,8 +108,8 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	return scriptFilePath, nil
 }
 
-// CreateAppendBlob creates a reference to an append blob. If blob exists - it gets deleted first.
-func CreateAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
+// CreateOrReplaceAppendBlob creates a reference to an append blob. If blob exists - it gets deleted first.
+func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 
 	bloburl, err := url.Parse(blobURI + blobSas)
 	if err != nil {
