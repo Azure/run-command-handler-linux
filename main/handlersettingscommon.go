@@ -23,16 +23,6 @@ type handlerSettingsCommon struct {
 	SettingsCertThumbprint  string                 `json:"protectedSettingsCertThumbprint"`
 }
 
-// settingsPath returns the full path to the .settings file with the
-// highest sequence number found in configFolder.
-func settingsPath(configFolder string) (string, error) {
-	seq, err := FindSeqNumConfig(configFolder)
-	if err != nil {
-		return "", fmt.Errorf("Cannot find seqnum: %v", err)
-	}
-	return filepath.Join(configFolder, fmt.Sprintf("%d%s", seq, ".settings")), nil
-}
-
 // ReadSettings locates the .settings file and returns public settings
 // JSON, and protected settings JSON (by decrypting it with the keys in
 // configFolder).
