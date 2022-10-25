@@ -37,6 +37,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	exitCode := 0 // TODO: return exit code and execution state
 
 	if cfg.publicSettings.RunAsUser != "" {
+		ctx.Log("message", "RunAsUser is "+cfg.publicSettings.RunAsUser)
 
 		// Check prefix ("/var/lib/waagent/run-command-handler") exists in script path for ex. /var/lib/waagent/run-command-handler/download/<runcommandName>/0/script.sh
 		if !strings.HasPrefix(scriptPath, dataDir) {
@@ -55,13 +56,13 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		scriptLines := [4]string{}
 
 		// Create runAsScriptDirectoryPath and its intermediate directories if they do not exist
-		scriptLines[0] = fmt.Sprintf("mkdir -p -m a=rwx %s", runAsScriptDirectoryPath)
+		scriptLines[0] = fmt.Sprintf("mkdir -p -m u=rwx %s", runAsScriptDirectoryPath)
 
 		// Copy script at scriptPath to runAsScriptDirectoryPath
 		scriptLines[1] = fmt.Sprintf("cp %s %s", scriptPath, runAsScriptDirectoryPath)
 
 		// Provide read and execute permissions to RunAsUser on .sh file at runAsScriptFilePath
-		scriptLines[2] = fmt.Sprintf("chmod 0555 %s", runAsScriptFilePath)
+		scriptLines[2] = fmt.Sprintf("chown -R %s %s", cfg.publicSettings.RunAsUser, runAsScriptDirectoryPath)
 
 		// echo pipes the RunAsPassword to sudo -S for RunAsUser instead of prompting the password interactively from user and blocking.
 		// echo <cfg.protectedSettings.RunAsPassword> | sudo -S -u <cfg.publicSettings.RunAsUser> <command>
