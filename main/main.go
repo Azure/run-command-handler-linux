@@ -122,6 +122,7 @@ func main() {
 		instanceView.ExecutionMessage = "Execution failed: " + err.Error()
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
 		instanceView.ExitCode = cmd.failExitCode
+		instanceView.ExecutionState = Failed
 		reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 		os.Exit(cmd.failExitCode)
 	} else { // No error. succeeded
