@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,11 +26,73 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	defer stdout.Close()
 	defer stderr.Close()
 
+	scriptPath := cmd
+	scriptPathDirectory := filepath.Dir(cmd)
+
 	commandArgs, err := SetEnvironmentVariables(cfg)
-	cmd = cmd + commandArgs // Add command args if any
+	// Add command args if any. Unnamed arguments go in 'commandArgs'. Named arguments are set as environment variables so the'd be available within the script.
+	cmd = cmd + commandArgs
 
 	//executionMessage := ""   // TODO: return
 	exitCode := 0 // TODO: return exit code and execution state
+
+	if cfg.publicSettings.RunAsUser != "" {
+
+		// Check prefix ("/var/lib/waagent/run-command-handler") exists in script path for ex. /var/lib/waagent/run-command-handler/download/<runcommandName>/0/script.sh
+		if !strings.HasPrefix(scriptPath, dataDir) {
+			errMessage := "Failed to determine RunAs script path. Contact ICM team AzureRT\\Extensions for this service error."
+			ctx.Log("message", errMessage)
+			return failedExitCodeGeneral, errors.New(errMessage)
+		}
+
+		// Gets suffix "download/<runcommandName>/0/script.sh"
+		downloadPathSuffix := scriptPath[len(dataDir):]
+		// formats into something like "/home/<RunAsUserName>/waagent/run-command-handler-runas/download/<runcommandName>/0/script.sh", This filepath doesn't exist yet.
+		runAsScriptFilePath := filepath.Join(fmt.Sprintf(runAsDir, cfg.publicSettings.RunAsUser), downloadPathSuffix)
+		runAsScriptDirectoryPath := filepath.Dir(runAsScriptFilePath) // Get directory of runAsScript that doesn't exist yet
+
+		// Create a 4-line script to be run as below to be able to Run As different user.
+		scriptLines := [4]string{}
+
+		// Create runAsScriptDirectoryPath and its intermediate directories if they do not exist
+		scriptLines[0] = fmt.Sprintf("mkdir -p -m a=rwx %s", runAsScriptDirectoryPath)
+
+		// Copy script at scriptPath to runAsScriptDirectoryPath
+		scriptLines[1] = fmt.Sprintf("cp %s %s", scriptPath, runAsScriptDirectoryPath)
+
+		// Provide read and execute permissions to RunAsUser on .sh file at runAsScriptFilePath
+		scriptLines[2] = fmt.Sprintf("chmod 0555 %s", runAsScriptFilePath)
+
+		// echo pipes the RunAsPassword to sudo -S for RunAsUser instead of prompting the password interactively from user and blocking.
+		// echo <cfg.protectedSettings.RunAsPassword> | sudo -S -u <cfg.publicSettings.RunAsUser> <command>
+		scriptLines[3] = fmt.Sprintf("echo %s | sudo -S -u %s %s", cfg.protectedSettings.RunAsPassword, cfg.publicSettings.RunAsUser, runAsScriptFilePath+commandArgs)
+
+		// Create a shell script file that is run by root at <scriptPathDirectory>/runAsScript.sh that contains script that is run as RunAsUser
+		// ex. /var/lib/waagent/run-command-handler/download/<RunCommandName>/<sequenceNumber>/runAsScript.sh
+		// Create a writer
+		runAsScriptContainerScriptFilePath := filepath.Join(scriptPathDirectory, "runAsScript.sh")
+		runAsScriptContainerScript, runAsScriptContainerScriptCreateError := os.Create(runAsScriptContainerScriptFilePath)
+		if runAsScriptContainerScriptCreateError != nil {
+			return failedExitCodeGeneral, errors.Wrapf(runAsScriptContainerScriptCreateError, fmt.Sprintf("Failed to create RunAs script '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptContainerScriptFilePath))
+		}
+		// Provide permissions to root to read + execute runAsScript.sh
+		runAsScriptContainerScriptChmodError := os.Chmod(runAsScriptContainerScriptFilePath, 0555)
+		if runAsScriptContainerScriptChmodError != nil {
+			return failedExitCodeGeneral, errors.Wrapf(runAsScriptContainerScriptCreateError, fmt.Sprintf("Failed to provide execute permissions to root for RunAs script '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptContainerScriptFilePath))
+		}
+
+		runAsScriptContainerScriptFileWriter := bufio.NewWriter(runAsScriptContainerScript)
+		for _, line := range scriptLines {
+			runAsScriptContainerScriptFileWriter.WriteString(line + "\n")
+		}
+		runAsScriptContainerScriptFileWriter.Flush() // Flush buffer
+		runAsScriptContainerScript.Close()
+
+		// .sh script file at runAsScriptContainerScriptFilePath would contain four lines of script to execute the Run Command as RunAsUser
+		cmd = runAsScriptContainerScriptFilePath
+		ctx.Log("message", "RunAs script is "+cmd)
+	}
+
 	var command *exec.Cmd
 	if cfg.publicSettings.TimeoutInSeconds > 0 {
 		commandContext, cancel := context.WithTimeout(context.Background(), time.Duration(1)*time.Second)
@@ -38,23 +101,6 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		ctx.Log("message", "Execute with TimeoutInSeconds="+strconv.Itoa(cfg.publicSettings.TimeoutInSeconds))
 	} else {
 		command = exec.Command("/bin/bash", "-c", cmd)
-	}
-
-	// If RunAsUser is set by customer we need to execute the script under that user
-	// Password is not needed because extension process runs under root and has permission to execute under different user
-	if cfg.publicSettings.RunAsUser != "" {
-		ctx.Log("message", "RunAsUser="+cfg.publicSettings.RunAsUser)
-		runAsUser, err := user.Lookup(cfg.publicSettings.RunAsUser)
-		if err != nil {
-			return exitCode, err
-		}
-
-		uid, _ := strconv.Atoi(runAsUser.Uid)
-		gid, _ := strconv.Atoi(runAsUser.Gid)
-
-		command.SysProcAttr = &syscall.SysProcAttr{}
-		command.SysProcAttr.Credential = &syscall.Credential{Uid: uint32(uid),
-			Gid: uint32(gid)}
 	}
 
 	command.Dir = workdir

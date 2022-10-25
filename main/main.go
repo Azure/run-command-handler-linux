@@ -15,6 +15,11 @@ var (
 	// the extension handler
 	dataDir = "/var/lib/waagent/run-command-handler"
 
+	// Directory used for copying the Run Command script file to be able to RunAs a different user.
+	// It needs to copied because of permission restrictions. RunAsUser does not have permission to execute under /var/lib/waagent and its subdirectories.
+	// %s needs to be replaced by '<RunAsUser>' (RunAs username)
+	runAsDir = "/home/%s/waagent/run-command-handler-runas"
+
 	// seqNumFile holds the processed highest sequence number to make
 	// sure we do not run the command more than once for the same sequence
 	// number. Stored under dataDir.
@@ -39,6 +44,9 @@ var (
 	configExtensionName = "ConfigExtensionName"
 
 	configFileExtension = ".settings"
+
+	// General failed exit code when extension provisioning fails due to service errors.
+	failedExitCodeGeneral = -1
 )
 
 func main() {
@@ -113,14 +121,18 @@ func main() {
 		ctx.Log("event", "failed to handle", "error", err)
 		instanceView.ExecutionMessage = "Execution failed: " + err.Error()
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
+		instanceView.ExitCode = cmd.failExitCode
 		reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 		os.Exit(cmd.failExitCode)
+	} else { // No error. succeeded
+		instanceView.ExecutionMessage = "Execution completed"
+		instanceView.ExecutionState = Succeeded
+		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
+		instanceView.ExitCode = 0
 	}
-	instanceView.ExecutionMessage = "Execution completed"
-	instanceView.ExecutionState = Succeeded
+
 	instanceView.Output = stdout
 	instanceView.Error = stderr
-	instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
 	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 	ctx.Log("event", "end")
 }
