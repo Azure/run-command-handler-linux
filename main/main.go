@@ -116,10 +116,10 @@ func main() {
 	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusTransitioning, cmd, &instanceView)
 
 	// execute the subcommand
-	stdout, stderr, err := cmd.invoke(ctx, hEnv, &instanceView, extensionName, seqNum)
-	if err != nil {
-		ctx.Log("event", "failed to handle", "error", err)
-		instanceView.ExecutionMessage = "Execution failed: " + err.Error()
+	stdout, stderr, cmdInvokeError := cmd.invoke(ctx, hEnv, &instanceView, extensionName, seqNum)
+	if cmdInvokeError != nil {
+		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
+		instanceView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
 		instanceView.ExitCode = cmd.failExitCode
 		instanceView.ExecutionState = Failed
