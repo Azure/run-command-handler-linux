@@ -77,7 +77,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 			return failedExitCodeGeneral, errors.Wrapf(runAsScriptContainerScriptCreateError, fmt.Sprintf("Failed to create RunAs script '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptContainerScriptFilePath))
 		}
 		// Provide permissions to root to read + execute runAsScript.sh
-		runAsScriptContainerScriptChmodError := os.Chmod(runAsScriptContainerScriptFilePath, 0555)
+		runAsScriptContainerScriptChmodError := os.Chmod(runAsScriptContainerScriptFilePath, 0550)
 		if runAsScriptContainerScriptChmodError != nil {
 			return failedExitCodeGeneral, errors.Wrapf(runAsScriptContainerScriptCreateError, fmt.Sprintf("Failed to provide execute permissions to root for RunAs script '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptContainerScriptFilePath))
 		}
