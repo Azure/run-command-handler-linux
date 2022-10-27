@@ -15,6 +15,11 @@ var (
 	// the extension handler
 	dataDir = "/var/lib/waagent/run-command-handler"
 
+	// Directory used for copying the Run Command script file to be able to RunAs a different user.
+	// It needs to copied because of permission restrictions. RunAsUser does not have permission to execute under /var/lib/waagent and its subdirectories.
+	// %s needs to be replaced by '<RunAsUser>' (RunAs username)
+	runAsDir = "/home/%s/waagent/run-command-handler-runas"
+
 	// seqNumFile holds the processed highest sequence number to make
 	// sure we do not run the command more than once for the same sequence
 	// number. Stored under dataDir.
@@ -39,6 +44,9 @@ var (
 	configExtensionName = "ConfigExtensionName"
 
 	configFileExtension = ".settings"
+
+	// General failed exit code when extension provisioning fails due to service errors.
+	failedExitCodeGeneral = -1
 )
 
 func main() {
@@ -108,19 +116,30 @@ func main() {
 	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusTransitioning, cmd, &instanceView)
 
 	// execute the subcommand
-	stdout, stderr, err := cmd.invoke(ctx, hEnv, &instanceView, extensionName, seqNum)
-	if err != nil {
-		ctx.Log("event", "failed to handle", "error", err)
-		instanceView.ExecutionMessage = "Execution failed: " + err.Error()
+	stdout, stderr, cmdInvokeError := cmd.invoke(ctx, hEnv, &instanceView, extensionName, seqNum)
+	if cmdInvokeError != nil {
+		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
+		instanceView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
+		instanceView.ExitCode = cmd.failExitCode
+		instanceView.ExecutionState = Failed
 		reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 		os.Exit(cmd.failExitCode)
+	} else { // No error. succeeded
+		instanceView.ExecutionMessage = "Execution completed"
+		instanceView.ExecutionState = Succeeded
+		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
+		instanceView.ExitCode = 0
 	}
-	instanceView.ExecutionMessage = "Execution completed"
-	instanceView.ExecutionState = Succeeded
+
 	instanceView.Output = stdout
 	instanceView.Error = stderr
-	instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
+	// Use this workaround to throw a user-friendly error message when RunAs user does not exist on VM.
+	// Using this workaround because of Bug 16003130: [RCv2 Linux] user.Lookup() does not return any error if the user does not exist.
+	if instanceView.Error != "" && (strings.Contains(instanceView.Error, "unknown user") || strings.Contains(instanceView.Error, "invalid user")) {
+		instanceView.Error = fmt.Sprintf("'%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", instanceView.Error)
+	}
+
 	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 	ctx.Log("event", "end")
 }
