@@ -134,12 +134,6 @@ func main() {
 
 	instanceView.Output = stdout
 	instanceView.Error = stderr
-	// Use this workaround to throw a user-friendly error message when RunAs user does not exist on VM.
-	// Using this workaround because of Bug 16003130: [RCv2 Linux] user.Lookup() does not return any error if the user does not exist.
-	if instanceView.Error != "" && (strings.Contains(instanceView.Error, "unknown user") || strings.Contains(instanceView.Error, "invalid user")) {
-		instanceView.Error = fmt.Sprintf("'%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", instanceView.Error)
-	}
-
 	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
 	ctx.Log("event", "end")
 }
