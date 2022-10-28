@@ -199,9 +199,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	outputFilePosition, err = reportOutputToBlob(stdoutF, outputBlobRef, outputFilePosition)
 	errorFilePosition, err = reportOutputToBlob(stderrF, errorBlobRef, errorFilePosition)
 
-	// Always report nil for error because extension should not fail if script throws error
-	// Execution error still will be reported in the error stream
-	return stdoutTail, stderrTail, nil
+	return stdoutTail, stderrTail, runErr
 }
 
 // reportOutputToBlob save a file (from seeking position to the end of the file) to append blob. Returns the new position (end of the file)
