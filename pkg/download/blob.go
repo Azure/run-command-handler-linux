@@ -78,10 +78,10 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 		return "", errors.Wrapf(err, "unable to open storage container: %q", blobURI)
 	}
 
-	// Extract the file name only
-	fileName := getFileName(blobURI)
+	// Extract the llob path after container name
+	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
-		return "", fmt.Errorf("cannot extract file name from URL: %q", blobURI)
+		return "", errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", blobURI)
 	}
 
 	blobref := containerRef.GetBlobReference(fileName)
@@ -121,13 +121,13 @@ func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 		return nil, err
 	}
 
-	fileName := getFileName(blobURI)
+	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
-		return nil, fmt.Errorf("cannot extract file name from URL: %q", blobURI)
+		return nil, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", blobURI)
 	}
 
 	blobref := containerRef.GetBlobReference(fileName)
-	err = blobref.PutAppendBlob(nil) // Create the page blob
+	err = blobref.PutAppendBlob(nil) // Create the append blob
 	if err != nil {
 		return nil, err
 	}
@@ -135,11 +135,21 @@ func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 	return blobref, nil
 }
 
-// Extract the file name only from the blob uri
-func getFileName(blobURI string) string {
-	s := strings.Split(blobURI, "/")
-	if len(s) > 0 {
-		return s[len(s)-1]
+// Extract the suffix after the container name from blob uri
+// Example: blobURI - https://mystorageaccount.blob.core.windows.net/mycontainer/dir2/dir3/outputL.txt,
+// Returns "dir2/dir3/outputL.txt" (Blobs would be created under the container under nested directories mycontainer/dir2/dir3 as expected)
+func getBlobPathAfterContainerName(blobURI string, containerName string) (string, error) {
+	blobURL, err := url.Parse(blobURI)
+	if err != nil {
+		return "", err
 	}
-	return ""
+
+	containerNameSearchString := containerName + "/"
+	blobPathWithoutHost := blobURL.Path
+	index := strings.Index(blobPathWithoutHost, containerNameSearchString)
+	if index >= 0 {
+		return blobPathWithoutHost[index+len(containerNameSearchString):], nil
+	} else {
+		return "", errors.New(fmt.Sprintf("Unable to find '%s' in blobURI '%s'. Unable to get blob path suffix after container name.", containerNameSearchString, blobURI))
+	}
 }

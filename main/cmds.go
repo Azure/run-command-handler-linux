@@ -168,7 +168,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	// Later the full extension output will be reported
 	statusToReport := StatusTransitioning
 	if cfg.AsyncExecution {
-		ctx.Log("message", "anycExecution is true - report success")
+		ctx.Log("message", "asycExecution is true - report success")
 		statusToReport = StatusSuccess
 		reportInstanceView(ctx, h, extName, seqNum, statusToReport, cmd{nil, "Enable", true, nil, 3}, report)
 	}
