@@ -132,7 +132,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	// Later the full extension output will be reported
 	statusToReport := StatusTransitioning
 	if cfg.AsyncExecution {
-		ctx.Log("message", "anycExecution is true - report success")
+		ctx.Log("message", "asycExecution is true - report success")
 		statusToReport = StatusSuccess
 		reportInstanceView(ctx, h, extName, seqNum, statusToReport, cmd{nil, "Enable", true, nil, 3}, report)
 	}
@@ -140,6 +140,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	var outputBlobRef *storage.Blob = nil
 	outputFilePosition := int64(0)
 	if cfg.OutputBlobURI != "" && cfg.protectedSettings.OutputBlobSASToken != "" {
+		ctx.Log("message", fmt.Sprintf("outputBlobURI is '%s'", cfg.OutputBlobURI))
 		outputBlobRef, err = download.CreateAppendBlob(cfg.OutputBlobURI, cfg.protectedSettings.OutputBlobSASToken)
 		if err != nil {
 			ctx.Log("message", "error creating output blob", "error", err)
