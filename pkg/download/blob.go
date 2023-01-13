@@ -78,7 +78,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 		return "", errors.Wrapf(err, "unable to open storage container: %q", blobURI)
 	}
 
-	// Extract the llob path after container name
+	// Extract the blob path after container name
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
 		return "", errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", blobURI)
@@ -94,7 +94,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	const mode = 0500 // scripts should have execute permissions
 	file, err := os.OpenFile(scriptFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to open file for writing: "+scriptFilePath)
+		return "", errors.Wrapf(err, "failed to open file '%s' for writing: ", scriptFilePath)
 	}
 	defer file.Close()
 
@@ -102,7 +102,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	for numBytes, _ := reader.Read(buff); numBytes > 0; numBytes, _ = reader.Read(buff) {
 		writtenBytes, writeErr := file.Write(buff[:numBytes])
 		if writtenBytes != numBytes || writeErr != nil {
-			return "", errors.Wrap(writeErr, "failed to write to the file: "+scriptFilePath)
+			return "", errors.Wrapf(writeErr, "failed to write to the file '%s': ", scriptFilePath)
 		}
 	}
 	return scriptFilePath, nil

@@ -129,10 +129,10 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	dir := filepath.Join(dataDir, downloadDir, fmt.Sprintf("%d", seqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
-		return "", "", errors.Wrap(err, "processing file downloads failed")
+		return "", "", errors.Wrap(err, fmt.Sprintf("processing file downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", cfg.scriptURI()))
 	}
 
-	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid SAS token or managed identity. If you choose to use managed identity, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux"
+	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions or managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux"
 
 	var outputBlobSASRef *storage.Blob
 	var outputBlobAppendClient *appendblob.Client
@@ -308,7 +308,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string,
 		file, err := downloadAndProcessURL(ctx, scriptURI, dir, cfg)
 		if err != nil {
 			ctx.Log("event", "download failed", "error", err)
-			return "", errors.Wrapf(err, "failed to download file %s", scriptURI)
+			return "", errors.Wrapf(err, "failed to download file %s. ", scriptURI)
 		}
 		scriptFilePath = file
 		ctx.Log("event", "download complete", "output", dir)
@@ -424,7 +424,7 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 		if managedIdentity.ClientId != "" {
 			ID = managedIdentity.ClientId
 		} else if managedIdentity.ObjectId != "" { //ObjectId is not supported by azidentity.NewManagedIdentityCredential
-			return nil, errors.Wrap(nil, "Managed identity's ObjectId is not supported. Use ClientId instead")
+			return nil, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead")
 		}
 	}
 
@@ -469,7 +469,10 @@ func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity 
 			if blobSASTokenError != nil {
 				ctx.Log("message", fmt.Sprintf("Error creating blob '%s' using SAS token. Retrying with system-assigned managed identity if available..", blobUri), "error", blobSASTokenError)
 			}
-		} else if sasToken == "" || blobSASTokenError != nil { // Try to create or replace output blob using managed identity.
+		}
+
+		// Try to create or replace output blob using managed identity.
+		if sasToken == "" || blobSASTokenError != nil {
 
 			blobAppendClient, blobAppendClientError = createOrReplaceAppendBlobUsingManagedIdentity(blobUri, managedIdentity)
 		}

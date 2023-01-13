@@ -61,7 +61,7 @@ func Download(downloader Downloader) (int, io.ReadCloser, error) {
 		return response.StatusCode, response.Body, nil
 	}
 
-	err = fmt.Errorf("Status code %d while downloading blob '%s'. Use either a public script URI, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. For more info, refer https://aka.ms/RunCommandManagedLinux", response.StatusCode, request.URL.Opaque)
+	err = fmt.Errorf("Status code %d while downloading blob '%s'. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. For more info, refer https://aka.ms/RunCommandManagedLinux", response.StatusCode, request.URL.Opaque)
 	switch downloader.(type) {
 	case *blobWithMsiToken:
 		switch response.StatusCode {
@@ -71,6 +71,7 @@ func Download(downloader Downloader) (int, io.ReadCloser, error) {
 		case http.StatusForbidden:
 		case http.StatusUnauthorized:
 		case http.StatusBadRequest:
+		case http.StatusConflict:
 			forbiddenError := fmt.Errorf("Make sure managed identity has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", request.URL.Opaque)
 			return response.StatusCode, nil, errors.Wrapf(forbiddenError, MsiDownload403ErrorString)
 		}

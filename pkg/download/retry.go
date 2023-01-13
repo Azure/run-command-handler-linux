@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 )
 
 // SleepFunc pauses the execution for at least duration d.
@@ -21,7 +22,7 @@ var (
 const (
 	// time to sleep between retries is an exponential backoff formula:
 	//   t(n) = k * m^n
-	expRetryN = 7 // how many times we retry the Download
+	expRetryN = 3 // how many times we retry the Download
 	expRetryK = time.Second * 3
 	expRetryM = 2
 )
@@ -32,7 +33,7 @@ const (
 //
 // It sleeps in exponentially increasing durations between retries.
 func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.ReadCloser, error) {
-	var lastErr error
+	var downloadErrors error
 	for _, d := range downloaders {
 		for n := 0; n < expRetryN; n++ {
 			ctx := ctx.With("retry", n)
@@ -41,7 +42,12 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 				return out, nil
 			}
 
-			lastErr = err
+			if downloadErrors != nil {
+				downloadErrors = errors.Wrapf(downloadErrors, fmt.Sprintf("Attempt %d: %s ", n+1, err.Error()))
+			} else {
+				downloadErrors = err
+			}
+
 			ctx.Log("error", err)
 
 			if out != nil { // we are not going to read this response body
@@ -68,7 +74,7 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 			}
 		}
 	}
-	return nil, lastErr
+	return nil, downloadErrors
 }
 
 func isTransientHttpStatusCode(statusCode int) bool {
