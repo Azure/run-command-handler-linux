@@ -133,8 +133,8 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	}
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions or managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux"
-
-	var outputBlobSASRef *storage.Blob
+	
+  var outputBlobSASRef *storage.Blob
 	var outputBlobAppendClient *appendblob.Client
 	var outputBlobAppendCreateOrReplaceError error
 	outputFilePosition := int64(0)
