@@ -97,7 +97,8 @@ func isAccessIssueHttpStatusCode(statusCode int) bool {
 	case
 		http.StatusUnauthorized, // 401
 		http.StatusForbidden,    // 403
-		http.StatusNotFound:     // 404
+		http.StatusNotFound,     // 404
+		http.StatusConflict:     // 409
 		return true
 	default:
 		return false

@@ -16,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var UseMockSASDownloadFailure bool = false
+
 // downloadAndProcessURL downloads using the specified downloader and saves it to the
 // specified existing directory, which must be the path to the saved file. Then
 // it post-processes file based on heuristics.
@@ -35,7 +37,11 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handl
 	var scriptSASDownloadErr error = nil
 	var downloadedFilePath string = ""
 	if scriptSAS != "" {
-		downloadedFilePath, scriptSASDownloadErr = download.GetSASBlob(url, scriptSAS, downloadDir)
+		if UseMockSASDownloadFailure {
+			scriptSASDownloadErr = errors.New("Downloading script using SAS token failed.")
+		} else {
+			downloadedFilePath, scriptSASDownloadErr = download.GetSASBlob(url, scriptSAS, downloadDir)
+		}
 		// Download was successful using SAS. So use downloadedFilePath
 		if scriptSASDownloadErr == nil && downloadedFilePath != "" {
 			targetFilePath = downloadedFilePath

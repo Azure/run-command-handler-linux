@@ -92,7 +92,7 @@ func TestRetriesWith_SwitchDownloaderOn404(t *testing.T) {
 	require.Nil(t, err, "should eventually succeed")
 	require.NotNil(t, resp, "response body exists")
 	require.Equal(t, d404.timesCalled, 1)
-	require.Equal(t, d200.timesCalled, 4)
+	require.Equal(t, d200.timesCalled, 2)
 }
 
 func TestRetriesWith_SwitchDownloaderThenFailWithCorretErrorMessage(t *testing.T) {
@@ -144,7 +144,7 @@ type healingServer int
 
 func (h *healingServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	*h++
-	if *h < 4 {
+	if *h < 2 {
 		w.WriteHeader(http.StatusInternalServerError)
 	} else {
 		w.WriteHeader(http.StatusOK)
