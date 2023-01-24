@@ -129,12 +129,12 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	dir := filepath.Join(dataDir, downloadDir, fmt.Sprintf("%d", seqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
-		return "", "", errors.Wrap(err, fmt.Sprintf("processing file downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", cfg.scriptURI()))
+		return "", "", errors.Wrap(err, fmt.Sprintf("processing file downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.scriptURI())))
 	}
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions or managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux"
-	
-  var outputBlobSASRef *storage.Blob
+
+	var outputBlobSASRef *storage.Blob
 	var outputBlobAppendClient *appendblob.Client
 	var outputBlobAppendCreateOrReplaceError error
 	outputFilePosition := int64(0)
@@ -440,12 +440,12 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 	if miCredError == nil {
 		appendBlobClient, appendBlobNewClientError = appendblob.NewClient(blobUri, miCred, nil)
 		if appendBlobNewClientError != nil {
-			return nil, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", blobUri))
+			return nil, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
 		} else {
 			// Create or Replace Append blob. If AppendBlob already exists, blob gets cleared.
 			_, createAppendBlobError := appendBlobClient.Create(context.Background(), nil)
 			if createAppendBlobError != nil {
-				return nil, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", blobUri))
+				return nil, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
 			}
 		}
 	} else {
@@ -467,7 +467,7 @@ func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity 
 			blobSASRef, blobSASTokenError = download.CreateOrReplaceAppendBlob(blobUri, sasToken)
 
 			if blobSASTokenError != nil {
-				ctx.Log("message", fmt.Sprintf("Error creating blob '%s' using SAS token. Retrying with system-assigned managed identity if available..", blobUri), "error", blobSASTokenError)
+				ctx.Log("message", fmt.Sprintf("Error creating blob '%s' using SAS token. Retrying with system-assigned managed identity if available..", download.GetUriForLogging(blobUri)), "error", blobSASTokenError)
 			}
 		}
 

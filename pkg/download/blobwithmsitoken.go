@@ -113,3 +113,18 @@ func IsAzureStorageBlobUri(url string) bool {
 
 	return false
 }
+
+func GetMockMsiProvider(clientId string, returnError bool) MsiProvider {
+	return func() (msi.Msi, error) {
+		mockMsi := msi.Msi{
+			AccessToken: "uwsihdiuhiuasdfui*(*(&90790asofhdioas",
+			ClientID:    clientId,
+		}
+		if returnError {
+			return mockMsi, errors.New("Error getting msi")
+		} else {
+			return mockMsi, nil
+		}
+
+	}
+}

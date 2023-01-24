@@ -69,25 +69,26 @@ func NewBlobDownload(accountName, accountKey string, blob blobutil.AzureBlobRef)
 // Returns the filePath where the blob was downloaded
 func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	bloburl, err := url.Parse(blobURI + blobSas)
+	loggableBlobUri := GetUriForLogging(blobURI)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to parse URL: %q", blobURI)
+		return "", errors.Wrapf(err, "unable to parse URL: %q", loggableBlobUri)
 	}
 
 	containerRef, err := storage.GetContainerReferenceFromSASURI(*bloburl)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to open storage container: %q", blobURI)
+		return "", errors.Wrapf(err, "unable to open storage container: %q", loggableBlobUri)
 	}
 
 	// Extract the blob path after container name
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
-		return "", errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", blobURI)
+		return "", errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", loggableBlobUri)
 	}
 
 	blobref := containerRef.GetBlobReference(fileName)
 	reader, err := blobref.Get(nil)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to open storage blob: %q", blobURI)
+		return "", errors.Wrapf(err, "unable to open storage blob: %q", loggableBlobUri)
 	}
 
 	scriptFilePath := filepath.Join(targetDir, fileName)
@@ -123,7 +124,7 @@ func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
-		return nil, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", blobURI)
+		return nil, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", GetUriForLogging(blobURI))
 	}
 
 	blobref := containerRef.GetBlobReference(fileName)
@@ -150,6 +151,6 @@ func getBlobPathAfterContainerName(blobURI string, containerName string) (string
 	if index >= 0 {
 		return blobPathWithoutHost[index+len(containerNameSearchString):], nil
 	} else {
-		return "", errors.New(fmt.Sprintf("Unable to find '%s' in blobURI '%s'. Unable to get blob path suffix after container name.", containerNameSearchString, blobURI))
+		return "", errors.New(fmt.Sprintf("Unable to find '%s' in blobURI '%s'. Unable to get blob path suffix after container name.", containerNameSearchString, GetUriForLogging(blobURI)))
 	}
 }

@@ -49,7 +49,7 @@ func TestDownload_badStatusCodeFails(t *testing.T) {
 	} {
 		_, _, err := download.Download(download.NewURLDownload(fmt.Sprintf("%s/status/%d", srv.URL, code)))
 		require.NotNil(t, err, "not failed for code:%d", code)
-		require.Contains(t, err.Error(), "unexpected status code", "wrong message for code %d", code)
+		require.Contains(t, err.Error(), fmt.Sprintf("Status code %d while downloading blob", code))
 	}
 }
 

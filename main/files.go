@@ -17,6 +17,8 @@ import (
 )
 
 var UseMockSASDownloadFailure bool = false
+var UseMockGetDownloaders = false
+var ReturnErrorForMockGetDownloaders = false
 
 // downloadAndProcessURL downloads using the specified downloader and saves it to the
 // specified existing directory, which must be the path to the saved file. Then
@@ -83,29 +85,32 @@ func getDownloaders(fileURL string, managedIdentity *RunCommandManagedIdentity) 
 	if download.IsAzureStorageBlobUri(fileURL) {
 		// if managed identity was specified in the configuration, try to use it to download the files
 		var msiProvider download.MsiProvider
-		switch {
-		case managedIdentity == nil || (managedIdentity.ClientId == "" && managedIdentity.ObjectId == ""):
-			// get msi Provider for blob url implicitly (uses system managed identity)
-			msiProvider = download.GetMsiProviderForStorageAccountsImplicitly(fileURL)
 
-		case managedIdentity.ClientId != "" && managedIdentity.ObjectId == "":
-			// uses user-managed identity
-			msiProvider = download.GetMsiProviderForStorageAccountsWithClientId(fileURL, managedIdentity.ClientId)
-		case managedIdentity.ClientId == "" && managedIdentity.ObjectId != "":
-			// uses user-managed identity
-			msiProvider = download.GetMsiProviderForStorageAccountsWithObjectId(fileURL, managedIdentity.ObjectId)
-		default:
-			return nil, fmt.Errorf("Use either ClientId or ObjectId for managed identity. Not both.")
+		if UseMockGetDownloaders {
+			msiProvider = download.GetMockMsiProvider(managedIdentity.ClientId, ReturnErrorForMockGetDownloaders)
+		} else {
+			switch {
+			case managedIdentity == nil || (managedIdentity.ClientId == "" && managedIdentity.ObjectId == ""):
+				// get msi Provider for blob url implicitly (uses system managed identity)
+				msiProvider = download.GetMsiProviderForStorageAccountsImplicitly(fileURL)
+
+			case managedIdentity.ClientId != "" && managedIdentity.ObjectId == "":
+				// uses user-managed identity
+				msiProvider = download.GetMsiProviderForStorageAccountsWithClientId(fileURL, managedIdentity.ClientId)
+			case managedIdentity.ClientId == "" && managedIdentity.ObjectId != "":
+				// uses user-managed identity
+				msiProvider = download.GetMsiProviderForStorageAccountsWithObjectId(fileURL, managedIdentity.ObjectId)
+			default:
+				return nil, fmt.Errorf("Use either ClientId or ObjectId for managed identity. Not both.")
+			}
 		}
 
 		_, msiError := msiProvider()
-		// managedIdentity input is not provided. Preserving user intent. So, use public URI downloader first.
 		if msiError == nil {
 			return []download.Downloader{
 				//Try downloading with MSI token first, if that fails attempt public download
 				download.NewBlobWithMsiDownload(fileURL, msiProvider),
 				download.NewURLDownload(fileURL), // Try downloading the Azure storage blob as public URI
-
 			}, nil
 		} else {
 			return []download.Downloader{

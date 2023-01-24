@@ -13,38 +13,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_getDownloader_azureBlob(t *testing.T) {
-	// // error condition
-	// _, err := getDownloaders("http://acct.blob.core.windows.net/", "acct", "key")
-	// require.NotNil(t, err)
-
-	// // valid input
-	// d, err := getDownloaders("http://acct.blob.core.windows.net/container/blob", "acct", "key")
-	// require.Nil(t, err)
-	// require.NotNil(t, d)
-	// require.Equal(t, 1, len(d))
-	// require.Equal(t, "download.blobDownload", fmt.Sprintf("%T", d[0]), "got wrong type")
+var mockManagedIdentity = RunCommandManagedIdentity{
+	ClientId: "5d784f90-d7d9-4b04-bdf1-4ae4824d55b0",
+	ObjectId: "bed99fe3-1ad3-4a25-867d-7d48d68def6a",
 }
 
 func Test_getDownloader_externalUrl(t *testing.T) {
-	d, err := getDownloaders("http://acct.blob.core.windows.net/", nil)
+	UseMockGetDownloaders = true
+	ReturnErrorForMockGetDownloaders = true
+
+	// Case 0: Error getting Msi. It returns public URL downloader
+	d, err := getDownloaders("http://acct.blob.core.windows.net/", &mockManagedIdentity)
 	require.Nil(t, err)
 	require.NotNil(t, d)
 	require.NotEmpty(t, d)
 	require.Equal(t, 1, len(d))
 	require.Equal(t, "download.urlDownload", fmt.Sprintf("%T", d[0]), "got wrong type")
 
-	d, err = getDownloaders("http://acct.blob.core.windows.net/", nil)
+	// Case 1: Valid Msi returned. It returns both MSI downloader and public URL downloader. First downloader is MSI downloader
+	ReturnErrorForMockGetDownloaders = false
+	d, err = getDownloaders("http://acct.blob.core.windows.net/", &mockManagedIdentity)
 	require.Nil(t, err)
 	require.NotNil(t, d)
-	require.Equal(t, 1, len(d))
-	require.Equal(t, "download.urlDownload", fmt.Sprintf("%T", d[0]), "got wrong type")
+	require.Equal(t, 2, len(d))
+	require.Equal(t, "*download.blobWithMsiToken", fmt.Sprintf("%T", d[0]), "got wrong type")
 
-	d, err = getDownloaders("http://acct.blob.core.windows.net/", nil)
-	require.Nil(t, err)
-	require.NotNil(t, d)
-	require.Equal(t, 1, len(d))
-	require.Equal(t, "download.urlDownload", fmt.Sprintf("%T", d[0]), "got wrong type")
+	UseMockGetDownloaders = false
 }
 
 func Test_urlToFileName_badURL(t *testing.T) {
