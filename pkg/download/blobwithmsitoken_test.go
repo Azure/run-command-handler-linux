@@ -2,10 +2,11 @@ package download
 
 import (
 	"encoding/json"
-	"github.com/Azure/azure-extension-foundation/msi"
-	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"testing"
+
+	"github.com/Azure/azure-extension-foundation/msi"
+	"github.com/stretchr/testify/require"
 )
 
 // README

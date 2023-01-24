@@ -17,8 +17,6 @@ import (
 )
 
 var UseMockSASDownloadFailure bool = false
-var UseMockGetDownloaders = false
-var ReturnErrorForMockGetDownloaders = false
 
 // downloadAndProcessURL downloads using the specified downloader and saves it to the
 // specified existing directory, which must be the path to the saved file. Then
@@ -52,7 +50,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handl
 
 	//If there was an error downloading using SAS URI or SAS was not provided, download using managedIdentity or publicly.
 	if scriptSASDownloadErr != nil || scriptSAS == "" {
-		downloaders, getDownloadersError := getDownloaders(url, cfg.SourceManagedIdentity)
+		downloaders, getDownloadersError := getDownloaders(url, cfg.SourceManagedIdentity, download.ProdMsiDownloader{})
 		if getDownloadersError == nil {
 			const mode = 0500 // we assume users download scripts to execute
 			_, err = download.SaveTo(ctx, downloaders, targetFilePath, mode)
@@ -76,7 +74,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handl
 // getDownloaders returns one or two downloaders (two if it is an Azure storage blob):
 // 1. Downloader for script using public URI.
 // 2. Downloader for script using managed identity.
-func getDownloaders(fileURL string, managedIdentity *RunCommandManagedIdentity) ([]download.Downloader, error) {
+func getDownloaders(fileURL string, managedIdentity *RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, error) {
 
 	if fileURL == "" {
 		return nil, fmt.Errorf("fileURL is empty.")
@@ -86,23 +84,19 @@ func getDownloaders(fileURL string, managedIdentity *RunCommandManagedIdentity) 
 		// if managed identity was specified in the configuration, try to use it to download the files
 		var msiProvider download.MsiProvider
 
-		if UseMockGetDownloaders {
-			msiProvider = download.GetMockMsiProvider(managedIdentity.ClientId, ReturnErrorForMockGetDownloaders)
-		} else {
-			switch {
-			case managedIdentity == nil || (managedIdentity.ClientId == "" && managedIdentity.ObjectId == ""):
-				// get msi Provider for blob url implicitly (uses system managed identity)
-				msiProvider = download.GetMsiProviderForStorageAccountsImplicitly(fileURL)
+		switch {
+		case managedIdentity == nil || (managedIdentity.ClientId == "" && managedIdentity.ObjectId == ""):
+			// get msi Provider for blob url implicitly (uses system managed identity)
+			msiProvider = msiDownloader.GetMsiProvider(fileURL)
 
-			case managedIdentity.ClientId != "" && managedIdentity.ObjectId == "":
-				// uses user-managed identity
-				msiProvider = download.GetMsiProviderForStorageAccountsWithClientId(fileURL, managedIdentity.ClientId)
-			case managedIdentity.ClientId == "" && managedIdentity.ObjectId != "":
-				// uses user-managed identity
-				msiProvider = download.GetMsiProviderForStorageAccountsWithObjectId(fileURL, managedIdentity.ObjectId)
-			default:
-				return nil, fmt.Errorf("Use either ClientId or ObjectId for managed identity. Not both.")
-			}
+		case managedIdentity.ClientId != "" && managedIdentity.ObjectId == "":
+			// uses user-managed identity
+			msiProvider = msiDownloader.GetMsiProviderByClientId(fileURL, managedIdentity.ClientId)
+		case managedIdentity.ClientId == "" && managedIdentity.ObjectId != "":
+			// uses user-managed identity
+			msiProvider = msiDownloader.GetMsiProviderByObjectId(fileURL, managedIdentity.ObjectId)
+		default:
+			return nil, fmt.Errorf("Use either ClientId or ObjectId for managed identity. Not both.")
 		}
 
 		_, msiError := msiProvider()
