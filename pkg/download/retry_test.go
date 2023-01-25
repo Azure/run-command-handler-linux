@@ -60,7 +60,8 @@ func TestWithRetries_failingBadStatusCode_validateSleeps(t *testing.T) {
 
 	sr := new(sleepRecorder)
 	_, err := download.WithRetries(nopLog(), []download.Downloader{d}, sr.Sleep)
-	require.Contains(t, err.Error(), "Status code 429 while downloading blob")
+	require.Contains(t, err.Error(), "429 Too Many Requests")
+	require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
 
 	require.Equal(t, sleepSchedule, []time.Duration(*sr))
 }

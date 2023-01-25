@@ -25,6 +25,7 @@ func Test_urlDownload_GetRequest_goodURL(t *testing.T) {
 	r, err := d.GetRequest()
 	require.Nil(t, err, u)
 	require.NotNil(t, r, u)
+	require.NotNil(t, r.Header.Get(xMsClientRequestIdHeaderName))
 }
 
 func Test_GetUriForLogging_ScrubsQuery(t *testing.T) {
