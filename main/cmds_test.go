@@ -2,9 +2,11 @@ package main
 
 import (
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ahmetalpbalkan/go-httpbin"
@@ -154,4 +156,35 @@ func Test_decodeScriptGzip(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, info, "32;3;gzip=1")
 	require.Equal(t, s, "ls\n")
+}
+
+func Test_downloadScriptUri_BySASFailsSucceedsByManagedIdentity(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	UseMockSASDownloadFailure = true
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.RequestURI, "/samplecontainer/sample.sh?SASToken") {
+			writer.WriteHeader(http.StatusOK) // Download successful using managed identity
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	defer srv.Close()
+
+	_, err = downloadScript(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlerSettings{
+			publicSettings: publicSettings{
+				Source: &scriptSource{ScriptURI: srv.URL + "/samplecontainer/sample.sh?SASToken"},
+			},
+			protectedSettings: protectedSettings{
+				SourceSASToken: "SASToken",
+				SourceManagedIdentity: &RunCommandManagedIdentity{
+					ClientId: "00b64c6a-6dbf-41e0-8707-74132d5cf53f",
+				},
+			},
+		})
+	require.Nil(t, err)
+	UseMockSASDownloadFailure = false
 }

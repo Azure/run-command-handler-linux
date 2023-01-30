@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 )
 
 // SleepFunc pauses the execution for at least duration d.
@@ -21,7 +22,7 @@ var (
 const (
 	// time to sleep between retries is an exponential backoff formula:
 	//   t(n) = k * m^n
-	expRetryN = 7 // how many times we retry the Download
+	expRetryN = 3 // how many times we retry the Download
 	expRetryK = time.Second * 3
 	expRetryM = 2
 )
@@ -32,7 +33,7 @@ const (
 //
 // It sleeps in exponentially increasing durations between retries.
 func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.ReadCloser, error) {
-	var lastErr error
+	var downloadErrors error
 	for _, d := range downloaders {
 		for n := 0; n < expRetryN; n++ {
 			ctx := ctx.With("retry", n)
@@ -41,11 +42,22 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 				return out, nil
 			}
 
-			lastErr = err
+			if downloadErrors != nil {
+				downloadErrors = errors.Wrapf(downloadErrors, fmt.Sprintf("Attempt %d: %s ", n+1, err.Error()))
+			} else {
+				downloadErrors = err
+			}
+
 			ctx.Log("error", err)
 
 			if out != nil { // we are not going to read this response body
 				out.Close()
+			}
+
+			// If there is an access issue while downloading using this downloader, use next downloader
+			// For ex. User may have set up access to blob using managed identity, but not using public blob access or vice-versa.
+			if isAccessIssueHttpStatusCode(status) {
+				break
 			}
 
 			// status == -1 the value when there was no http request
@@ -62,7 +74,7 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 			}
 		}
 	}
-	return nil, lastErr
+	return nil, downloadErrors
 }
 
 func isTransientHttpStatusCode(statusCode int) bool {
@@ -75,6 +87,19 @@ func isTransientHttpStatusCode(statusCode int) bool {
 		http.StatusServiceUnavailable,  // 503
 		http.StatusGatewayTimeout:      // 504
 		return true // timeout and too many requests
+	default:
+		return false
+	}
+}
+
+func isAccessIssueHttpStatusCode(statusCode int) bool {
+	switch statusCode {
+	case
+		http.StatusUnauthorized, // 401
+		http.StatusForbidden,    // 403
+		http.StatusNotFound,     // 404
+		http.StatusConflict:     // 409
+		return true
 	default:
 		return false
 	}

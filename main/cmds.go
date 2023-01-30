@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -11,6 +12,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/go-kit/kit/log"
@@ -125,7 +129,39 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	dir := filepath.Join(dataDir, downloadDir, fmt.Sprintf("%d", seqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
-		return "", "", errors.Wrap(err, "processing file downloads failed")
+		return "", "", errors.Wrap(err, fmt.Sprintf("processing file downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.scriptURI())))
+	}
+
+	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions or managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux"
+
+	var outputBlobSASRef *storage.Blob
+	var outputBlobAppendClient *appendblob.Client
+	var outputBlobAppendCreateOrReplaceError error
+	outputFilePosition := int64(0)
+
+	// Create or Replace outputBlobURI if provided. Fail the command if create or replace fails.
+	if cfg.OutputBlobURI != "" {
+		outputBlobSASRef, outputBlobAppendClient, outputBlobAppendCreateOrReplaceError = createOrReplaceAppendBlob(cfg.OutputBlobURI,
+			cfg.protectedSettings.OutputBlobSASToken, cfg.protectedSettings.OutputBlobManagedIdentity, ctx)
+
+		if outputBlobAppendCreateOrReplaceError != nil {
+			return "", "", errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI))
+		}
+	}
+
+	var errorBlobSASRef *storage.Blob
+	var errorBlobAppendClient *appendblob.Client
+	var errorBlobAppendCreateOrReplaceError error
+	errorFilePosition := int64(0)
+
+	// Create or Replace errorBlobURI if provided. Fail the command if create or replace fails.
+	if cfg.ErrorBlobURI != "" {
+		errorBlobSASRef, errorBlobAppendClient, errorBlobAppendCreateOrReplaceError = createOrReplaceAppendBlob(cfg.ErrorBlobURI,
+			cfg.protectedSettings.ErrorBlobSASToken, cfg.protectedSettings.ErrorBlobManagedIdentity, ctx)
+
+		if errorBlobAppendCreateOrReplaceError != nil {
+			return "", "", errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI))
+		}
 	}
 
 	// AsyncExecution requested by customer means the extension should report successful extension deployment to complete the provisioning state
@@ -135,25 +171,6 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		ctx.Log("message", "asycExecution is true - report success")
 		statusToReport = StatusSuccess
 		reportInstanceView(ctx, h, extName, seqNum, statusToReport, cmd{nil, "Enable", true, nil, 3}, report)
-	}
-
-	var outputBlobRef *storage.Blob = nil
-	outputFilePosition := int64(0)
-	if cfg.OutputBlobURI != "" && cfg.protectedSettings.OutputBlobSASToken != "" {
-		ctx.Log("message", fmt.Sprintf("outputBlobURI is '%s'", cfg.OutputBlobURI))
-		outputBlobRef, err = download.CreateAppendBlob(cfg.OutputBlobURI, cfg.protectedSettings.OutputBlobSASToken)
-		if err != nil {
-			ctx.Log("message", "error creating output blob", "error", err)
-		}
-	}
-
-	var errorBlobRef *storage.Blob = nil
-	errorFilePosition := int64(0)
-	if cfg.ErrorBlobURI != "" && cfg.protectedSettings.ErrorBlobSASToken != "" {
-		errorBlobRef, err = download.CreateAppendBlob(cfg.ErrorBlobURI, cfg.protectedSettings.ErrorBlobSASToken)
-		if err != nil {
-			ctx.Log("message", "error creating error blob", "error", err)
-		}
 	}
 
 	stdoutF, stderrF := logPaths(dir)
@@ -172,8 +189,8 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 				report.Output = stdoutTail
 				report.Error = stderrTail
 				reportInstanceView(ctx, h, extName, seqNum, statusToReport, cmd{nil, "Enable", true, nil, 3}, report)
-				outputFilePosition, err = reportOutputToBlob(stdoutF, outputBlobRef, outputFilePosition)
-				errorFilePosition, err = reportOutputToBlob(stderrF, errorBlobRef, errorFilePosition)
+				outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
+				errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 			}
 		}
 	}()
@@ -197,28 +214,40 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	}
 
 	// Report the output streams to blobs
-	outputFilePosition, err = reportOutputToBlob(stdoutF, outputBlobRef, outputFilePosition)
-	errorFilePosition, err = reportOutputToBlob(stderrF, errorBlobRef, errorFilePosition)
+	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
+	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
 	return stdoutTail, stderrTail, runErr
 }
 
-// reportOutputToBlob save a file (from seeking position to the end of the file) to append blob. Returns the new position (end of the file)
-func reportOutputToBlob(sourceFilePath string, outputBlobRef *storage.Blob, outputFilePosition int64) (int64, error) {
-	var err error = nil
-	if outputBlobRef != nil {
+// appendToBlob saves a file (from seeking position to the end of the file) to AppendBlob. Returns the new position (end of the file)
+func appendToBlob(sourceFilePath string, appendBlobRef *storage.Blob, appendBlobClient *appendblob.Client, outputFilePosition int64, ctx *log.Context) (int64, error) {
+	var err error
+	var newOutput []byte
+	if appendBlobRef != nil || appendBlobClient != nil {
 		// Save to blob
-		newOutput, err := getFileFromPosition(sourceFilePath, outputFilePosition)
+		newOutput, err = getFileFromPosition(sourceFilePath, outputFilePosition)
 		if err == nil {
 			newOutputSize := len(newOutput)
 			if newOutputSize > 0 {
-				err = outputBlobRef.AppendBlock(newOutput, nil)
+				if appendBlobRef != nil {
+					err = appendBlobRef.AppendBlock(newOutput, nil)
+				} else if appendBlobClient != nil {
+					ctx.Log("message", fmt.Sprintf("inside appendBlobClient. Output is '%s'", newOutput))
+					_, err = appendBlobClient.AppendBlock(context.Background(), streaming.NopCloser(bytes.NewReader(newOutput)), nil)
+				}
+
 				if err == nil {
 					outputFilePosition += int64(newOutputSize)
+				} else {
+					ctx.Log("message", "AppendToBlob failed", "error", err)
 				}
 			}
+		} else {
+			ctx.Log("message", "AppendToBlob - getFileFromPosition failed.", "error", err)
 		}
 	}
+
 	return outputFilePosition, err
 }
 
@@ -279,7 +308,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string,
 		file, err := downloadAndProcessURL(ctx, scriptURI, dir, cfg)
 		if err != nil {
 			ctx.Log("event", "download failed", "error", err)
-			return "", errors.Wrapf(err, "failed to download file %s", scriptURI)
+			return "", errors.Wrapf(err, "failed to download file %s. ", scriptURI)
 		}
 		scriptFilePath = file
 		ctx.Log("event", "download complete", "output", dir)
@@ -384,4 +413,81 @@ func decodeScript(script string) (string, string, error) {
 
 	w.Flush()
 	return buf.String(), fmt.Sprintf("%d;%d;gzip=1", len(script), n), nil
+}
+
+func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdentity *RunCommandManagedIdentity) (*appendblob.Client, error) {
+	var ID string = ""
+	var miCred *azidentity.ManagedIdentityCredential = nil
+	var miCredError error = nil
+
+	if managedIdentity != nil {
+		if managedIdentity.ClientId != "" {
+			ID = managedIdentity.ClientId
+		} else if managedIdentity.ObjectId != "" { //ObjectId is not supported by azidentity.NewManagedIdentityCredential
+			return nil, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead")
+		}
+	}
+
+	if ID != "" { // Use user-assigned identity if clientId is provided
+		miCredentialOptions := azidentity.ManagedIdentityCredentialOptions{ID: azidentity.ClientID(ID)}
+		miCred, miCredError = azidentity.NewManagedIdentityCredential(&miCredentialOptions)
+	} else { // Use system-assigned identity if clientId not provided
+		miCred, miCredError = azidentity.NewManagedIdentityCredential(nil)
+	}
+
+	var appendBlobClient *appendblob.Client
+	var appendBlobNewClientError error
+	if miCredError == nil {
+		appendBlobClient, appendBlobNewClientError = appendblob.NewClient(blobUri, miCred, nil)
+		if appendBlobNewClientError != nil {
+			return nil, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
+		} else {
+			// Create or Replace Append blob. If AppendBlob already exists, blob gets cleared.
+			_, createAppendBlobError := appendBlobClient.Create(context.Background(), nil)
+			if createAppendBlobError != nil {
+				return nil, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
+			}
+		}
+	} else {
+		return nil, errors.Wrap(miCredError, "Error while retrieving managed identity credential")
+	}
+
+	return appendBlobClient, nil
+}
+
+func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity *RunCommandManagedIdentity, ctx *log.Context) (*storage.Blob, *appendblob.Client, error) {
+	var blobSASRef *storage.Blob
+	var blobSASTokenError error
+	var blobAppendClient *appendblob.Client
+	var blobAppendClientError error
+
+	// Validate blob can be created or replaced.
+	if blobUri != "" {
+		if sasToken != "" {
+			blobSASRef, blobSASTokenError = download.CreateOrReplaceAppendBlob(blobUri, sasToken)
+
+			if blobSASTokenError != nil {
+				ctx.Log("message", fmt.Sprintf("Error creating blob '%s' using SAS token. Retrying with system-assigned managed identity if available..", download.GetUriForLogging(blobUri)), "error", blobSASTokenError)
+			}
+		}
+
+		// Try to create or replace output blob using managed identity.
+		if sasToken == "" || blobSASTokenError != nil {
+
+			blobAppendClient, blobAppendClientError = createOrReplaceAppendBlobUsingManagedIdentity(blobUri, managedIdentity)
+		}
+
+		if (sasToken == "" && blobAppendClientError != nil) ||
+			(blobSASTokenError != nil && blobAppendClientError != nil) {
+
+			var er error
+			if blobSASTokenError != nil {
+				er = blobSASTokenError
+			} else {
+				er = blobAppendClientError
+			}
+			return nil, nil, errors.Wrap(er, "Creating or Replacing append blob failed.")
+		}
+	}
+	return blobSASRef, blobAppendClient, nil
 }

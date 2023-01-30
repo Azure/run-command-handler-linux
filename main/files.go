@@ -16,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var UseMockSASDownloadFailure bool = false
+
 // downloadAndProcessURL downloads using the specified downloader and saves it to the
 // specified existing directory, which must be the path to the saved file. Then
 // it post-processes file based on heuristics.
@@ -29,34 +31,91 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handl
 		return "", fmt.Errorf(url + " is not a valid url") // url does not contain SAS to se can log it
 	}
 
-	downloadedFilePath := filepath.Join(downloadDir, fileName)
+	targetFilePath := filepath.Join(downloadDir, fileName)
 	scriptSAS := cfg.scriptSAS()
+
+	var scriptSASDownloadErr error = nil
+	var downloadedFilePath string = ""
 	if scriptSAS != "" {
-		downloadedFilePath, err = download.GetSASBlob(url, scriptSAS, downloadDir)
-	} else {
-		downloaders, err := getDownloaders(url)
-		if err == nil {
-			const mode = 0500 // we assume users download scripts to execute
-			_, err = download.SaveTo(ctx, downloaders, downloadedFilePath, mode)
+		if UseMockSASDownloadFailure {
+			scriptSASDownloadErr = errors.New("Downloading script using SAS token failed.")
+		} else {
+			downloadedFilePath, scriptSASDownloadErr = download.GetSASBlob(url, scriptSAS, downloadDir)
+		}
+		// Download was successful using SAS. So use downloadedFilePath
+		if scriptSASDownloadErr == nil && downloadedFilePath != "" {
+			targetFilePath = downloadedFilePath
 		}
 	}
+
+	//If there was an error downloading using SAS URI or SAS was not provided, download using managedIdentity or publicly.
+	if scriptSASDownloadErr != nil || scriptSAS == "" {
+		downloaders, getDownloadersError := getDownloaders(url, cfg.SourceManagedIdentity, download.ProdMsiDownloader{})
+		if getDownloadersError == nil {
+			const mode = 0500 // we assume users download scripts to execute
+			_, err = download.SaveTo(ctx, downloaders, targetFilePath, mode)
+		} else {
+			return "", getDownloadersError
+		}
+	}
+
 	if err != nil {
 		return "", err
 	}
 
-	err = postProcessFile(downloadedFilePath)
+	err = postProcessFile(targetFilePath)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to post-process '%s'", fileName)
 	}
 
-	return downloadedFilePath, nil
+	return targetFilePath, nil
 }
 
-// getDownloader returns a downloader for the given URL based on whether the
-// storage credentials are empty or not.
-func getDownloaders(fileURL string) (
-	[]download.Downloader, error) {
-	return []download.Downloader{download.NewURLDownload(fileURL)}, nil
+// getDownloaders returns one or two downloaders (two if it is an Azure storage blob):
+// 1. Downloader for script using public URI.
+// 2. Downloader for script using managed identity.
+func getDownloaders(fileURL string, managedIdentity *RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, error) {
+
+	if fileURL == "" {
+		return nil, fmt.Errorf("fileURL is empty.")
+	}
+
+	if download.IsAzureStorageBlobUri(fileURL) {
+		// if managed identity was specified in the configuration, try to use it to download the files
+		var msiProvider download.MsiProvider
+
+		switch {
+		case managedIdentity == nil || (managedIdentity.ClientId == "" && managedIdentity.ObjectId == ""):
+			// get msi Provider for blob url implicitly (uses system managed identity)
+			msiProvider = msiDownloader.GetMsiProvider(fileURL)
+
+		case managedIdentity.ClientId != "" && managedIdentity.ObjectId == "":
+			// uses user-managed identity
+			msiProvider = msiDownloader.GetMsiProviderByClientId(fileURL, managedIdentity.ClientId)
+		case managedIdentity.ClientId == "" && managedIdentity.ObjectId != "":
+			// uses user-managed identity
+			msiProvider = msiDownloader.GetMsiProviderByObjectId(fileURL, managedIdentity.ObjectId)
+		default:
+			return nil, fmt.Errorf("Use either ClientId or ObjectId for managed identity. Not both.")
+		}
+
+		_, msiError := msiProvider()
+		if msiError == nil {
+			return []download.Downloader{
+				//Try downloading with MSI token first, if that fails attempt public download
+				download.NewBlobWithMsiDownload(fileURL, msiProvider),
+				download.NewURLDownload(fileURL), // Try downloading the Azure storage blob as public URI
+			}, nil
+		} else {
+			return []download.Downloader{
+				// Try downloading the Azure storage blob as public URI
+				download.NewURLDownload(fileURL),
+			}, nil
+		}
+	} else {
+		// Public URI - do not use MSI downloader if the uri is not azure storage blob
+		return []download.Downloader{download.NewURLDownload(fileURL)}, nil
+	}
 }
 
 // urlToFileName parses given URL and returns the section after the last slash

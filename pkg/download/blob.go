@@ -69,32 +69,33 @@ func NewBlobDownload(accountName, accountKey string, blob blobutil.AzureBlobRef)
 // Returns the filePath where the blob was downloaded
 func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	bloburl, err := url.Parse(blobURI + blobSas)
+	loggableBlobUri := GetUriForLogging(blobURI)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to parse URL: %q", blobURI)
+		return "", errors.Wrapf(err, "unable to parse URL: %q", loggableBlobUri)
 	}
 
 	containerRef, err := storage.GetContainerReferenceFromSASURI(*bloburl)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to open storage container: %q", blobURI)
+		return "", errors.Wrapf(err, "unable to open storage container: %q", loggableBlobUri)
 	}
 
-	// Extract the llob path after container name
+	// Extract the blob path after container name
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
-		return "", errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", blobURI)
+		return "", errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", loggableBlobUri)
 	}
 
 	blobref := containerRef.GetBlobReference(fileName)
 	reader, err := blobref.Get(nil)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to open storage blob: %q", blobURI)
+		return "", errors.Wrapf(err, "unable to open storage blob: %q", loggableBlobUri)
 	}
 
 	scriptFilePath := filepath.Join(targetDir, fileName)
 	const mode = 0500 // scripts should have execute permissions
 	file, err := os.OpenFile(scriptFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to open file for writing: "+scriptFilePath)
+		return "", errors.Wrapf(err, "failed to open file '%s' for writing: ", scriptFilePath)
 	}
 	defer file.Close()
 
@@ -102,14 +103,14 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	for numBytes, _ := reader.Read(buff); numBytes > 0; numBytes, _ = reader.Read(buff) {
 		writtenBytes, writeErr := file.Write(buff[:numBytes])
 		if writtenBytes != numBytes || writeErr != nil {
-			return "", errors.Wrap(writeErr, "failed to write to the file: "+scriptFilePath)
+			return "", errors.Wrapf(writeErr, "failed to write to the file '%s': ", scriptFilePath)
 		}
 	}
 	return scriptFilePath, nil
 }
 
-// CreateAppendBlob creates a reference to an append blob. If blob exists - it gets deleted first.
-func CreateAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
+// CreateOrReplaceAppendBlob creates a reference to an append blob. If blob exists - it gets deleted first.
+func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 
 	bloburl, err := url.Parse(blobURI + blobSas)
 	if err != nil {
@@ -123,7 +124,7 @@ func CreateAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
-		return nil, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", blobURI)
+		return nil, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", GetUriForLogging(blobURI))
 	}
 
 	blobref := containerRef.GetBlobReference(fileName)
@@ -150,6 +151,6 @@ func getBlobPathAfterContainerName(blobURI string, containerName string) (string
 	if index >= 0 {
 		return blobPathWithoutHost[index+len(containerNameSearchString):], nil
 	} else {
-		return "", errors.New(fmt.Sprintf("Unable to find '%s' in blobURI '%s'. Unable to get blob path suffix after container name.", containerNameSearchString, blobURI))
+		return "", errors.New(fmt.Sprintf("Unable to find '%s' in blobURI '%s'. Unable to get blob path suffix after container name.", containerNameSearchString, GetUriForLogging(blobURI)))
 	}
 }

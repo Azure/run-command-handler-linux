@@ -19,7 +19,7 @@ type Downloader interface {
 
 const (
 	// MsiDownload404ErrorString describes Msi specific error
-	MsiDownload404ErrorString = "please ensure that the blob location in the fileUri setting exists, and the specified Managed Identity has read permissions to the storage blob"
+	MsiDownload404ErrorString = "please ensure that the blob exists, and the specified Managed Identity has read permissions to the storage blob"
 
 	// MsiDownload403ErrorString describes Msi permission specific error
 	MsiDownload403ErrorString = "please ensure that the specified Managed Identity has read permissions to the storage blob"
@@ -61,14 +61,19 @@ func Download(downloader Downloader) (int, io.ReadCloser, error) {
 		return response.StatusCode, response.Body, nil
 	}
 
-	err = fmt.Errorf("unexpected status code: actual=%d expected=%d", response.StatusCode, http.StatusOK)
+	err = fmt.Errorf("Status code %d while downloading blob '%s'. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. For more info, refer https://aka.ms/RunCommandManagedLinux", response.StatusCode, request.URL.Opaque)
 	switch downloader.(type) {
 	case *blobWithMsiToken:
 		switch response.StatusCode {
 		case http.StatusNotFound:
-			return response.StatusCode, nil, errors.Wrapf(err, MsiDownload404ErrorString)
+			notFoundError := fmt.Errorf("Make sure Azure blob '%s' and managed identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Reader' role assignment. In case of user assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", request.URL.Opaque)
+			return response.StatusCode, nil, errors.Wrapf(notFoundError, MsiDownload404ErrorString)
 		case http.StatusForbidden:
-			return response.StatusCode, nil, errors.Wrapf(err, MsiDownload403ErrorString)
+		case http.StatusUnauthorized:
+		case http.StatusBadRequest:
+		case http.StatusConflict:
+			forbiddenError := fmt.Errorf("Make sure managed identity has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", request.URL.Opaque)
+			return response.StatusCode, nil, errors.Wrapf(forbiddenError, MsiDownload403ErrorString)
 		}
 	}
 	return response.StatusCode, nil, err

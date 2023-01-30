@@ -99,6 +99,18 @@ const (
       "description": "SAS token to access the errorBlobUri blob",
       "type": "string"
     },
+    "sourceManagedIdentity": {
+      "description": "Managed identity to use for reading the script pointed by scriptUri if sourceSASToken not provided(using system-assigned or user-assigned managed identity)",
+      "type": "object"
+    },
+    "outputBlobManagedIdentity": {
+      "description": "Managed identity to use for writing Run Command output to blob pointed by outputBlobUri if outputBlobSASToken not provided(using system-assigned or user-assigned managed identity)",
+      "type": "object"
+    },
+    "errorBlobManagedIdentity": {
+      "description": "Managed identity to use for writing Run Command error to blob pointed by errorBlobUri if errorBlobSASToken not provided(using system-assigned or user-assigned managed identity)",
+      "type": "object"
+    },
     "protectedParameters": {
       "description": "List of parameters",
       "type": "array",
