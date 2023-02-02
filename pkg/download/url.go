@@ -3,6 +3,13 @@ package download
 import (
 	"net/http"
 	"net/url"
+
+	"github.com/google/uuid"
+)
+
+const (
+	xMsClientRequestIdHeaderName  = "x-ms-client-request-id"
+	xMsServiceRequestIdHeaderName = "x-ms-request-id"
 )
 
 // urlDownload describes a URL to download.
@@ -17,7 +24,11 @@ func NewURLDownload(url string) Downloader {
 
 // GetRequest returns a new request to download the URL
 func (u urlDownload) GetRequest() (*http.Request, error) {
-	return http.NewRequest("GET", u.url, nil)
+	req, err := http.NewRequest("GET", u.url, nil)
+	if req != nil {
+		req.Header.Add(xMsClientRequestIdHeaderName, uuid.New().String())
+	}
+	return req, err
 }
 
 // Scrub query. Used to remove the query parts like SAS token.

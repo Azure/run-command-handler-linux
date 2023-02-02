@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/pkg/blobutil"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +31,11 @@ func (b blobDownload) GetRequest() (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	return http.NewRequest("GET", url, nil)
+	req, error := http.NewRequest("GET", url, nil)
+	if req != nil {
+		req.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())
+	}
+	return req, error
 }
 
 // getURL returns publicly downloadable URL of the Azure Blob
