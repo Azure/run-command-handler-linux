@@ -73,15 +73,16 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 	case *blobWithMsiToken:
 		switch response.StatusCode {
 		case http.StatusNotFound:
-			notFoundError := fmt.Errorf("Make sure Azure blob '%s' and managed identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Reader' role assignment. In case of user assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", request.URL.Opaque)
-			return response.StatusCode, nil, errors.Wrapf(notFoundError, MsiDownload404ErrorString)
+			notFoundError := fmt.Sprintf("RunCommand failed to download blob '%s' and recieved response code '%s'. Make sure Azure blob and managed identity exist, and identity has access to storage blob's container with 'Storage Blob Data Reader' role assignment. For user assigned identity, add it under VM's identity. For more info, see https://aka.ms/RunCommandManagedLinux", request.URL.Opaque, response.Status)
+			errString = fmt.Sprintf("%s: %s", MsiDownload404ErrorString, notFoundError)
 		case http.StatusForbidden,
 			http.StatusUnauthorized,
 			http.StatusBadRequest,
 			http.StatusConflict:
-			forbiddenError := fmt.Errorf("Make sure managed identity has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", request.URL.Opaque)
-			return response.StatusCode, nil, errors.Wrapf(forbiddenError, MsiDownload403ErrorString)
+			forbiddenError := fmt.Sprintf("RunCommand failed to download blob '%s' and recieved response code '%s'. Make sure managed identity has access to storage blob's container with 'Storage Blob Data Reader' role assignment. For user assigned identity, add it under VM's identity. For more info, see https://aka.ms/RunCommandManagedLinux", request.URL.Opaque, response.Status)
+			errString = fmt.Sprintf("%s: %s", MsiDownload403ErrorString, forbiddenError)
 		}
+		break
 	default:
 		hostname := request.URL.Host
 		switch response.StatusCode {
@@ -89,6 +90,7 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 			errString = fmt.Sprintf("RunCommand failed to download the file from %s because access was denied. Please fix the blob permissions and try again, the response code and message returned were: %q",
 				hostname,
 				response.Status)
+			break
 		case http.StatusNotFound:
 			errString = fmt.Sprintf("RunCommand failed to download the file from %s because it does not exist. Please create the blob and try again, the response code and message returned were: %q",
 				hostname,
@@ -109,7 +111,7 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 				response.Status)
 		}
 	}
-	errString += " Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. For more info, refer https://aka.ms/RunCommandManagedLinux."
+
 	if len(requestId) > 0 {
 		errString += fmt.Sprintf(" (Service request ID: %s)", requestId)
 	}
