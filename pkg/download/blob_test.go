@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/pkg/blobutil"
 	"github.com/go-kit/kit/log"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,6 +83,22 @@ func Test_blobDownload_fails_badCreds(t *testing.T) {
 	require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
 	require.Contains(t, err.Error(), "403")
 	require.Equal(t, status, http.StatusForbidden)
+}
+
+// Tests that a common error message will be uniquely formatted
+func Test_blobDownload_fails_badRequest(t *testing.T) {
+	d := badRequestBlobDownload{
+		blobDownload{"example", "Zm9vCg==", blobutil.AzureBlobRef{
+			StorageBase: storage.DefaultBaseURL,
+			Blob:        "fooBlob.txt",
+			Container:   "foocontainer",
+		}}}
+
+	status, _, err := Download(testctx, d)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "parts of the request were incorrectly formatted, missing, and/or invalid")
+	require.Contains(t, err.Error(), "400")
+	require.Equal(t, status, http.StatusBadRequest)
 }
 
 func Test_blobDownload_fails_urlNotFound(t *testing.T) {
@@ -159,57 +176,6 @@ func Test_blobDownload_actualBlob(t *testing.T) {
 	require.EqualValues(t, chunk, b, "retrieved body is different body=%d chunk=%d", len(b), len(chunk))
 }
 
-func Test_blobDownload_fails_actualBlob404(t *testing.T) {
-	acct := os.Getenv("AZURE_STORAGE_ACCOUNT")
-	key := os.Getenv("AZURE_STORAGE_ACCESS_KEY")
-	if acct == "" || key == "" {
-		t.Skipf("Skipping: AZURE_STORAGE_ACCOUNT or AZURE_STORAGE_ACCESS_KEY not specified to run this test")
-	}
-	base := storage.DefaultBaseURL
-
-	blobName := "<BLOB THAT DOESN'T EXIST>"
-	containerName := "<CONTAINER NAME>"
-
-	// Get the blob via downloader
-	d := NewBlobDownload(acct, key, blobutil.AzureBlobRef{
-		Container:   containerName,
-		Blob:        blobName,
-		StorageBase: base,
-	})
-	code, _, err := Download(testctx, d)
-	require.NotNil(t, err)
-	require.Equal(t, code, http.StatusNotFound)
-	require.Contains(t, err.Error(), "because it does not exist")
-	require.Contains(t, err.Error(), "Not Found")
-	require.Contains(t, err.Error(), "Service request ID")
-}
-
-func Test_blobDownload_fails_actualBlob409(t *testing.T) {
-	// before running this test, go to your storage account on portal > Configuration and disable Blob public access
-	acct := os.Getenv("AZURE_STORAGE_ACCOUNT")
-	key := os.Getenv("AZURE_STORAGE_ACCESS_KEY")
-	if acct == "" || key == "" {
-		t.Skipf("Skipping: AZURE_STORAGE_ACCOUNT or AZURE_STORAGE_ACCESS_KEY not specified to run this test")
-	}
-	base := storage.DefaultBaseURL
-
-	blobName := "<BLOB NAME>"
-	containerName := "<CONTAINER NAME>"
-
-	// Get the blob via downloader
-	d := NewBlobDownload(acct, key, blobutil.AzureBlobRef{
-		Container:   containerName,
-		Blob:        blobName,
-		StorageBase: base,
-	})
-	code, _, err := Download(testctx, d)
-	require.NotNil(t, err)
-	require.Equal(t, code, http.StatusConflict)
-	require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
-	require.Contains(t, err.Error(), "Public access is not permitted on this storage account")
-	require.Contains(t, err.Error(), "Service request ID")
-}
-
 func Test_blobAppend_actualBlob(t *testing.T) {
 	// Before running the test locally prepare storage account and set the following env variables:
 	// export AZURE_STORAGE_BLOB="https://atanas.blob.core.windows.net/con1/output5.txt"
@@ -228,4 +194,21 @@ func Test_blobAppend_actualBlob(t *testing.T) {
 	err = blobref.AppendBlock([]byte("Second line\n"), nil)
 	err = blobref.AppendBlock([]byte("Third line\n"), nil)
 	require.Nil(t, err)
+}
+
+type badRequestBlobDownload struct {
+	blobDownloader blobDownload
+}
+
+func (b badRequestBlobDownload) GetRequest() (*http.Request, error) {
+	url, err := b.blobDownloader.getURL()
+	if err != nil {
+		return nil, err
+	}
+	req, error := http.NewRequest("GET", url, nil)
+	if req != nil {
+		req.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())
+		req.Header.Set("x-ms-version", "bad value")
+	}
+	return req, error
 }

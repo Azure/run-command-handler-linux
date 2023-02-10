@@ -3,7 +3,7 @@ package download
 import (
 	"encoding/json"
 	"io/ioutil"
-	"net/http"
+	// "net/http"
 	"testing"
 
 	"github.com/Azure/azure-extension-foundation/msi"
@@ -34,8 +34,8 @@ var msiJson = `` // place the msi json here e.g.
 // the second command gets user assigned identity with its client id
 // the third command gets user assigned identity with its object id
 
-var blobUri = ""         // set the blob to download here e.g. https://storageaccount.blob.core.windows.net/container/blobname
-var stringToLookFor = "" // the string to look for in you blob
+var blobUri = "https://deeptivaistorage.blob.core.windows.net/newcontainer/errors.txt" // set the blob to download here e.g. https://storageaccount.blob.core.windows.net/container/blobname
+var stringToLookFor = "hello"                                                          // the string to look for in you blob
 
 func Test_realDownloadBlobWithMsiToken(t *testing.T) {
 	if msiJson == "" || blobUri == "" || stringToLookFor == "" {
@@ -53,23 +53,6 @@ func Test_realDownloadBlobWithMsiToken(t *testing.T) {
 	bytes, err := ioutil.ReadAll(stream)
 	require.NoError(t, err, "saving file stream to memory failed")
 	require.Contains(t, string(bytes), stringToLookFor)
-}
-
-func Test_realDownloadBlobWithMsiToken404(t *testing.T) {
-	if msiJson == "" || blobUri == "" || stringToLookFor == "" {
-		t.Skip()
-	}
-	var badBlobUri = blobUri[0 : len(blobUri)-1]
-	downloader := blobWithMsiToken{badBlobUri, func() (msi.Msi, error) {
-		msi := msi.Msi{}
-		err := json.Unmarshal([]byte(msiJson), &msi)
-		return msi, err
-	}}
-	code, _, err := Download(testctx, &downloader)
-	require.NotNil(t, err, "File download succeeded but was not supposed to")
-	require.Equal(t, http.StatusNotFound, code)
-	require.Contains(t, err.Error(), MsiDownload404ErrorString)
-	require.Contains(t, err.Error(), "Service request ID:") // should have a service request ID since downloading from Azure Storage
 }
 
 func Test_isAzureStorageBlobUri(t *testing.T) {

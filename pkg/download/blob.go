@@ -31,11 +31,11 @@ func (b blobDownload) GetRequest() (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, error := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if req != nil {
 		req.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())
 	}
-	return req, error
+	return req, err
 }
 
 // getURL returns publicly downloadable URL of the Azure Blob

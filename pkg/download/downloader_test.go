@@ -73,7 +73,7 @@ func TestDownload_statusOKSucceeds(t *testing.T) {
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
 
-	_, body, err := download.Download(testctx, download.NewURLDownload(srv.URL + "/status/200"))
+	_, body, err := download.Download(testctx, download.NewURLDownload(srv.URL+"/status/200"))
 	require.Nil(t, err)
 	defer body.Close()
 	require.NotNil(t, body)
@@ -90,12 +90,14 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 
 	returnCode, body, err := download.Download(testctx, msiDownloader404)
 	require.True(t, strings.Contains(err.Error(), download.MsiDownload404ErrorString), "error string doesn't contain the correct message")
+	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux.", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
 	require.Equal(t, 404, returnCode, "return code was not 404")
 
 	msiDownloader403 := download.NewBlobWithMsiDownload(srv.URL+"/status/403", mockMsiProvider)
 	returnCode, body, err = download.Download(testctx, msiDownloader403)
 	require.True(t, strings.Contains(err.Error(), download.MsiDownload403ErrorString), "error string doesn't contain the correct message")
+	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux.", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
 	require.Equal(t, 403, returnCode, "return code was not 403")
 
