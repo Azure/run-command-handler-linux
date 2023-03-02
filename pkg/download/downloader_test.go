@@ -90,16 +90,25 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 
 	returnCode, body, err := download.Download(testctx, msiDownloader404)
 	require.True(t, strings.Contains(err.Error(), download.MsiDownload404ErrorString), "error string doesn't contain the correct message")
-	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux.", "error string doesn't contain full message")
+	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
 	require.Equal(t, 404, returnCode, "return code was not 404")
 
 	msiDownloader403 := download.NewBlobWithMsiDownload(srv.URL+"/status/403", mockMsiProvider)
 	returnCode, body, err = download.Download(testctx, msiDownloader403)
 	require.True(t, strings.Contains(err.Error(), download.MsiDownload403ErrorString), "error string doesn't contain the correct message")
-	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux.", "error string doesn't contain full message")
+	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
 	require.Equal(t, 403, returnCode, "return code was not 403")
+
+	// Should use default error message for any error code other than 400, 401, 403, 404, and 409
+	msiDownloader500 := download.NewBlobWithMsiDownload(srv.URL+"/status/500", mockMsiProvider)
+	returnCode, body, err = download.Download(testctx, msiDownloader500)
+	fmt.Println(err.Error())
+	require.Contains(t, err.Error(), "Use either a public script URI that points to .sh file", "error string doesn't contain full message")
+	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
+	require.Nil(t, body, "body is not nil for failed download")
+	require.Equal(t, 500, returnCode, "return code was not 500")
 
 }
 

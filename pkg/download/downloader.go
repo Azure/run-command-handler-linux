@@ -66,19 +66,19 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 		return response.StatusCode, response.Body, nil
 	}
 
-	errString := ""
+	errString := fmt.Sprintf("Status code %d while downloading blob '%s'. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. For more information, see https://aka.ms/RunCommandManagedLinux", response.StatusCode, request.URL.Opaque)
 	requestId := response.Header.Get(xMsServiceRequestIdHeaderName)
 	switch downloader.(type) {
 	case *blobWithMsiToken:
 		switch response.StatusCode {
 		case http.StatusNotFound:
-			notFoundError := fmt.Sprintf("RunCommand failed to download the blob '%s' and received a response code '%s'. Make sure that the Azure blob and managed identity exist, and the identity has access to the storage blob's container with the 'Storage Blob Data Reader' role assignment. For a user-assigned identity, add it under the VM's identity. For more information, see https://aka.ms/RunCommandManagedLinux.", request.URL.Opaque, response.Status)
+			notFoundError := fmt.Sprintf("RunCommand failed to download the blob '%s' and received a response code '%s'. Make sure that the Azure blob and managed identity exist, and the identity has access to the storage blob's container with the 'Storage Blob Data Reader' role assignment. For a user-assigned identity, add it under the VM's identity. For more information, see https://aka.ms/RunCommandManagedLinux", request.URL.Opaque, response.Status)
 			errString = fmt.Sprintf("%s: %s", MsiDownload404ErrorString, notFoundError)
 		case http.StatusForbidden,
 			http.StatusUnauthorized,
 			http.StatusBadRequest,
 			http.StatusConflict:
-			forbiddenError := fmt.Sprintf("RunCommand failed to download the blob '%s' and received a response code '%s'. Ensure that the managed identity has access to the storage blob's container with the 'Storage Blob Data Reader' role assignment. For a user-assigned identity, add it under the VM's identity. For more information, see https://aka.ms/RunCommandManagedLinux.", request.URL.Opaque, response.Status)
+			forbiddenError := fmt.Sprintf("RunCommand failed to download the blob '%s' and received a response code '%s'. Ensure that the managed identity has access to the storage blob's container with the 'Storage Blob Data Reader' role assignment. For a user-assigned identity, add it under the VM's identity. For more information, see https://aka.ms/RunCommandManagedLinux", request.URL.Opaque, response.Status)
 			errString = fmt.Sprintf("%s: %s", MsiDownload403ErrorString, forbiddenError)
 		}
 		break
