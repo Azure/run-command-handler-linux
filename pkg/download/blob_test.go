@@ -11,7 +11,13 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/pkg/blobutil"
+	"github.com/go-kit/kit/log"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	testctx = log.NewContext(log.NewNopLogger())
 )
 
 func Test_blobDownload_validateInputs(t *testing.T) {
@@ -72,10 +78,27 @@ func Test_blobDownload_fails_badCreds(t *testing.T) {
 		Container:   "foocontainer",
 	})
 
-	status, _, err := Download(d)
+	status, _, err := Download(testctx, d)
 	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "Status code 403 while downloading blob")
+	require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
+	require.Contains(t, err.Error(), "403")
 	require.Equal(t, status, http.StatusForbidden)
+}
+
+// Tests that a common error message will be uniquely formatted
+func Test_blobDownload_fails_badRequest(t *testing.T) {
+	d := badRequestBlobDownload{
+		blobDownload{"example", "Zm9vCg==", blobutil.AzureBlobRef{
+			StorageBase: storage.DefaultBaseURL,
+			Blob:        "fooBlob.txt",
+			Container:   "foocontainer",
+		}}}
+
+	status, _, err := Download(testctx, d)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "parts of the request were incorrectly formatted, missing, and/or invalid")
+	require.Contains(t, err.Error(), "400")
+	require.Equal(t, status, http.StatusBadRequest)
 }
 
 func Test_blobDownload_fails_urlNotFound(t *testing.T) {
@@ -85,7 +108,7 @@ func Test_blobDownload_fails_urlNotFound(t *testing.T) {
 		Container:   "foocontainer",
 	})
 
-	_, _, err := Download(d)
+	_, _, err := Download(testctx, d)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "http request failed:")
 }
@@ -145,7 +168,7 @@ func Test_blobDownload_actualBlob(t *testing.T) {
 		Blob:        name,
 		StorageBase: base,
 	})
-	_, body, err := Download(d)
+	_, body, err := Download(testctx, d)
 	require.Nil(t, err)
 	defer body.Close()
 	b, err := ioutil.ReadAll(body)
@@ -171,4 +194,21 @@ func Test_blobAppend_actualBlob(t *testing.T) {
 	err = blobref.AppendBlock([]byte("Second line\n"), nil)
 	err = blobref.AppendBlock([]byte("Third line\n"), nil)
 	require.Nil(t, err)
+}
+
+type badRequestBlobDownload struct {
+	blobDownloader blobDownload
+}
+
+func (b badRequestBlobDownload) GetRequest() (*http.Request, error) {
+	url, err := b.blobDownloader.getURL()
+	if err != nil {
+		return nil, err
+	}
+	req, error := http.NewRequest("GET", url, nil)
+	if req != nil {
+		req.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())
+		req.Header.Set("x-ms-version", "bad value")
+	}
+	return req, error
 }

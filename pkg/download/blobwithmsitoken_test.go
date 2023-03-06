@@ -3,6 +3,7 @@ package download
 import (
 	"encoding/json"
 	"io/ioutil"
+	// "net/http"
 	"testing"
 
 	"github.com/Azure/azure-extension-foundation/msi"
@@ -33,8 +34,8 @@ var msiJson = `` // place the msi json here e.g.
 // the second command gets user assigned identity with its client id
 // the third command gets user assigned identity with its object id
 
-var blobUri = ""         // set the blob to download here e.g. https://storageaccount.blob.core.windows.net/container/blobname
-var stringToLookFor = "" // the string to look for in you blob
+var blobUri = "https://deeptivaistorage.blob.core.windows.net/newcontainer/errors.txt" // set the blob to download here e.g. https://storageaccount.blob.core.windows.net/container/blobname
+var stringToLookFor = "hello"                                                          // the string to look for in you blob
 
 func Test_realDownloadBlobWithMsiToken(t *testing.T) {
 	if msiJson == "" || blobUri == "" || stringToLookFor == "" {
@@ -45,7 +46,7 @@ func Test_realDownloadBlobWithMsiToken(t *testing.T) {
 		err := json.Unmarshal([]byte(msiJson), &msi)
 		return msi, err
 	}}
-	_, stream, err := Download(&downloader)
+	_, stream, err := Download(testctx, &downloader)
 	require.NoError(t, err, "File download failed")
 	defer stream.Close()
 
