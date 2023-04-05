@@ -116,12 +116,7 @@ func min(a, b int) int {
 
 func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error) {
 	// parse the extension handler settings (not available prior to 'enable')
-	configFile := fmt.Sprintf("%d.settings", seqNum)
-	if extName != "" {
-		configFile = extName + "." + configFile
-	}
-	configPath := filepath.Join(h.HandlerEnvironment.ConfigFolder, configFile)
-	cfg, err := parseAndValidateSettings(ctx, configPath)
+	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
 		return "", "", errors.Wrap(err, "failed to get configuration")
 	}

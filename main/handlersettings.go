@@ -42,13 +42,14 @@ func (s handlerSettings) validate() error {
 // publicSettings is the type deserialized from public configuration section of
 // the extension handler. This should be in sync with publicSettingsSchema.
 type publicSettings struct {
-	Source           *scriptSource         `json:"source"`
-	Parameters       []parameterDefinition `json:"parameters"`
-	RunAsUser        string                `json:"runAsUser"`
-	OutputBlobURI    string                `json:"outputBlobUri"`
-	ErrorBlobURI     string                `json:"errorBlobUri"`
-	TimeoutInSeconds int                   `json:"timeoutInSeconds,int"`
-	AsyncExecution   bool                  `json:"asyncExecution,bool"`
+	Source                          *scriptSource         `json:"source"`
+	Parameters                      []parameterDefinition `json:"parameters"`
+	RunAsUser                       string                `json:"runAsUser"`
+	OutputBlobURI                   string                `json:"outputBlobUri"`
+	ErrorBlobURI                    string                `json:"errorBlobUri"`
+	TimeoutInSeconds                int                   `json:"timeoutInSeconds,int"`
+	AsyncExecution                  bool                  `json:"asyncExecution,bool"`
+	TreatFailureAsDeploymentFailure bool                  `json:"treatFailureAsDeploymentFailure,bool"`
 }
 
 // protectedSettings is the type decoded and deserialized from protected
