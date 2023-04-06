@@ -124,7 +124,15 @@ func main() {
 		instanceView.ExitCode = -1
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
 		instanceView.ExitCode = cmd.failExitCode
-		reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusSuccess, cmd, &instanceView)
+		statusToReport := StatusSuccess
+
+		// If TreatFailureAsDeploymentFailure is set, report error back as the status
+		cfg, err := GetHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
+		if err == nil && cfg.publicSettings.TreatFailureAsDeploymentFailure {
+			statusToReport = StatusError
+		}
+
+		reportInstanceView(ctx, hEnv, extensionName, seqNum, statusToReport, cmd, &instanceView)
 		os.Exit(cmd.failExitCode)
 	} else { // No error. succeeded
 		instanceView.ExecutionMessage = "Execution completed"
