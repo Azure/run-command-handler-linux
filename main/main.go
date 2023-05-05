@@ -121,14 +121,13 @@ func main() {
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instanceView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
 		instanceView.ExecutionState = Failed
-		instanceView.ExitCode = -1
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
 		instanceView.ExitCode = cmd.failExitCode
 		statusToReport := StatusSuccess
 
 		// If TreatFailureAsDeploymentFailure is set, report error back as the status
 		cfg, err := GetHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
-		if err == nil && cfg.publicSettings.TreatFailureAsDeploymentFailure {
+		if err == nil && cfg.publicSettings.TreatFailureAsDeploymentFailure && cmd.failExitCode != 0 {
 			statusToReport = StatusError
 		}
 
