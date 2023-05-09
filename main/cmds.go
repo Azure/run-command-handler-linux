@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	utils "github.com/Azure/azure-extension-platform/pkg/utils"
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/go-kit/kit/log"
@@ -129,13 +130,20 @@ func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanc
 	return "", "", nil
 }
 
-func enablePre(ctx *log.Context, seqNum int) error {
+func enablePre(ctx *log.Context,  h HandlerEnvironment, seqNum int) error {
 	// exit if this sequence number (a snapshot of the configuration) is already
 	// processed. if not, save this sequence number before proceeding.
 	if shouldExit, err := checkAndSaveSeqNum(ctx, seqNum, mostRecentSequence); err != nil {
 		return errors.Wrap(err, "failed to process sequence number")
 	} else if shouldExit {
 		ctx.Log("event", "exit", "message", "the script configuration has already been processed, will not run again")
+		downloadParent := filepath.Join(dataDir, downloadDir)
+		if extName != "" {
+			configFile = extName + "." + configFile
+		}
+		configPath := filepath.Join(h.HandlerEnvironment.ConfigFolder, configFile)
+		mostRecentRuntimeSetting := fmt.Sprintf("%d.settings", uint(seqNum))
+		utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(downloadParent, h.HandlerEnvironment.ConfigFolder, configFile, uint(seqNum), "\\d+.settings", mostRecentRuntimeSetting, false)
 		os.Exit(0)
 	}
 	return nil
@@ -233,12 +241,10 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		ctx.Log("event", "enable script failed")
 	}
 
-	err = cleanUpSettings(h.HandlerEnvironment.ConfigFolder)
-	if err != nil {
-		ctx.Log("message", "error clearing config folder")
-	} else {
-		ctx.Log("message", "config folder cleared successfully")
-	}
+	//cleaning up scripts + settings (most recent run is retained)
+	downloadParent := filepath.Join(dataDir, downloadDir)
+	mostRecentRuntimeSetting := fmt.Sprintf("%d.settings", uint(seqNum))
+	utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(downloadParent, h.HandlerEnvironment.ConfigFolder, configFile, uint(seqNum), "\\d+.settings", mostRecentRuntimeSetting, false)
 
 	// Report the output streams to blobs
 	outputFilePosition, err = reportOutputToBlob(stdoutF, outputBlobRef, outputFilePosition)
