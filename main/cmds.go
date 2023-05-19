@@ -10,8 +10,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
+	utils "github.com/Azure/azure-extension-platform/pkg/utils"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -27,7 +29,7 @@ const (
 )
 
 type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (stdout string, stderr string, err error)
-type preFunc func(ctx *log.Context, seqNum int) error
+type preFunc func(ctx *log.Context, hEnv HandlerEnvironment, extName string, seqNum int) error
 
 type cmd struct {
 	invoke             cmdFunc // associated function
@@ -95,13 +97,14 @@ func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanc
 	return "", "", nil
 }
 
-func enablePre(ctx *log.Context, seqNum int) error {
+func enablePre(ctx *log.Context, h HandlerEnvironment, extName string, seqNum int) error {
 	// exit if this sequence number (a snapshot of the configuration) is already
 	// processed. if not, save this sequence number before proceeding.
 	if shouldExit, err := checkAndSaveSeqNum(ctx, seqNum, mostRecentSequence); err != nil {
 		return errors.Wrap(err, "failed to process sequence number")
 	} else if shouldExit {
 		ctx.Log("event", "exit", "message", "the script configuration has already been processed, will not run again")
+		deleteScriptsAndSettingsExceptMostRecent(dataDir, downloadDir, extName, seqNum, h, ctx, "")
 		os.Exit(0)
 	}
 	return nil
@@ -211,6 +214,8 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	// Report the output streams to blobs
 	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
+
+	deleteScriptsAndSettingsExceptMostRecent(dataDir, downloadDir, extName, seqNum, h, ctx, cfg.publicSettings.RunAsUser)
 
 	return stdoutTail, stderrTail, runErr
 }
@@ -485,4 +490,23 @@ func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity 
 		}
 	}
 	return blobSASRef, blobAppendClient, nil
+}
+
+func deleteScriptsAndSettingsExceptMostRecent(dataDir string, downloadDir string, extName string, seqNum int, h HandlerEnvironment, ctx *log.Context, runAsUser string) {
+	downloadParent := filepath.Join(dataDir, downloadDir)
+	runtimeSettingsRegexFormat := extName + ".\\d+.settings"
+	runtimeSettingsLastSeqNumFormat := extName + ".%d.settings"
+	ctx.Log("event", "clearing settings and script files except most recent seq num")
+	err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(downloadParent, h.HandlerEnvironment.ConfigFolder, "", uint64(seqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
+	if err != nil {
+		ctx.Log("event", "could not clear settings and script files")
+	}
+
+	if runAsUser != "" {
+		runAsDownloadParent := filepath.Join(fmt.Sprintf(runAsDir, runAsUser), downloadDir)
+		err = utils.TryDeleteDirectoriesExcept(runAsDownloadParent, strconv.Itoa(seqNum))
+		if err != nil {
+			ctx.Log("event", "could not clear runas script")
+		}
+	}
 }

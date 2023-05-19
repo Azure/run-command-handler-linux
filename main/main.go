@@ -98,7 +98,7 @@ func main() {
 	ctx.Log("event", "start")
 	if cmd.pre != nil {
 		ctx.Log("event", "pre-check")
-		if err := cmd.pre(ctx, seqNum); err != nil {
+		if err := cmd.pre(ctx, hEnv, extensionName, seqNum); err != nil {
 			ctx.Log("event", "pre-check failed", "error", err)
 			os.Exit(cmd.failExitCode)
 		}
