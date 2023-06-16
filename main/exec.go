@@ -115,7 +115,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 
 	var command *exec.Cmd
 	if cfg.publicSettings.TimeoutInSeconds > 0 {
-		commandContext, cancel := context.WithTimeout(context.Background(), time.Duration(1)*time.Second)
+		commandContext, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.publicSettings.TimeoutInSeconds)*time.Second)
 		defer cancel()
 		command = exec.CommandContext(commandContext, "/bin/bash", "-c", cmd)
 		ctx.Log("message", "Execute with TimeoutInSeconds="+strconv.Itoa(cfg.publicSettings.TimeoutInSeconds))
