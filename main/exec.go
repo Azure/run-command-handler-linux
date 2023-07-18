@@ -32,8 +32,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	// Add command args if any. Unnamed arguments go in 'commandArgs'. Named arguments are set as environment variables so the'd be available within the script.
 	cmd = cmd + commandArgs
 
-	//executionMessage := ""   // TODO: return
-	exitCode := 0 // TODO: return exit code and execution state
+	exitCode := ExitCode_Okay
 
 	if cfg.publicSettings.RunAsUser != "" {
 		ctx.Log("message", "RunAsUser is "+cfg.publicSettings.RunAsUser)
@@ -42,7 +41,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if !strings.HasPrefix(scriptPath, dataDir) {
 			errMessage := "Failed to determine RunAs script path. Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage)
-			return failedExitCodeGeneral, errors.New(errMessage)
+			return ExitCode_RunAsIncorrectScriptPath, errors.New(errMessage)
 		}
 
 		// Gets suffix "download/<runcommandName>/0/script.sh"
@@ -60,20 +59,20 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if sourceScriptFileOpenError != nil {
 			errMessage := "Failed to open source script. Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage+fmt.Sprintf(" Source script file is '%s'", scriptPath))
-			return failedExitCodeGeneral, errors.Wrapf(sourceScriptFileOpenError, errMessage)
+			return ExitCode_RunAsOpenSourceScriptFileFailed, errors.Wrapf(sourceScriptFileOpenError, errMessage)
 		}
 
 		destScriptFile, destScriptCreateError := os.Create(runAsScriptFilePath)
 		if destScriptCreateError != nil {
 			errMessage := "Failed to create script for Run As in Run As directory. Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage+fmt.Sprintf(" Destination runAs script file is '%s'", runAsScriptFilePath))
-			return failedExitCodeGeneral, errors.Wrapf(destScriptCreateError, errMessage)
+			return ExitCode_RunAsCreateRunAsScriptFileFailed, errors.Wrapf(destScriptCreateError, errMessage)
 		}
 		_, runAsScriptCopyError := io.Copy(destScriptFile, sourceScriptFile)
 		if runAsScriptCopyError != nil {
 			errMessage := fmt.Sprintf("Failed to copy script file '%s' to Run As path '%s'. Contact ICM team AzureRT\\Extensions for this service error.", scriptPath, runAsScriptFilePath)
 			ctx.Log("message", errMessage)
-			return failedExitCodeGeneral, errors.Wrapf(runAsScriptCopyError, errMessage)
+			return ExitCode_RunAsCopySourceScriptToRunAsScriptFileFailed, errors.Wrapf(runAsScriptCopyError, errMessage)
 		}
 		sourceScriptFile.Close()
 		destScriptFile.Close()
@@ -83,28 +82,28 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if lookupUserError != nil {
 			errMessage := fmt.Sprintf("Failed to lookup RunAs user '%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", cfg.publicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return failedExitCodeGeneral, errors.Wrapf(lookupUserError, errMessage)
+			return ExitCode_RunAsLookupUserFailed, errors.Wrapf(lookupUserError, errMessage)
 		}
 
 		lookedUpUserUid, lookedUpUserUidErr := strconv.Atoi(lookedUpUser.Uid)
 		if lookedUpUserUidErr != nil {
 			errMessage := "Failed to determine RunAs user's Uid and Guid . Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage)
-			return failedExitCodeGeneral, errors.Wrapf(lookedUpUserUidErr, errMessage)
+			return ExitCode_RunAsLookupUserUidFailed, errors.Wrapf(lookedUpUserUidErr, errMessage)
 		}
 
 		runAsScriptChownError := os.Chown(runAsScriptFilePath, lookedUpUserUid, os.Getegid())
 		if runAsScriptChownError != nil {
 			errMessage := fmt.Sprintf("Failed to change owner of file '%s' to RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.publicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return failedExitCodeGeneral, errors.Wrapf(runAsScriptChownError, errMessage)
+			return ExitCode_RunAsScriptFileChangeOwnerFailed, errors.Wrapf(runAsScriptChownError, errMessage)
 		}
 
 		runAsScriptChmodError := os.Chmod(runAsScriptFilePath, 0550)
 		if runAsScriptChmodError != nil {
 			errMessage := fmt.Sprintf("Failed to change permissions to execute for file '%s' for RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.publicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return failedExitCodeGeneral, errors.Wrapf(runAsScriptChmodError, errMessage)
+			return ExitCode_RunAsScriptFileChangePermissionsFailed, errors.Wrapf(runAsScriptChmodError, errMessage)
 		}
 
 		// echo pipes the RunAsPassword to sudo -S for RunAsUser instead of prompting the password interactively from user and blocking.
@@ -175,22 +174,21 @@ func SetEnvironmentVariables(cfg *handlerSettings) (string, error) {
 //
 // Ideally, we execute commands only once per sequence number in run-command-handler,
 // and save their output under /var/lib/waagent/<dir>/download/<seqnum>/*.
-func ExecCmdInDir(ctx *log.Context, scriptFilePath, workdir string, cfg *handlerSettings) error {
+func ExecCmdInDir(ctx *log.Context, scriptFilePath, workdir string, cfg *handlerSettings) (error, int) {
 
 	stdoutFileName, stderrFileName := logPaths(workdir)
 
 	outF, err := os.OpenFile(stdoutFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open stdout file")
+		return errors.Wrapf(err, "failed to open stdout file"), ExitCode_OpenStdOutFileFailed
 	}
 	errF, err := os.OpenFile(stderrFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open stderr file")
+		return errors.Wrapf(err, "failed to open stderr file"), ExitCode_OpenStdErrFileFailed
 	}
 
-	_, err = Exec(ctx, scriptFilePath, workdir, outF, errF, cfg)
-
-	return err
+	exitCode, err := Exec(ctx, scriptFilePath, workdir, outF, errF, cfg)
+	return err, exitCode
 }
 
 // logPaths returns stdout and stderr file paths for the specified output

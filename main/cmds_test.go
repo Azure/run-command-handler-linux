@@ -85,10 +85,11 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err = runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
 		publicSettings: publicSettings{Source: &scriptSource{Script: script}},
 	})
 	require.Nil(t, err, "command should run successfully")
+	require.Equal(t, ExitCode_Okay, exitCode)
 
 	// check stdout stderr files
 	_, err = os.Stat(filepath.Join(dir, "stdout"))
@@ -109,11 +110,12 @@ func Test_runCmd_fail(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err = runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
 		publicSettings: publicSettings{Source: &scriptSource{Script: "non-existing-cmd"}},
 	})
 	require.NotNil(t, err, "command terminated with exit status")
 	require.Contains(t, err.Error(), "failed to execute command")
+	require.NotEqual(t, ExitCode_Okay, exitCode)
 }
 
 func Test_downloadScriptUri(t *testing.T) {
@@ -187,4 +189,37 @@ func Test_downloadScriptUri_BySASFailsSucceedsByManagedIdentity(t *testing.T) {
 		})
 	require.Nil(t, err)
 	UseMockSASDownloadFailure = false
+}
+
+// This test just makes sure using TreatFailureAsDeploymentFailure flag, script is executed as expected.
+// The interpretation of the result (Succeeded or Failed, when TreatFailureAsDeploymentFailure is true)
+//     is done in main.go
+func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
+	var script = "ech HelloWorld" // ech is an unknown command. Sh returns error and 127 status code
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
+		publicSettings: publicSettings{Source: &scriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
+	})
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "failed to execute command: command terminated with exit status=127")
+	require.NotEqual(t, ExitCode_Okay, exitCode)
+}
+
+// This test just makes sure using TreatFailureAsDeploymentFailure flag, script is executed as expected.
+// The interpretation of the result (Succeeded or Failed, when TreatFailureAsDeploymentFailure is true)
+//     is done in main.go
+func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.T) {
+	var script = "echo HelloWorld" // ech is an unknown command. Sh returns error and 127 status code
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
+		publicSettings: publicSettings{Source: &scriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
+	})
+	require.Nil(t, err)
+	require.Equal(t, ExitCode_Okay, exitCode)
 }

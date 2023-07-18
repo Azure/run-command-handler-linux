@@ -111,10 +111,11 @@ func TestExecCmdInDir(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err = ExecCmdInDir(testContext, "/bin/echo 'Hello world'", dir, &testHandlerSettings)
+	err, exitCode := ExecCmdInDir(testContext, "/bin/echo 'Hello world'", dir, &testHandlerSettings)
 	require.Nil(t, err)
 	require.True(t, fileExists(t, filepath.Join(dir, "stdout")), "stdout file should be created")
 	require.True(t, fileExists(t, filepath.Join(dir, "stderr")), "stderr file should be created")
+	require.Equal(t, ExitCode_Okay, exitCode)
 
 	b, err := ioutil.ReadFile(filepath.Join(dir, "stdout"))
 	require.Nil(t, err)
@@ -126,8 +127,9 @@ func TestExecCmdInDir(t *testing.T) {
 }
 
 func TestExecCmdInDir_cantOpenError(t *testing.T) {
-	err := ExecCmdInDir(testContext, "/bin/echo 'Hello world'", "/non-existing-dir", &testHandlerSettings)
+	err, exitCode := ExecCmdInDir(testContext, "/bin/echo 'Hello world'", "/non-existing-dir", &testHandlerSettings)
 	require.Contains(t, err.Error(), "failed to open stdout file")
+	require.NotEqual(t, ExitCode_Okay, exitCode)
 }
 
 func TestExecCmdInDir_truncates(t *testing.T) {
@@ -135,8 +137,13 @@ func TestExecCmdInDir_truncates(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	require.Nil(t, ExecCmdInDir(testContext, "/bin/echo '1:out'; /bin/echo '1:err'>&2", dir, &testHandlerSettings))
-	require.Nil(t, ExecCmdInDir(testContext, "/bin/echo '2:out'; /bin/echo '2:err'>&2", dir, &testHandlerSettings))
+	err, exitCode := ExecCmdInDir(testContext, "/bin/echo '1:out'; /bin/echo '1:err'>&2", dir, &testHandlerSettings)
+	require.Nil(t, err)
+	require.Equal(t, ExitCode_Okay, exitCode)
+
+	err, exitCode = ExecCmdInDir(testContext, "/bin/echo '2:out'; /bin/echo '2:err'>&2", dir, &testHandlerSettings)
+	require.Nil(t, err)
+	require.Equal(t, ExitCode_Okay, exitCode)
 
 	b, err := ioutil.ReadFile(filepath.Join(dir, "stdout"))
 	require.Nil(t, err)

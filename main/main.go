@@ -116,19 +116,18 @@ func main() {
 	reportInstanceView(ctx, hEnv, extensionName, seqNum, StatusTransitioning, cmd, &instanceView)
 
 	// execute the subcommand
-	stdout, stderr, cmdInvokeError := cmd.invoke(ctx, hEnv, &instanceView, extensionName, seqNum)
+	stdout, stderr, cmdInvokeError, exitCode := cmd.invoke(ctx, hEnv, &instanceView, extensionName, seqNum)
 	if cmdInvokeError != nil {
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instanceView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
 		instanceView.ExecutionState = Failed
-		instanceView.ExitCode = -1
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
-		instanceView.ExitCode = cmd.failExitCode
+		instanceView.ExitCode = exitCode
 		statusToReport := StatusSuccess
 
-		// If TreatFailureAsDeploymentFailure is set, report error back as the status
+		// If TreatFailureAsDeploymentFailure is set to true and the exit code is non-zero, set extension status to error
 		cfg, err := GetHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
-		if err == nil && cfg.publicSettings.TreatFailureAsDeploymentFailure {
+		if err == nil && cfg.publicSettings.TreatFailureAsDeploymentFailure && cmd.failExitCode != 0 {
 			statusToReport = StatusError
 		}
 
@@ -138,7 +137,7 @@ func main() {
 		instanceView.ExecutionMessage = "Execution completed"
 		instanceView.ExecutionState = Succeeded
 		instanceView.EndTime = time.Now().UTC().Format(time.RFC3339)
-		instanceView.ExitCode = 0
+		instanceView.ExitCode = ExitCode_Okay
 	}
 
 	instanceView.Output = stdout

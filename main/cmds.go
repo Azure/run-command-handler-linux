@@ -28,7 +28,7 @@ const (
 	updateStatusInSeconds = 30
 )
 
-type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (stdout string, stderr string, err error)
+type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (stdout string, stderr string, err error, exitCode int)
 type preFunc func(ctx *log.Context, hEnv HandlerEnvironment, extName string, seqNum int) error
 
 type cmd struct {
@@ -61,40 +61,67 @@ var (
 		"update":    cmdUpdate,
 		"uninstall": cmdUninstall,
 	}
+
+	// Exit codes
+	ExitCode_Okay = 0
+
+	// User errors (-100s):
+	ExitCode_ScriptBlobDownloadFailed  = -100
+	ExitCode_BlobCreateOrReplaceFailed = -101
+	ExitCode_RunAsLookupUserFailed     = -102
+
+	// Service Errors (-200s):
+	ExitCode_CreateDataDirectoryFailed                    = -200
+	ExitCode_RemoveDataDirectoryFailed                    = -201
+	ExitCode_GetHandlerSettingsFailed                     = -202
+	ExitCode_SaveScriptFailed                             = -203
+	ExitCode_CommandExecutionFailed                       = -204
+	ExitCode_OpenStdOutFileFailed                         = -205
+	ExitCode_OpenStdErrFileFailed                         = -206
+	ExitCode_IncorrectRunAsScriptPath                     = -207
+	ExitCode_RunAsIncorrectScriptPath                     = -208
+	ExitCode_RunAsOpenSourceScriptFileFailed              = -209
+	ExitCode_RunAsCreateRunAsScriptFileFailed             = -210
+	ExitCode_RunAsCopySourceScriptToRunAsScriptFileFailed = -211
+	ExitCode_RunAsLookupUserUidFailed                     = -212
+	ExitCode_RunAsScriptFileChangeOwnerFailed             = -213
+	ExitCode_RunAsScriptFileChangePermissionsFailed       = -214
+
+	// Unknown errors (-300s):
 )
 
-func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error) {
+func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	ctx.Log("event", "update")
-	return "", "", nil
+	return "", "", nil, ExitCode_Okay
 }
 
-func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error) {
+func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	ctx.Log("event", "disable")
 	KillPreviousExtension(ctx, pidFilePath)
-	return "", "", nil
+	return "", "", nil, ExitCode_Okay
 }
 
-func install(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error) {
+func install(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return "", "", errors.Wrap(err, "failed to create data dir")
+		return "", "", errors.Wrap(err, "failed to create data dir"), ExitCode_CreateDataDirectoryFailed
 	}
 
 	ctx.Log("event", "created data dir", "path", dataDir)
 	ctx.Log("event", "installed")
-	return "", "", nil
+	return "", "", nil, ExitCode_Okay
 }
 
-func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error) {
+func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	{ // a new context scope with path
 		ctx = ctx.With("path", dataDir)
 		ctx.Log("event", "removing data dir", "path", dataDir)
 		if err := os.RemoveAll(dataDir); err != nil {
-			return "", "", errors.Wrap(err, "failed to delete data directory")
+			return "", "", errors.Wrap(err, "failed to delete data directory"), ExitCode_RemoveDataDirectoryFailed
 		}
 		ctx.Log("event", "removed data dir")
 	}
 	ctx.Log("event", "uninstalled")
-	return "", "", nil
+	return "", "", nil, ExitCode_Okay
 }
 
 func enablePre(ctx *log.Context, h HandlerEnvironment, extName string, seqNum int) error {
@@ -117,17 +144,20 @@ func min(a, b int) int {
 	return b
 }
 
-func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error) {
+func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	// parse the extension handler settings (not available prior to 'enable')
 	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get configuration")
+		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
 	}
 
 	dir := filepath.Join(dataDir, downloadDir, fmt.Sprintf("%d", seqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
-		return "", "", errors.Wrap(err, fmt.Sprintf("processing file downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.scriptURI())))
+		return "",
+			"",
+			errors.Wrap(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.scriptURI()))),
+			ExitCode_ScriptBlobDownloadFailed
 	}
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions OR managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity and provide outputBlobUri / errorBlobUri and corresponding clientId in outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). In case of system-assigned identity, do not use outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). For more info, refer https://aka.ms/RunCommandManagedLinux"
@@ -143,7 +173,10 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 			cfg.protectedSettings.OutputBlobSASToken, cfg.protectedSettings.OutputBlobManagedIdentity, ctx)
 
 		if outputBlobAppendCreateOrReplaceError != nil {
-			return "", "", errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI))
+			return "",
+				"",
+				errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
+				ExitCode_BlobCreateOrReplaceFailed
 		}
 	}
 
@@ -158,7 +191,10 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 			cfg.protectedSettings.ErrorBlobSASToken, cfg.protectedSettings.ErrorBlobManagedIdentity, ctx)
 
 		if errorBlobAppendCreateOrReplaceError != nil {
-			return "", "", errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI))
+			return "",
+				"",
+				errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
+				ExitCode_BlobCreateOrReplaceFailed
 		}
 	}
 
@@ -194,7 +230,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	}()
 
 	// execute the command, save its error
-	runErr := runCmd(ctx, dir, scriptFilePath, &cfg)
+	runErr, exitCode := runCmd(ctx, dir, scriptFilePath, &cfg)
 
 	ticker.Stop()
 	done <- true
@@ -216,8 +252,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
 	deleteScriptsAndSettingsExceptMostRecent(dataDir, downloadDir, extName, seqNum, h, ctx, cfg.publicSettings.RunAsUser)
-
-	return stdoutTail, stderrTail, runErr
+	return stdoutTail, stderrTail, runErr, exitCode
 }
 
 // appendToBlob saves a file (from seeking position to the end of the file) to AppendBlob. Returns the new position (end of the file)
@@ -317,7 +352,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string,
 }
 
 // runCmd runs the command (extracted from cfg) in the given dir (assumed to exist).
-func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerSettings) (err error) {
+func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerSettings) (err error, exitCode int) {
 	ctx.Log("event", "executing command", "output", dir)
 	var scenario string
 
@@ -329,7 +364,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerSet
 		err := saveScriptFile(scriptFilePath, cfg.script())
 		if err != nil {
 			ctx.Log("event", "failed to save script to file", "error", err, "file", scriptFilePath)
-			return errors.Wrap(err, "failed to save script to file")
+			return errors.Wrap(err, "failed to save script to file"), ExitCode_SaveScriptFailed
 		}
 	} else if cfg.scriptURI() != "" {
 		// If scriptUri is specified then cmd should start it
@@ -347,7 +382,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerSet
 	defer DeleteCurrentPidAndStartTime(pidFilePath)
 
 	begin := time.Now()
-	err = ExecCmdInDir(ctx, scriptFilePath, dir, cfg)
+	err, exitCode = ExecCmdInDir(ctx, scriptFilePath, dir, cfg)
 	elapsed := time.Now().Sub(begin)
 	isSuccess := err == nil
 
@@ -355,10 +390,10 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerSet
 
 	if err != nil {
 		ctx.Log("event", "failed to execute command", "error", err, "output", dir)
-		return errors.Wrap(err, "failed to execute command")
+		return errors.Wrap(err, "failed to execute command"), exitCode
 	}
 	ctx.Log("event", "executed command", "output", dir)
-	return nil
+	return nil, ExitCode_Okay
 }
 
 func writeTempScript(script, dir string) (string, string, error) {

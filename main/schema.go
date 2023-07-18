@@ -69,6 +69,10 @@ const (
       "description": "Async script execution",
       "type": "boolean"
     },
+    "treatFailureAsDeploymentFailure": {
+      "description": "If set to true, extension status will be set to error if the Run Command exits with a non-zero exit code.",
+      "type": "boolean"
+    },
 
     "timestamp": {
       "description": "An integer, intended to trigger re-execution of the script when changed",
