@@ -41,32 +41,6 @@ status_file_path() {
         readlink -f "$status_dir/$status_file"
 }
 
-write_status() {
-	status_file="$(status_file_path)"
-	if [ -f "$status_file" ]; then
-		echo "Not writing a placeholder status file, already exists: $status_file"
-	else
-		echo "Writing a placeholder status file indicating progress before forking: $status_file"
-		timestamp="$(date --utc --iso-8601=seconds)"
-		cat > "$status_file" <<- EOF
-			[
-				{
-					"version": 1,
-					"timestampUTC": "$timestamp",
-					"status": {
-						"operation": "Enable",
-						"status": "transitioning",
-						"formattedMessage": {
-							"lang": "en",
-							"message": "{}"
-						}
-					}
-				}
-			]
-		EOF
-	fi
-}
-
 check_binary_write_lock() {
     set +e # disable exit on non-zero return code
     local retry_attempts=0
@@ -124,10 +98,9 @@ bin="$(readlink -f "$SCRIPT_DIR/$HANDLER_BIN")"
 cmd="$1"
 
 if [[ "$cmd" == "enable" ]]; then
-    # for 'enable' command, write a .status file first, then double fork
+    # for 'enable' command, double fork
     # to detach from the handler process tree to avoid getting terminated 
     # after the 15-minute extension enabling timeout.
-    write_status
     check_binary_write_lock
     set -x
     # & will execute the binary on the backgraound and will not block current shell execution
