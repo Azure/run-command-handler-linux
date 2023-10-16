@@ -18,29 +18,6 @@ echo "ConfigSequenceNumber: $SEQNO"
 echo Architecture: $ARCHITECTURE
 echo Binary: $HANDLER_BIN
 
-# status_file returns the .status file path we are supposed to write
-# by determining the highest sequence number from ./config/*.settings files.
-status_file_path() {
-        # multiconfig support: status file name should be "extname.seqNo.status"
-        if [ -n "$EXTENSION_NAME" ] && [ -n "$ConfigSequenceNumber" ]; then
-            status_file=$(echo $EXTENSION_NAME.$SEQNO.status)
-        else
-            # normally we would need to find this config_dir by parsing the
-            # HandlerEnvironment.json, but we are in a bash script here,
-            # so assume it's at ../config/.
-            config_dir=$(readlink -f "${SCRIPT_DIR}/../config")
-            status_dir=$(readlink -f "${SCRIPT_DIR}/../status")
-            config_file=$(ls $config_dir | grep -E ^[0-9]+.settings$ | sort -n | tail -n 1)
-            if [ -f "$config_file" ]; then
-                echo "Cannot locate the config file.">&2
-                exit 1
-            fi
-            status_file=$(echo $config_file | sed s/settings/status/)
-        fi
-
-        readlink -f "$status_dir/$status_file"
-}
-
 check_binary_write_lock() {
     set +e # disable exit on non-zero return code
     local retry_attempts=0
