@@ -79,6 +79,10 @@ type RunCommandManagedIdentity struct {
 type scriptSource struct {
 	Script    string `json:"script"`
 	ScriptURI string `json:"scriptUri"`
+
+	// When the RunCommand extension sees the installAsService flag, it will install itself as a service on the VM.
+	// This service will continuously poll HGAP for any new goal state.
+	InstallAsService bool `json:"installAsService"`
 }
 
 type parameterDefinition struct {

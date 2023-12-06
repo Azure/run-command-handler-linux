@@ -27,6 +27,10 @@ const (
           "description": "ScriptUri specify the script source download location",
           "type": "string",
           "format": "uri"
+        },
+        "installAsService": {
+          "description": "Indicates the RunCommand extension to self install as a service on the VM",
+          "type", "bool"
         }
       }
     },
