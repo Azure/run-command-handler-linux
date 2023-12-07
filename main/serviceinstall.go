@@ -27,11 +27,14 @@ const (
 
 	// The name of the systemd configuration file
 	systemdServiceName = "managed-run-command.service"
+
+	// The full path of the systemd configuration for the RunCommand service
+	systemServiceFilePath = "/lib/systemd/system/" + systemdServiceName
 )
 
 // Installs RunCommand as a service on the client
-func InstallService(ctx *log.Context) (bool, error) {
-	_, err := updateRunCommandVersion(ctx)
+func InstallRunCommandService(ctx *log.Context) (bool, error) {
+	_, err := createOrUpdateRunCommandService(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to install service")
 	}
@@ -39,9 +42,9 @@ func InstallService(ctx *log.Context) (bool, error) {
 	return startService(ctx)
 }
 
-// Upgrades the RunCommand service with the latest available one
-func UpgradeService(ctx *log.Context) (bool, error) {
-	_, err := updateRunCommandVersion(ctx)
+// Upgrades the RunCommand service with the latest available one (if any service exists)
+func UpgradeRunCommandService(ctx *log.Context) (bool, error) {
+	_, err := createOrUpdateRunCommandService(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to upgrade service")
 	}
@@ -55,15 +58,30 @@ func UpgradeService(ctx *log.Context) (bool, error) {
 }
 
 // Stops and removes the installed service from the VM.
-func RemoveService(ctx *log.Context) (bool, error) {
+func UninstallRunCommandService(ctx *log.Context) (bool, error) {
 	_, err := stopService(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to remove service")
 	}
 
-	err = os.Remove("/lib/systemd/system/" + systemdServiceName)
+	err = os.Remove(systemServiceFilePath)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to delete systemd configuration")
+	}
+
+	return true, nil
+}
+
+// Checks if the service is installed by checking for the presence of the systemd configuration file
+func RunCommandServiceIsInstalled(ctx *log.Context) (bool, error) {
+	_, err := os.Stat(systemServiceFilePath)
+
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, errors.Wrap(err, "failed to check if systemd configuration file exists")
 	}
 
 	return true, nil
@@ -73,7 +91,7 @@ func RemoveService(ctx *log.Context) (bool, error) {
 // It will update the 'WorkingDirectory' and 'ExecStart' paths of the systemd configuration.
 // If this is the first time the method is getting invoked, then it will create the config file with the required details.
 // Subsequent calls will update the version of RunCommand to use.
-func updateRunCommandVersion(ctx *log.Context) (bool, error) {
+func createOrUpdateRunCommandService(ctx *log.Context) (bool, error) {
 	runCommandVersion := "2.42.0"
 	systemdConfig := fmt.Sprintf(serviceDetails, runCommandVersion)
 	err := os.WriteFile("/lib/systemd/system/"+systemdServiceName, []byte(systemdConfig), 0666)

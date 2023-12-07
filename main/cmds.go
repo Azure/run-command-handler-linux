@@ -86,16 +86,45 @@ var (
 	ExitCode_RunAsLookupUserUidFailed                     = -212
 	ExitCode_RunAsScriptFileChangeOwnerFailed             = -213
 	ExitCode_RunAsScriptFileChangePermissionsFailed       = -214
+	ExitCode_CheckDataDirectoryFailed                     = -215
+	ExitCode_UpgradeInstalledServiceFailed                = -216
+	ExitCode_InstallServiceFailed                         = -217
+	ExitCode_UninstallInstalledServiceFailed              = -218
+	ExitCode_DisableInstalledServiceFailed                = -219
 
 	// Unknown errors (-300s):
 )
 
 func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+	isInstalled, err := RunCommandServiceIsInstalled(ctx)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+	}
+
+	if isInstalled {
+		_, error := UpgradeRunCommandService(ctx)
+		if error != nil {
+			return "", "", errors.Wrap(err, "failed to upgrade run command service"), ExitCode_UpgradeInstalledServiceFailed
+		}
+	}
+
 	ctx.Log("event", "update")
 	return "", "", nil, ExitCode_Okay
 }
 
 func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+	isInstalled, err := RunCommandServiceIsInstalled(ctx)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+	}
+
+	if isInstalled {
+		_, error := stopService(ctx)
+		if error != nil {
+			return "", "", errors.Wrap(err, "failed to stop run command service"), ExitCode_DisableInstalledServiceFailed
+		}
+	}
+
 	ctx.Log("event", "disable")
 	KillPreviousExtension(ctx, pidFilePath)
 	return "", "", nil, ExitCode_Okay
@@ -112,6 +141,18 @@ func install(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceV
 }
 
 func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+	isInstalled, err := RunCommandServiceIsInstalled(ctx)
+	if err != nil {
+		return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+	}
+
+	if isInstalled {
+		_, error := UninstallRunCommandService(ctx)
+		if error != nil {
+			return "", "", errors.Wrap(err, "failed to uninstall run command service"), ExitCode_UninstallInstalledServiceFailed
+		}
+	}
+
 	{ // a new context scope with path
 		ctx = ctx.With("path", dataDir)
 		ctx.Log("event", "removing data dir", "path", dataDir)
@@ -149,6 +190,18 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
 		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
+	}
+
+	// If installService was provided and is equals to true, then install RunCommand as a service
+	if cfg.installAsService() {
+		serviceWasInstalled, err1 := InstallRunCommandService(ctx)
+		if err1 != nil {
+			return "", "", errors.Wrap(err1, "failed to install RunCommand as a service"), ExitCode_InstallServiceFailed
+		}
+
+		if serviceWasInstalled {
+			ctx.Log("message", "RunCommand service successfully installed")
+		}
 	}
 
 	dir := filepath.Join(dataDir, downloadDir, fmt.Sprintf("%d", seqNum))
