@@ -48,18 +48,20 @@ const (
 var (
 	telemetry = sendTelemetry(newTelemetryEventSender(), fullName, Version)
 
-	cmdInstall   = cmd{install, "Install", false, nil, 52}
-	cmdEnable    = cmd{enable, "Enable", true, enablePre, 3}
-	cmdDisable   = cmd{disable, "Disable", true, nil, 3}
-	cmdUpdate    = cmd{update, "Update", true, nil, 3}
-	cmdUninstall = cmd{uninstall, "Uninstall", false, nil, 3}
+	cmdInstall    = cmd{install, "Install", false, nil, 52}
+	cmdEnable     = cmd{enable, "Enable", true, enablePre, 3}
+	cmdDisable    = cmd{disable, "Disable", true, nil, 3}
+	cmdUpdate     = cmd{update, "Update", true, nil, 3}
+	cmdUninstall  = cmd{uninstall, "Uninstall", false, nil, 3}
+	cmdRunService = cmd{runService, "RunService", true, nil, 3}
 
 	cmds = map[string]cmd{
-		"install":   cmdInstall,
-		"enable":    cmdEnable,
-		"disable":   cmdDisable,
-		"update":    cmdUpdate,
-		"uninstall": cmdUninstall,
+		"install":    cmdInstall,
+		"enable":     cmdEnable,
+		"disable":    cmdDisable,
+		"update":     cmdUpdate,
+		"uninstall":  cmdUninstall,
+		"runService": cmdRunService,
 	}
 
 	// Exit codes
@@ -95,16 +97,31 @@ var (
 	// Unknown errors (-300s):
 )
 
+// Runs the extension as a service. This is the default behavior for when the program is initiated as a service by systemd.
+func runService(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+	StartImmediateRunCommand()
+	return "", "", nil, ExitCode_Okay
+}
+
 func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
-	isInstalled, err := RunCommandServiceIsInstalled(ctx)
+	// parse the extension handler settings
+	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
 	}
 
-	if isInstalled {
-		_, error := UpgradeRunCommandService(ctx)
-		if error != nil {
-			return "", "", errors.Wrap(err, "failed to upgrade run command service"), ExitCode_UpgradeInstalledServiceFailed
+	// If installAsService == true, then upgrade the service if already installed
+	if cfg.installAsService() {
+		isInstalled, err := RunCommandServiceIsInstalled(ctx)
+		if err != nil {
+			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+		}
+
+		if isInstalled {
+			_, error := UpgradeRunCommandService(ctx)
+			if error != nil {
+				return "", "", errors.Wrap(err, "failed to upgrade run command service"), ExitCode_UpgradeInstalledServiceFailed
+			}
 		}
 	}
 
@@ -113,15 +130,24 @@ func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 }
 
 func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
-	isInstalled, err := RunCommandServiceIsInstalled(ctx)
+	// parse the extension handler settings
+	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
 	}
 
-	if isInstalled {
-		_, error := stopService(ctx)
-		if error != nil {
-			return "", "", errors.Wrap(err, "failed to stop run command service"), ExitCode_DisableInstalledServiceFailed
+	// If installAsService == true, then disable the service (if any)
+	if cfg.installAsService() {
+		isInstalled, err := RunCommandServiceIsInstalled(ctx)
+		if err != nil {
+			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+		}
+
+		if isInstalled {
+			_, error := stopService(ctx)
+			if error != nil {
+				return "", "", errors.Wrap(err, "failed to stop run command service"), ExitCode_DisableInstalledServiceFailed
+			}
 		}
 	}
 
@@ -141,15 +167,24 @@ func install(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceV
 }
 
 func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
-	isInstalled, err := RunCommandServiceIsInstalled(ctx)
+	// parse the extension handler settings
+	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
 	}
 
-	if isInstalled {
-		_, error := UninstallRunCommandService(ctx)
-		if error != nil {
-			return "", "", errors.Wrap(err, "failed to uninstall run command service"), ExitCode_UninstallInstalledServiceFailed
+	// If installAsService == true, then uninstall the service
+	if cfg.installAsService() {
+		isInstalled, err := RunCommandServiceIsInstalled(ctx)
+		if err != nil {
+			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
+		}
+
+		if isInstalled {
+			_, error := UninstallRunCommandService(ctx)
+			if error != nil {
+				return "", "", errors.Wrap(err, "failed to uninstall run command service"), ExitCode_UninstallInstalledServiceFailed
+			}
 		}
 	}
 
@@ -192,7 +227,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
 	}
 
-	// If installService was provided and is equals to true, then install RunCommand as a service
+	// If installService == true, then install RunCommand as a service
 	if cfg.installAsService() {
 		serviceWasInstalled, err1 := InstallRunCommandService(ctx)
 		if err1 != nil {

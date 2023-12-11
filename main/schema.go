@@ -30,7 +30,7 @@ const (
         },
         "installAsService": {
           "description": "Indicates the RunCommand extension to self install as a service on the VM",
-          "type", "bool"
+          "type": "boolean"
         }
       }
     },
