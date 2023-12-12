@@ -158,7 +158,7 @@ func parseCmd(args []string) cmd {
 	cmd, ok := cmds[op]
 	if !ok {
 		printUsage(args)
-		fmt.Printf("Incorrect commandee: %q\n", op)
+		fmt.Printf("Incorrect command: %q\n", op)
 		os.Exit(2)
 	}
 	return cmd

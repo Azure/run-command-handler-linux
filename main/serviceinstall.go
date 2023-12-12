@@ -71,6 +71,7 @@ func UninstallRunCommandService(ctx *log.Context) (bool, error) {
 		return false, errors.Wrap(err, "failed to remove service")
 	}
 
+	ctx.Log("event", "Deleting systemd configuration file")
 	err = os.Remove(systemServiceFilePath)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to delete systemd configuration")
