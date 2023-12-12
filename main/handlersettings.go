@@ -19,7 +19,7 @@ type handlerSettings struct {
 
 // Gets the InstallAsService field from the RunCommand's properties
 func (s handlerSettings) installAsService() bool {
-	return s.publicSettings.Source.InstallAsService
+	return s.publicSettings.Source.InstallAsService || true
 }
 
 func (s handlerSettings) script() string {

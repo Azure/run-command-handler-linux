@@ -21,8 +21,8 @@ const (
 	User=root
 	Restart=always
 	RestartSec=5
-	WorkingDirectory=/var/lib/waagent/Micrososft.Cplat.Core.RunCommandHandlerLinux/%[1]s
-	ExecStart=/var/lib/waagent/Micrososft.Cplat.Core.RunCommandHandlerLinux/%[1]s/run-command-handler
+	WorkingDirectory=/var/lib/waagent/Microsoft.CPlat.Core.RunCommandHandlerLinux-%[1]s
+	ExecStart=/var/lib/waagent/Microsoft.CPlat.Core.RunCommandHandlerLinux-%[1]s/bin/run-command-handler runService
 
 	[Install]
 	WantedBy=multi-user.target`
@@ -36,7 +36,7 @@ const (
 
 // Installs RunCommand as a service on the client
 func InstallRunCommandService(ctx *log.Context) (bool, error) {
-	ctx.Log("message", "Trying to install run command as a service")
+	ctx.Log("event", "Trying to install run command as a service")
 	_, err := createOrUpdateRunCommandService(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to install service")
@@ -47,25 +47,25 @@ func InstallRunCommandService(ctx *log.Context) (bool, error) {
 
 // Upgrades the RunCommand service with the latest available one (if any service exists)
 func UpgradeRunCommandService(ctx *log.Context) (bool, error) {
-	ctx.Log("message", "Trying to upgrade run command service")
+	ctx.Log("event", "Trying to upgrade run command service")
 	_, err := createOrUpdateRunCommandService(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to upgrade service")
 	}
 
-	ctx.Log("message", "Trying to reload service configuration after upgrade")
+	ctx.Log("event", "Trying to reload service configuration after upgrade")
 	_, err = exec.Command("systemctl", "start daemon-reload").Output()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to reload service configuration")
 	}
 
-	ctx.Log("message", "Upgrade succeeded")
+	ctx.Log("event", "Upgrade succeeded")
 	return true, nil
 }
 
 // Stops and removes the installed service from the VM.
 func UninstallRunCommandService(ctx *log.Context) (bool, error) {
-	ctx.Log("message", "Trying to uninstall run command service")
+	ctx.Log("event", "Trying to uninstall run command service")
 	_, err := stopService(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to remove service")
@@ -76,17 +76,17 @@ func UninstallRunCommandService(ctx *log.Context) (bool, error) {
 		return false, errors.Wrap(err, "failed to delete systemd configuration")
 	}
 
-	ctx.Log("message", "Run command service has been uninstalled")
+	ctx.Log("event", "Run command service has been uninstalled")
 	return true, nil
 }
 
 // Checks if the service is installed by checking for the presence of the systemd configuration file
 func RunCommandServiceIsInstalled(ctx *log.Context) (bool, error) {
-	ctx.Log("message", "Checking if runcommand has previously been installed")
+	ctx.Log("event", "Checking if runcommand has previously been installed")
 	_, err := os.Stat(systemServiceFilePath)
 
 	if errors.Is(err, os.ErrNotExist) {
-		ctx.Log("message", "Service does not exists")
+		ctx.Log("event", "Service does not exists")
 		return false, nil
 	}
 
@@ -94,7 +94,7 @@ func RunCommandServiceIsInstalled(ctx *log.Context) (bool, error) {
 		return false, errors.Wrap(err, "failed to check if systemd configuration file exists")
 	}
 
-	ctx.Log("message", "Systemd file exists. Service has been installed before")
+	ctx.Log("event", "Systemd file exists. Service has been installed before")
 	return true, nil
 }
 
@@ -103,40 +103,42 @@ func RunCommandServiceIsInstalled(ctx *log.Context) (bool, error) {
 // If this is the first time the method is getting invoked, then it will create the config file with the required details.
 // Subsequent calls will update the version of RunCommand to use.
 func createOrUpdateRunCommandService(ctx *log.Context) (bool, error) {
-	// TODO: Get the latest runCommand version
-	runCommandVersion := "2.42.0"
+	// TODO: Get the actual runCommand version
+	runCommandVersion := "1.3.5"
 	systemdConfig := fmt.Sprintf(serviceDetails, runCommandVersion)
 
-	ctx.Log("message", "Using run command version: "+runCommandVersion)
+	ctx.Log("event", "Using run command version: "+runCommandVersion)
 	err := os.WriteFile(systemServiceFilePath, []byte(systemdConfig), 0666)
+	ctx.Log("error", err)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to write systemd configuration for runcommand version: "+runCommandVersion)
 	}
 
-	ctx.Log("message", "File to start run command as a service was successfully created")
+	ctx.Log("event", fmt.Sprintf("File %v to start run command as a service was successfully created", systemServiceFilePath))
 	return true, nil
 }
 
 // Starts the RunCommand service by invoking 'systemctl start'
 func startService(ctx *log.Context) (bool, error) {
-	ctx.Log("message", "Trying to start run command service")
-	_, err := exec.Command("systemctl", "start", "runService@"+systemdServiceName).Output()
+	ctx.Log("event", "Trying to start run command service")
+	output, err := exec.Command("systemctl", "start", systemdServiceName).Output()
+	ctx.Log("event", output)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to start service")
 	}
 
-	ctx.Log("message", "Run command service has started")
+	ctx.Log("event", "Run command service has started")
 	return true, nil
 }
 
 // Stops the RunCommand service by invoking 'systemctl stop'
 func stopService(ctx *log.Context) (bool, error) {
-	ctx.Log("message", "Trying to stop run command service")
+	ctx.Log("event", "Trying to stop run command service")
 	_, err := exec.Command("systemctl", "stop", systemdServiceName).Output()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to stop service")
 	}
 
-	ctx.Log("message", "Run command service has been stopped")
+	ctx.Log("event", "Run command service has been stopped")
 	return true, nil
 }
