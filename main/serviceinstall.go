@@ -117,7 +117,6 @@ func createOrUpdateRunCommandService(ctx *log.Context) (bool, error) {
 
 	ctx.Log("event", "Using run command version: "+runCommandVersion)
 	err := os.WriteFile(systemServiceFilePath, []byte(systemdConfig), 0666)
-	ctx.Log("error", err)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to write systemd configuration for runcommand version: "+runCommandVersion)
 	}
@@ -130,7 +129,6 @@ func createOrUpdateRunCommandService(ctx *log.Context) (bool, error) {
 func startService(ctx *log.Context) (bool, error) {
 	ctx.Log("event", "Trying to start run command service")
 	output, err := exec.Command("systemctl", "start", systemdServiceName).Output()
-	ctx.Log("event", output)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to start service")
 	}
