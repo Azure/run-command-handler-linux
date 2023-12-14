@@ -42,6 +42,13 @@ func InstallRunCommandService(ctx *log.Context) (bool, error) {
 		return false, errors.Wrap(err, "failed to install service")
 	}
 
+	// Important to enable the service to start automatically at system boot as current
+	// configuration does not allow that action
+	_, err = enableService(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to enable service after install")
+	}
+
 	return startService(ctx)
 }
 
@@ -141,5 +148,17 @@ func stopService(ctx *log.Context) (bool, error) {
 	}
 
 	ctx.Log("event", "Run command service has been stopped")
+	return true, nil
+}
+
+// Enables the RunCommand service by invoking 'systemctl enable'
+func enableService(ctx *log.Context) (bool, error) {
+	ctx.Log("event", "Trying to enable run command service to start at system boot")
+	_, err := exec.Command("systemctl", "enable", systemdServiceName).Output()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to enable service")
+	}
+
+	ctx.Log("event", "Run command service has been enable to start at system boot")
 	return true, nil
 }
