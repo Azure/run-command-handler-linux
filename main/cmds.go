@@ -229,13 +229,22 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 
 	// If installService == true, then install RunCommand as a service
 	if cfg.installAsService() {
-		serviceWasInstalled, err1 := InstallRunCommandService(ctx)
+		serviceExists, err1 := RunCommandServiceIsInstalled(ctx)
 		if err1 != nil {
-			return "", "", errors.Wrap(err1, "failed to install RunCommand as a service"), ExitCode_InstallServiceFailed
+			ctx.Log("event",
+				fmt.Sprintf("could not check if service is already installed. Proceeding to overwrite configuration file to make sure it is installed. %v"),
+				errors.Wrap(err1, "failed to check if service was previously installed"))
 		}
 
-		if serviceWasInstalled {
-			ctx.Log("message", "RunCommand service successfully installed")
+		if serviceExists == false {
+			serviceWasInstalled, err2 := InstallRunCommandService(ctx)
+			if err2 != nil {
+				return "", "", errors.Wrap(err2, "failed to install RunCommand as a service"), ExitCode_InstallServiceFailed
+			}
+
+			if serviceWasInstalled {
+				ctx.Log("event", "RunCommand service successfully installed")
+			}
 		}
 	}
 

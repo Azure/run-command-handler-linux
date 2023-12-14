@@ -128,7 +128,7 @@ func createOrUpdateRunCommandService(ctx *log.Context) (bool, error) {
 // Starts the RunCommand service by invoking 'systemctl start'
 func startService(ctx *log.Context) (bool, error) {
 	ctx.Log("event", "Trying to start run command service")
-	output, err := exec.Command("systemctl", "start", systemdServiceName).Output()
+	_, err := exec.Command("systemctl", "start", systemdServiceName).Output()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to start service")
 	}
