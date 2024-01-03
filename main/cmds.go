@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/run-command-handler-linux/internal/service"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -110,16 +112,17 @@ func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
 	}
 
-	// If installAsService == true, then upgrade the service if already installed
+	// If installAsService == true, then upgrade the service if already been installed before
 	if cfg.installAsService() {
-		isInstalled, err := RunCommandServiceIsInstalled(ctx)
+		isInstalled, err := service.IsInstalled(ctx)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
 		}
 
 		if isInstalled {
-			_, error := UpgradeRunCommandService(ctx)
-			if error != nil {
+			workingDirectory := path.Dir(h.HandlerEnvironment.ConfigFolder)
+			err = service.Register(ctx, workingDirectory)
+			if err != nil {
 				return "", "", errors.Wrap(err, "failed to upgrade run command service"), ExitCode_UpgradeInstalledServiceFailed
 			}
 		}
@@ -138,16 +141,18 @@ func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceV
 
 	// If installAsService == true, then disable the service (if any)
 	if cfg.installAsService() {
-		isInstalled, err := RunCommandServiceIsInstalled(ctx)
+		isInstalled, err := service.IsInstalled(ctx)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
 		}
 
 		if isInstalled {
-			_, error := stopService(ctx)
-			if error != nil {
+			err := service.Stop(ctx)
+			if err != nil {
 				return "", "", errors.Wrap(err, "failed to stop run command service"), ExitCode_DisableInstalledServiceFailed
 			}
+
+			// TODO: Decide if service should be disabled and then enabled again if indicated by the user
 		}
 	}
 
@@ -175,18 +180,21 @@ func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanc
 
 	// If installAsService == true, then uninstall the service
 	if cfg.installAsService() {
-		isInstalled, err := RunCommandServiceIsInstalled(ctx)
+		isInstalled, err := service.IsInstalled(ctx)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
 		}
 
 		if isInstalled {
-			_, error := UninstallRunCommandService(ctx)
+			error := service.DeRegister(ctx)
 			if error != nil {
 				return "", "", errors.Wrap(err, "failed to uninstall run command service"), ExitCode_UninstallInstalledServiceFailed
 			}
 		}
 	}
+
+	// TODO: Remove this after testing
+	return "", "", nil, ExitCode_Okay
 
 	{ // a new context scope with path
 		ctx = ctx.With("path", dataDir)
@@ -222,28 +230,24 @@ func min(a, b int) int {
 
 func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	// parse the extension handler settings (not available prior to 'enable')
-	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
+	cfg, err1 := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
+	if err1 != nil {
+		return "", "", errors.Wrap(err1, "failed to get configuration"), ExitCode_GetHandlerSettingsFailed
 	}
 
 	// If installService == true, then install RunCommand as a service
 	if cfg.installAsService() {
-		serviceExists, err1 := RunCommandServiceIsInstalled(ctx)
-		if err1 != nil {
-			ctx.Log("event",
-				fmt.Sprintf("could not check if service is already installed. Proceeding to overwrite configuration file to make sure it is installed. %v"),
-				errors.Wrap(err1, "failed to check if service was previously installed"))
+		isInstalled, err2 := service.IsInstalled(ctx)
+		if err2 != nil {
+			ctx.Log("message", "could not check if service is already installed. Proceeding to overwrite configuration file to make sure it gets installed.")
 		}
 
-		if serviceExists == false {
-			serviceWasInstalled, err2 := InstallRunCommandService(ctx)
-			if err2 != nil {
-				return "", "", errors.Wrap(err2, "failed to install RunCommand as a service"), ExitCode_InstallServiceFailed
-			}
-
-			if serviceWasInstalled {
-				ctx.Log("event", "RunCommand service successfully installed")
+		if !isInstalled {
+			ctx.Log("message", "Getting run command service working directory")
+			workingDirectory := path.Dir(h.HandlerEnvironment.ConfigFolder)
+			err3 := service.Register(ctx, workingDirectory)
+			if err3 != nil {
+				return "", "", errors.Wrap(err3, "failed to install RunCommand as a service"), ExitCode_InstallServiceFailed
 			}
 		}
 	}
