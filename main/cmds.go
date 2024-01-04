@@ -86,6 +86,7 @@ var (
 	ExitCode_RunAsLookupUserUidFailed                     = -212
 	ExitCode_RunAsScriptFileChangeOwnerFailed             = -213
 	ExitCode_RunAsScriptFileChangePermissionsFailed       = -214
+	ExitCode_DownloadArtifactFailed                       = -215
 
 	// Unknown errors (-300s):
 )
@@ -158,6 +159,13 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 			"",
 			errors.Wrap(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.scriptURI()))),
 			ExitCode_ScriptBlobDownloadFailed
+	}
+
+	err = downloadArtifacts(ctx, dir, &cfg)
+	if err != nil {
+		return "", "",
+			errors.Wrap(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
+			ExitCode_DownloadArtifactFailed
 	}
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions OR managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity and provide outputBlobUri / errorBlobUri and corresponding clientId in outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). In case of system-assigned identity, do not use outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). For more info, refer https://aka.ms/RunCommandManagedLinux"
@@ -340,7 +348,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string,
 	if scriptURI != "" {
 		telemetry("scenario", fmt.Sprintf("source.scriptUri;dos2unix=%d", dos2unix), true, 0*time.Millisecond)
 		ctx.Log("event", "download start")
-		file, err := downloadAndProcessURL(ctx, scriptURI, dir, cfg)
+		file, err := downloadAndProcessScript(ctx, scriptURI, dir, cfg)
 		if err != nil {
 			ctx.Log("event", "download failed", "error", err)
 			return "", errors.Wrapf(err, "failed to download file %s. ", scriptURI)
@@ -349,6 +357,31 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string,
 		ctx.Log("event", "download complete", "output", dir)
 	}
 	return scriptFilePath, nil
+}
+
+func downloadArtifacts(ctx *log.Context, dir string, cfg *handlerSettings) error {
+	artifacts, err := cfg.readArtifacts()
+	if err != nil {
+		return err
+	}
+
+	if artifacts == nil {
+		return nil
+	}
+
+	ctx.Log("event", "Downloading artifacts")
+	for i := 0; i < len(artifacts); i++ {
+		// Download the artifact
+		filePath, err := downloadAndProcessArtifact(ctx, dir, &artifacts[i])
+		if err != nil {
+			ctx.Log("events", "Failed to download artifact", err, "artifact", artifacts[i].ArtifactUri)
+			return errors.Wrapf(err, "failed to download artifact %s", artifacts[i].ArtifactUri)
+		}
+
+		ctx.Log("event", "Downloaded artifact complete", "file", filePath)
+	}
+
+	return nil
 }
 
 // runCmd runs the command (extracted from cfg) in the given dir (assumed to exist).

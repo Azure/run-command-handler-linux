@@ -142,6 +142,54 @@ func Test_downloadScriptUri(t *testing.T) {
 	require.Nil(t, err, "%s is missing from download dir", fp)
 }
 
+func Test_downloadArtifacts(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	srv := httptest.NewServer(httpbin.GetMux())
+	defer srv.Close()
+
+	err = downloadArtifacts(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlerSettings{
+			publicSettings: publicSettings{
+				Source: &scriptSource{ScriptURI: srv.URL + "/bytes/10"},
+				Artifacts: []publicArtifactSource{
+					publicArtifactSource{
+						ArtifactId:  1,
+						ArtifactUri: srv.URL + "/bytes/255",
+						FileName:    "flipper",
+					},
+					publicArtifactSource{
+						ArtifactId:  2,
+						ArtifactUri: srv.URL + "/bytes/256",
+					},
+				},
+			},
+			protectedSettings: protectedSettings{
+				Artifacts: []protectedArtifactSource{
+					protectedArtifactSource{
+						ArtifactId: 1,
+					},
+					protectedArtifactSource{
+						ArtifactId: 2,
+					},
+				},
+			},
+		})
+	require.Nil(t, err)
+
+	// check the downloaded files
+	fp := filepath.Join(dir, "flipper")
+	_, err = os.Stat(fp)
+	require.Nil(t, err, "%s is missing from download dir", fp)
+
+	fp = filepath.Join(dir, "Artifact2")
+	_, err = os.Stat(fp)
+	require.Nil(t, err, "%s is missing from download dir", fp)
+}
+
 func Test_decodeScript(t *testing.T) {
 	testSubject := "bHMK"
 	s, info, err := decodeScript(testSubject)
