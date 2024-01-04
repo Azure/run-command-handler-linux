@@ -26,6 +26,7 @@ type functionCalled struct {
 	disableunit_f          bool
 	daemondreload_f        bool
 	isunitactive_f         bool
+	isunitenabled_f        bool
 	isunitinstalled_f      bool
 	removeunitconfigfile_f bool
 	createunitconfigfile_f bool
@@ -39,6 +40,7 @@ type ManagerMock struct {
 	disable_f                 func(unitName string, ctx *log.Context) error
 	daemondreload_f           func(unitName string, ctx *log.Context) error
 	isactive_f                func(unitName string, ctx *log.Context) error
+	isenabled_f               func(unitName string, ctx *log.Context) (bool, error)
 	isinstalled_f             func(unitName string, ctx *log.Context) (bool, error)
 	removeUnitConfiguration_f func(unitName string, ctx *log.Context) error
 	createUnitConfiguration_f func(unitName string, content []byte, ctx *log.Context) error
@@ -73,6 +75,11 @@ func (s *ManagerMock) DaemonReload(unitName string, ctx *log.Context) error {
 func (s *ManagerMock) IsUnitActive(unitName string, ctx *log.Context) error {
 	s.functionCalled.isunitactive_f = true
 	return s.isactive_f(unitName, ctx)
+}
+
+func (s *ManagerMock) IsUnitEnabled(unitName string, ctx *log.Context) (bool, error) {
+	s.functionCalled.isunitenabled_f = true
+	return s.isenabled_f(unitName, ctx)
 }
 
 func (s *ManagerMock) IsUnitInstalled(unitName string, ctx *log.Context) (bool, error) {
@@ -110,6 +117,9 @@ func getManagerMock() *ManagerMock {
 		isactive_f: func(unitName string, ctx *log.Context) error {
 			return nil
 		},
+		isenabled_f: func(unitName string, ctx *log.Context) (bool, error) {
+			return true, nil
+		},
 		isinstalled_f: func(unitName string, ctx *log.Context) (bool, error) {
 			return true, nil
 		},
@@ -125,7 +135,8 @@ func getManagerMock() *ManagerMock {
 			enableunit_f:    false,
 			startunit_f:     false,
 			stopunit_f:      false,
-			isunitactive_f:  false},
+			isunitactive_f:  false,
+			isunitenabled_f: false},
 	}
 }
 
@@ -552,6 +563,55 @@ func TestHandlerIsActiveFalse(t *testing.T) {
 
 	if isActive == true {
 		t.Errorf("unexpected isactive true")
+	}
+}
+
+func TestHandlerIsEnabledTrue(t *testing.T) {
+	config := NewConfiguration(testUnitName)
+
+	m := getManagerMock()
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
+		os.Stdout))).With("time", log.DefaultTimestamp)
+
+	handler := NewHandler(m, config, ctx)
+	isEnabled, err := handler.IsEnabled()
+
+	if !m.functionCalled.isunitenabled_f {
+		t.Errorf("missing IsUnitEnabled method call")
+	}
+
+	if err != nil {
+		t.Errorf("unexpected error from IsUnitEnabled call")
+	}
+
+	if isEnabled == false {
+		t.Errorf("unexpected isEnabled false")
+	}
+}
+
+func TestHandlerIsEnabledFalse(t *testing.T) {
+	config := NewConfiguration(testUnitName)
+
+	m := getManagerMock()
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
+		os.Stdout))).With("time", log.DefaultTimestamp)
+
+	handler := NewHandler(m, config, ctx)
+	m.isenabled_f = func(unitName string, ctx *log.Context) (bool, error) {
+		return false, nil
+	}
+
+	isEnabled, err := handler.IsEnabled()
+	if !m.functionCalled.isunitenabled_f {
+		t.Errorf("missing IsUnitEnabled method call")
+	}
+
+	if err != nil {
+		t.Errorf("unexpected error from IsUnitEnabled call")
+	}
+
+	if isEnabled == true {
+		t.Errorf("unexpected isEnabled true")
 	}
 }
 

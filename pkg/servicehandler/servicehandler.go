@@ -14,6 +14,7 @@ type UnitManager interface {
 	DisableUnit(unitName string, ctx *log.Context) error
 	DaemonReload(unitName string, ctx *log.Context) error
 	IsUnitActive(unitName string, ctx *log.Context) error
+	IsUnitEnabled(unitName string, ctx *log.Context) (bool, error)
 	IsUnitInstalled(unitName string, ctx *log.Context) (bool, error)
 	RemoveUnitConfigurationFile(unitName string, ctx *log.Context) error
 	CreateUnitConfigurationFile(unitName string, content []byte, ctx *log.Context) error
@@ -68,6 +69,10 @@ func (handler *Handler) IsActive() (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (handler *Handler) IsEnabled() (bool, error) {
+	return handler.manager.IsUnitEnabled(handler.config.Name, handler.ctx)
 }
 
 func (handler *Handler) IsInstalled() (bool, error) {

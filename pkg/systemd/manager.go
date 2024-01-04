@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -16,6 +17,7 @@ const (
 	systemctl_disable      = "disable"
 	systemctl_enable       = "enable"
 	systemctl_isactive     = "is-active"
+	systemctl_isenabled    = "is-enabled"
 	systemctl_start        = "start"
 	systemctl_status       = "status"
 	systemctl_stop         = "stop"
@@ -67,6 +69,20 @@ func (mgr *Manager) IsUnitActive(unitName string, ctx *log.Context) error {
 	ctx.Log("message", "running command to check if unit is active")
 	err := exec.Command(systemctl, systemctl_isactive, unitName).Run()
 	return err
+}
+
+func (mgr *Manager) IsUnitEnabled(unitName string, ctx *log.Context) (bool, error) {
+	ctx.Log("message", "running command to check if unit is already enabled")
+	output, err := exec.Command(systemctl, systemctl_isenabled, unitName).Output()
+	sanitizedOutput := strings.Replace(string(output), "\n", "", -1)
+	ctx.Log("message", fmt.Sprintf("%v %v output: %v", systemctl, systemctl_isenabled, sanitizedOutput))
+	if sanitizedOutput == "enabled" {
+		return true, nil
+	} else if sanitizedOutput == "disabled" {
+		return false, nil
+	}
+
+	return false, err
 }
 
 func (mgr *Manager) IsUnitInstalled(unitName string, ctx *log.Context) (bool, error) {

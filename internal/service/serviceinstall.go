@@ -32,9 +32,9 @@ func Register(ctx *log.Context, workingDirectory string) error {
 	if isSystemdSupported(ctx) {
 		ctx.Log("message", "Generating service configuration files")
 		systemdUnitContent := generateServiceConfigurationContent(ctx, workingDirectory)
+		serviceHandler := getSystemdHandler(ctx)
 
 		ctx.Log("message", "Registering service")
-		serviceHandler := getSystemdHandler(ctx)
 		err := serviceHandler.Register(ctx, systemdUnitContent)
 		if err != nil {
 			return err
@@ -53,8 +53,9 @@ func Register(ctx *log.Context, workingDirectory string) error {
 
 func DeRegister(ctx *log.Context) error {
 	if isSystemdSupported(ctx) {
-		ctx.Log("message", "Deregistering service")
 		serviceHandler := getSystemdHandler(ctx)
+
+		ctx.Log("message", "Deregistering service")
 		err := serviceHandler.DeRegister(ctx)
 		if err != nil {
 			return err
@@ -68,8 +69,9 @@ func DeRegister(ctx *log.Context) error {
 
 func Start(ctx *log.Context) error {
 	if isSystemdSupported(ctx) {
-		ctx.Log("message", "Starting service")
 		serviceHandler := getSystemdHandler(ctx)
+
+		ctx.Log("message", "Starting service")
 		err := serviceHandler.Start()
 		if err != nil {
 			return err
@@ -81,10 +83,48 @@ func Start(ctx *log.Context) error {
 	return nil
 }
 
+func Disable(ctx *log.Context) error {
+	if isSystemdSupported(ctx) {
+		serviceHandler := getSystemdHandler(ctx)
+
+		ctx.Log("message", "Stopping service")
+		err := serviceHandler.Stop()
+		if err != nil {
+			return err
+		}
+		ctx.Log("message", "Service stopped")
+
+		ctx.Log("message", "Disabling service")
+		err = serviceHandler.Disable()
+		if err != nil {
+			return err
+		}
+		ctx.Log("message", "Service disabled")
+	}
+
+	return nil
+}
+
+func Enable(ctx *log.Context) error {
+	if isSystemdSupported(ctx) {
+		serviceHandler := getSystemdHandler(ctx)
+
+		ctx.Log("message", "enabling service")
+		err := serviceHandler.Enable()
+		if err != nil {
+			return err
+		}
+		ctx.Log("message", "Service enabled")
+	}
+
+	return nil
+}
+
 func Stop(ctx *log.Context) error {
 	if isSystemdSupported(ctx) {
-		ctx.Log("message", "Stopping service")
 		serviceHandler := getSystemdHandler(ctx)
+
+		ctx.Log("message", "Stopping service")
 		err := serviceHandler.Stop()
 		if err != nil {
 			return err
@@ -110,10 +150,22 @@ func IsActive(ctx *log.Context) (bool, error) {
 	return false, nil
 }
 
+func IsEnabled(ctx *log.Context) (bool, error) {
+	if isSystemdSupported(ctx) {
+		serviceHandler := getSystemdHandler(ctx)
+		isEnabled, err := serviceHandler.IsEnabled()
+		ctx.Log("message", fmt.Sprintf("Service is enabled : %v", isEnabled))
+		return isEnabled, err
+	}
+
+	return false, nil
+}
+
 func IsInstalled(ctx *log.Context) (bool, error) {
 	if isSystemdSupported(ctx) {
-		ctx.Log("message", "Checking if service is installed")
 		serviceHandler := getSystemdHandler(ctx)
+
+		ctx.Log("message", "Checking if service is installed")
 		isInstalled, err := serviceHandler.IsInstalled()
 
 		ctx.Log("message", fmt.Sprintf("Service is installed: %v", isInstalled))

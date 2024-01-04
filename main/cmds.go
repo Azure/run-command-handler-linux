@@ -121,6 +121,7 @@ func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 
 		if isInstalled {
 			workingDirectory := path.Dir(h.HandlerEnvironment.ConfigFolder)
+			ctx.Log("message", fmt.Sprintf("Upgrading service with new working directory: %v", workingDirectory))
 			err = service.Register(ctx, workingDirectory)
 			if err != nil {
 				return "", "", errors.Wrap(err, "failed to upgrade run command service"), ExitCode_UpgradeInstalledServiceFailed
@@ -147,12 +148,10 @@ func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceV
 		}
 
 		if isInstalled {
-			err := service.Stop(ctx)
+			err := service.Disable(ctx)
 			if err != nil {
-				return "", "", errors.Wrap(err, "failed to stop run command service"), ExitCode_DisableInstalledServiceFailed
+				return "", "", errors.Wrap(err, "failed to disable run command service"), ExitCode_DisableInstalledServiceFailed
 			}
-
-			// TODO: Decide if service should be disabled and then enabled again if indicated by the user
 		}
 	}
 
@@ -192,9 +191,6 @@ func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanc
 			}
 		}
 	}
-
-	// TODO: Remove this after testing
-	return "", "", nil, ExitCode_Okay
 
 	{ // a new context scope with path
 		ctx = ctx.With("path", dataDir)
@@ -248,6 +244,25 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 			err3 := service.Register(ctx, workingDirectory)
 			if err3 != nil {
 				return "", "", errors.Wrap(err3, "failed to install RunCommand as a service"), ExitCode_InstallServiceFailed
+			}
+		} else {
+			isEnabled, err3 := service.IsEnabled(ctx)
+			if err3 != nil {
+				return "", "", errors.Wrap(err3, "failed to check if service is already enabled"), ExitCode_InstallServiceFailed
+			}
+
+			if !isEnabled {
+				err4 := service.Enable(ctx)
+
+				if err4 != nil {
+					return "", "", errors.Wrap(err4, "failed to enable service"), ExitCode_InstallServiceFailed
+				}
+
+				err5 := service.Start(ctx)
+
+				if err5 != nil {
+					return "", "", errors.Wrap(err5, "failed to start service"), ExitCode_InstallServiceFailed
+				}
 			}
 		}
 	}
