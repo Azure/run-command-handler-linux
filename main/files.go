@@ -21,7 +21,7 @@ var UseMockSASDownloadFailure bool = false
 func downloadAndProcessArtifact(ctx *log.Context, downloadDir string, artifact *unifiedArtifact) (string, error) {
 	fileName := artifact.FileName
 	if fileName == "" {
-		fileName = fmt.Sprintf("%s%d", artifact.ArtifactId, "Artifact")
+		fileName = fmt.Sprintf("%s%d", "Artifact", artifact.ArtifactId)
 	}
 	targetFilePath, err := downloadAndProcessURL(ctx, artifact.ArtifactUri, downloadDir, fileName, artifact.ArtifactSasToken, artifact.ArtifactManagedIdentity)
 
