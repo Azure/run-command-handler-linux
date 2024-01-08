@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Azure/run-command-handler-linux/pkg/servicehandler"
@@ -28,10 +29,10 @@ ExecStart=%run_command_working_directory%/bin/run-command-handler runService
 WantedBy=multi-user.target`
 )
 
-func Register(ctx *log.Context, workingDirectory string) error {
+func Register(ctx *log.Context) error {
 	if isSystemdSupported(ctx) {
 		ctx.Log("message", "Generating service configuration files")
-		systemdUnitContent := generateServiceConfigurationContent(ctx, workingDirectory)
+		systemdUnitContent := generateServiceConfigurationContent(ctx)
 		serviceHandler := getSystemdHandler(ctx)
 
 		ctx.Log("message", "Registering service")
@@ -182,7 +183,8 @@ func getSystemdHandler(ctx *log.Context) *servicehandler.Handler {
 	return &handler
 }
 
-func generateServiceConfigurationContent(ctx *log.Context, workingDirectory string) string {
+func generateServiceConfigurationContent(ctx *log.Context) string {
+	workingDirectory := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_PATH")
 	systemdConfigContent := strings.Replace(systemdUnitConfigurationTemplate, runcommand_working_directory_placeholder, workingDirectory, -1)
 	ctx.Log("message", "Using working directory: "+workingDirectory)
 	return systemdConfigContent

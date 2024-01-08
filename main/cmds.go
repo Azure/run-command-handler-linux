@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -120,9 +119,7 @@ func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		}
 
 		if isInstalled {
-			workingDirectory := path.Dir(h.HandlerEnvironment.ConfigFolder)
-			ctx.Log("message", fmt.Sprintf("Upgrading service with new working directory: %v", workingDirectory))
-			err = service.Register(ctx, workingDirectory)
+			err = service.Register(ctx)
 			if err != nil {
 				return "", "", errors.Wrap(err, "failed to upgrade run command service"), ExitCode_UpgradeInstalledServiceFailed
 			}
@@ -239,9 +236,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		}
 
 		if !isInstalled {
-			ctx.Log("message", "Getting run command service working directory")
-			workingDirectory := path.Dir(h.HandlerEnvironment.ConfigFolder)
-			err3 := service.Register(ctx, workingDirectory)
+			err3 := service.Register(ctx)
 			if err3 != nil {
 				return "", "", errors.Wrap(err3, "failed to install RunCommand as a service"), ExitCode_InstallServiceFailed
 			}
