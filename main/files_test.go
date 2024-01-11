@@ -8,26 +8,27 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
-var mockManagedIdentityBoth = RunCommandManagedIdentity{
+var mockManagedIdentityBoth = handlersettings.RunCommandManagedIdentity{
 	ClientId: "5d784f90-d7d9-4b04-bdf1-4ae4824d55b0",
 	ObjectId: "bed99fe3-1ad3-4a25-867d-7d48d68def6a",
 }
 
-var mockManagedIdentityClientId = RunCommandManagedIdentity{
+var mockManagedIdentityClientId = handlersettings.RunCommandManagedIdentity{
 	ClientId: "5d784f90-d7d9-4b04-bdf1-4ae4824d55b0",
 }
 
-var mockManagedIdentityObjectId = RunCommandManagedIdentity{
+var mockManagedIdentityObjectId = handlersettings.RunCommandManagedIdentity{
 	ObjectId: "bed99fe3-1ad3-4a25-867d-7d48d68def6a",
 }
 
-var mockManagedSystemIdentity = RunCommandManagedIdentity{}
+var mockManagedSystemIdentity = handlersettings.RunCommandManagedIdentity{}
 
 func Test_getDownloaders_externalUrl(t *testing.T) {
 	download.MockReturnErrorForMockMsiDownloader = true
@@ -160,7 +161,7 @@ func Test_downloadAndProcessURL(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	cfg := handlerSettings{publicSettings{}, protectedSettings{}}
+	cfg := handlersettings.HandlerSettings{PublicSettings: handlersettings.PublicSettings{}, ProtectedSettings: handlersettings.ProtectedSettings{}}
 	downloadedFilePath, err := downloadAndProcessURL(log.NewContext(log.NewNopLogger()), srv.URL+"/bytes/256", tmpDir, &cfg)
 	require.Nil(t, err)
 

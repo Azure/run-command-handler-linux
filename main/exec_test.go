@@ -8,13 +8,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	testHandlerSettings handlerSettings = handlerSettings{publicSettings{}, protectedSettings{}}
-	testContext                         = log.NewContext(log.NewNopLogger())
+	testHandlerSettings handlersettings.HandlerSettings = handlersettings.HandlerSettings{PublicSettings: handlersettings.PublicSettings{}, ProtectedSettings: handlersettings.ProtectedSettings{}}
+	testContext                                         = log.NewContext(log.NewNopLogger())
 )
 
 func TestExec_success(t *testing.T) {
@@ -45,9 +46,9 @@ func TestExec_failure_exitError(t *testing.T) {
 }
 
 func TestExec_failure_timeout(t *testing.T) {
-	testHandlerSettings.publicSettings.TimeoutInSeconds = 1
+	testHandlerSettings.PublicSettings.TimeoutInSeconds = 1
 	ec, err := Exec(testContext, "sleep 20", "/", new(mockFile), new(mockFile), &testHandlerSettings)
-	testHandlerSettings.publicSettings.TimeoutInSeconds = 0
+	testHandlerSettings.PublicSettings.TimeoutInSeconds = 0
 	require.NotNil(t, err)
 	require.EqualError(t, err, "command terminated with exit status=-1") // error is customized
 	require.EqualValues(t, -1, ec)
@@ -69,8 +70,20 @@ func TestExec_failure_timeout(t *testing.T) {
 // }
 
 func TestExec_SetEnvironmentVariables(t *testing.T) {
-	cfg := handlerSettings{publicSettings{Parameters: []parameterDefinition{{Name: "Variable1", Value: "value1"}, {Name: "", Value: "arg1"}}},
-		protectedSettings{ProtectedParameters: []parameterDefinition{{Name: "Variable2", Value: "value2"}, {Name: "", Value: "arg2"}}}}
+	cfg := handlersettings.HandlerSettings{
+		PublicSettings: handlersettings.PublicSettings{
+			Parameters: []handlersettings.ParameterDefinition{
+				{Name: "Variable1", Value: "value1"},
+				{Name: "", Value: "arg1"},
+			},
+		},
+		ProtectedSettings: handlersettings.ProtectedSettings{
+			ProtectedParameters: []handlersettings.ParameterDefinition{
+				{Name: "Variable2", Value: "value2"},
+				{Name: "", Value: "arg2"},
+			},
+		},
+	}
 	commandArgs, err := SetEnvironmentVariables(&cfg)
 	require.Nil(t, err)
 	require.Equal(t, commandArgs, " arg1 arg2")

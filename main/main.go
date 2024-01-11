@@ -127,7 +127,7 @@ func main() {
 
 		// If TreatFailureAsDeploymentFailure is set to true and the exit code is non-zero, set extension status to error
 		cfg, err := GetHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
-		if err == nil && cfg.publicSettings.TreatFailureAsDeploymentFailure && cmd.failExitCode != 0 {
+		if err == nil && cfg.PublicSettings.TreatFailureAsDeploymentFailure && cmd.failExitCode != 0 {
 			statusToReport = StatusError
 		}
 

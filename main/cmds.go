@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/service"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/go-kit/kit/log"
@@ -100,7 +101,7 @@ var (
 
 // Runs the extension as a service. This is the default behavior for when the program is initiated as a service by systemd.
 func runService(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
-	StartImmediateRunCommand()
+	StartImmediateRunCommand(ctx)
 	return "", "", nil, ExitCode_Okay
 }
 
@@ -112,7 +113,7 @@ func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	}
 
 	// If installAsService == true, then upgrade the service if already been installed before
-	if cfg.installAsService() {
+	if cfg.InstallAsService() {
 		isInstalled, err := service.IsInstalled(ctx)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
@@ -138,7 +139,7 @@ func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceV
 	}
 
 	// If installAsService == true, then disable the service (if any)
-	if cfg.installAsService() {
+	if cfg.InstallAsService() {
 		isInstalled, err := service.IsInstalled(ctx)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
@@ -175,7 +176,7 @@ func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanc
 	}
 
 	// If installAsService == true, then uninstall the service
-	if cfg.installAsService() {
+	if cfg.InstallAsService() {
 		isInstalled, err := service.IsInstalled(ctx)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), ExitCode_CheckDataDirectoryFailed
@@ -229,7 +230,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	}
 
 	// If installService == true, then install RunCommand as a service
-	if cfg.installAsService() {
+	if cfg.InstallAsService() {
 		isInstalled, err2 := service.IsInstalled(ctx)
 		if err2 != nil {
 			ctx.Log("message", "could not check if service is already installed. Proceeding to overwrite configuration file to make sure it gets installed.")
@@ -267,7 +268,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	if err != nil {
 		return "",
 			"",
-			errors.Wrap(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.scriptURI()))),
+			errors.Wrap(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
 			ExitCode_ScriptBlobDownloadFailed
 	}
 
@@ -281,7 +282,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	// Create or Replace outputBlobURI if provided. Fail the command if create or replace fails.
 	if cfg.OutputBlobURI != "" {
 		outputBlobSASRef, outputBlobAppendClient, outputBlobAppendCreateOrReplaceError = createOrReplaceAppendBlob(cfg.OutputBlobURI,
-			cfg.protectedSettings.OutputBlobSASToken, cfg.protectedSettings.OutputBlobManagedIdentity, ctx)
+			cfg.ProtectedSettings.OutputBlobSASToken, cfg.ProtectedSettings.OutputBlobManagedIdentity, ctx)
 
 		if outputBlobAppendCreateOrReplaceError != nil {
 			return "",
@@ -299,7 +300,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	// Create or Replace errorBlobURI if provided. Fail the command if create or replace fails.
 	if cfg.ErrorBlobURI != "" {
 		errorBlobSASRef, errorBlobAppendClient, errorBlobAppendCreateOrReplaceError = createOrReplaceAppendBlob(cfg.ErrorBlobURI,
-			cfg.protectedSettings.ErrorBlobSASToken, cfg.protectedSettings.ErrorBlobManagedIdentity, ctx)
+			cfg.ProtectedSettings.ErrorBlobSASToken, cfg.ProtectedSettings.ErrorBlobManagedIdentity, ctx)
 
 		if errorBlobAppendCreateOrReplaceError != nil {
 			return "",
@@ -362,7 +363,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
-	deleteScriptsAndSettingsExceptMostRecent(dataDir, downloadDir, extName, seqNum, h, ctx, cfg.publicSettings.RunAsUser)
+	deleteScriptsAndSettingsExceptMostRecent(dataDir, downloadDir, extName, seqNum, h, ctx, cfg.PublicSettings.RunAsUser)
 	return stdoutTail, stderrTail, runErr, exitCode
 }
 
@@ -433,7 +434,7 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 
 // downloadScript downloads the script file specified in cfg into dir (creates if does
 // not exist) and takes storage credentials specified in cfg into account.
-func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string, error) {
+func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings) (string, error) {
 	// - prepare the output directory for files and the command output
 	// - create the directory if missing
 	ctx.Log("event", "creating output directory", "path", dir)
@@ -446,7 +447,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string,
 
 	// - download scriptURI
 	scriptFilePath := ""
-	scriptURI := cfg.scriptURI()
+	scriptURI := cfg.ScriptURI()
 	ctx.Log("scriptUri", scriptURI)
 	if scriptURI != "" {
 		telemetry("scenario", fmt.Sprintf("source.scriptUri;dos2unix=%d", dos2unix), true, 0*time.Millisecond)
@@ -463,21 +464,21 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string,
 }
 
 // runCmd runs the command (extracted from cfg) in the given dir (assumed to exist).
-func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerSettings) (err error, exitCode int) {
+func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlersettings.HandlerSettings) (err error, exitCode int) {
 	ctx.Log("event", "executing command", "output", dir)
 	var scenario string
 
 	// If script is specified - use it directly for command
-	if cfg.script() != "" {
+	if cfg.Script() != "" {
 		scenario = "embedded-script"
 		// Save the script to a file
 		scriptFilePath = filepath.Join(dir, "script.sh")
-		err := saveScriptFile(scriptFilePath, cfg.script())
+		err := saveScriptFile(scriptFilePath, cfg.Script())
 		if err != nil {
 			ctx.Log("event", "failed to save script to file", "error", err, "file", scriptFilePath)
 			return errors.Wrap(err, "failed to save script to file"), ExitCode_SaveScriptFailed
 		}
-	} else if cfg.scriptURI() != "" {
+	} else if cfg.ScriptURI() != "" {
 		// If scriptUri is specified then cmd should start it
 		scenario = "public-scriptUri"
 	}
@@ -561,7 +562,7 @@ func decodeScript(script string) (string, string, error) {
 	return buf.String(), fmt.Sprintf("%d;%d;gzip=1", len(script), n), nil
 }
 
-func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdentity *RunCommandManagedIdentity) (*appendblob.Client, error) {
+func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdentity *handlersettings.RunCommandManagedIdentity) (*appendblob.Client, error) {
 	var ID string = ""
 	var miCred *azidentity.ManagedIdentityCredential = nil
 	var miCredError error = nil
@@ -601,7 +602,7 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 	return appendBlobClient, nil
 }
 
-func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity *RunCommandManagedIdentity, ctx *log.Context) (*storage.Blob, *appendblob.Client, error) {
+func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity *handlersettings.RunCommandManagedIdentity, ctx *log.Context) (*storage.Blob, *appendblob.Client, error) {
 	var blobSASRef *storage.Blob
 	var blobSASTokenError error
 	var blobAppendClient *appendblob.Client

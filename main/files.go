@@ -9,6 +9,7 @@ import (
 
 	"os"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/Azure/run-command-handler-linux/pkg/preprocess"
 	"github.com/Azure/run-command-handler-linux/pkg/urlutil"
@@ -21,7 +22,7 @@ var UseMockSASDownloadFailure bool = false
 // downloadAndProcessURL downloads using the specified downloader and saves it to the
 // specified existing directory, which must be the path to the saved file. Then
 // it post-processes file based on heuristics.
-func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handlerSettings) (string, error) {
+func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handlersettings.HandlerSettings) (string, error) {
 	fileName, err := urlToFileName(url)
 	if err != nil {
 		return "", err
@@ -32,7 +33,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handl
 	}
 
 	targetFilePath := filepath.Join(downloadDir, fileName)
-	scriptSAS := cfg.scriptSAS()
+	scriptSAS := cfg.ScriptSAS()
 
 	var scriptSASDownloadErr error = nil
 	var downloadedFilePath string = ""
@@ -74,7 +75,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handl
 // getDownloaders returns one or two downloaders (two if it is an Azure storage blob):
 // 1. Downloader for script using public URI.
 // 2. Downloader for script using managed identity.
-func getDownloaders(fileURL string, managedIdentity *RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, error) {
+func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, error) {
 
 	if fileURL == "" {
 		return nil, fmt.Errorf("fileURL is empty.")

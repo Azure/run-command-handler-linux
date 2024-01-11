@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -22,7 +23,7 @@ import (
 //
 // On error, an exit code may be returned if it is an exit code error.
 // Given stdout and stderr will be closed upon returning.
-func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, cfg *handlerSettings) (int, error) {
+func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, cfg *handlersettings.HandlerSettings) (int, error) {
 	defer stdout.Close()
 	defer stderr.Close()
 
@@ -34,8 +35,8 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 
 	exitCode := ExitCode_Okay
 
-	if cfg.publicSettings.RunAsUser != "" {
-		ctx.Log("message", "RunAsUser is "+cfg.publicSettings.RunAsUser)
+	if cfg.PublicSettings.RunAsUser != "" {
+		ctx.Log("message", "RunAsUser is "+cfg.PublicSettings.RunAsUser)
 
 		// Check prefix ("/var/lib/waagent/run-command-handler") exists in script path for ex. /var/lib/waagent/run-command-handler/download/<runcommandName>/0/script.sh
 		if !strings.HasPrefix(scriptPath, dataDir) {
@@ -47,7 +48,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		// Gets suffix "download/<runcommandName>/0/script.sh"
 		downloadPathSuffix := scriptPath[len(dataDir):]
 		// formats into something like "/home/<RunAsUserName>/waagent/run-command-handler-runas/download/<runcommandName>/0/script.sh", This filepath doesn't exist yet.
-		runAsScriptFilePath := filepath.Join(fmt.Sprintf(runAsDir, cfg.publicSettings.RunAsUser), downloadPathSuffix)
+		runAsScriptFilePath := filepath.Join(fmt.Sprintf(runAsDir, cfg.PublicSettings.RunAsUser), downloadPathSuffix)
 		runAsScriptDirectoryPath := filepath.Dir(runAsScriptFilePath) // Get directory of runAsScript that doesn't exist yet
 
 		// Create runAsScriptDirectoryPath and its intermediate directories if they do not exist
@@ -78,9 +79,9 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		destScriptFile.Close()
 
 		// Provide read and execute permissions to RunAsUser on .sh file at runAsScriptFilePath
-		lookedUpUser, lookupUserError := user.Lookup(cfg.publicSettings.RunAsUser)
+		lookedUpUser, lookupUserError := user.Lookup(cfg.PublicSettings.RunAsUser)
 		if lookupUserError != nil {
-			errMessage := fmt.Sprintf("Failed to lookup RunAs user '%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", cfg.publicSettings.RunAsUser)
+			errMessage := fmt.Sprintf("Failed to lookup RunAs user '%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
 			return ExitCode_RunAsLookupUserFailed, errors.Wrapf(lookupUserError, errMessage)
 		}
@@ -94,30 +95,30 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 
 		runAsScriptChownError := os.Chown(runAsScriptFilePath, lookedUpUserUid, os.Getegid())
 		if runAsScriptChownError != nil {
-			errMessage := fmt.Sprintf("Failed to change owner of file '%s' to RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.publicSettings.RunAsUser)
+			errMessage := fmt.Sprintf("Failed to change owner of file '%s' to RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
 			return ExitCode_RunAsScriptFileChangeOwnerFailed, errors.Wrapf(runAsScriptChownError, errMessage)
 		}
 
 		runAsScriptChmodError := os.Chmod(runAsScriptFilePath, 0550)
 		if runAsScriptChmodError != nil {
-			errMessage := fmt.Sprintf("Failed to change permissions to execute for file '%s' for RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.publicSettings.RunAsUser)
+			errMessage := fmt.Sprintf("Failed to change permissions to execute for file '%s' for RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
 			return ExitCode_RunAsScriptFileChangePermissionsFailed, errors.Wrapf(runAsScriptChmodError, errMessage)
 		}
 
 		// echo pipes the RunAsPassword to sudo -S for RunAsUser instead of prompting the password interactively from user and blocking.
 		// echo <cfg.protectedSettings.RunAsPassword> | sudo -S -u <cfg.publicSettings.RunAsUser> <command>
-		cmd = fmt.Sprintf("echo %s | sudo -S -u %s %s", cfg.protectedSettings.RunAsPassword, cfg.publicSettings.RunAsUser, runAsScriptFilePath+commandArgs)
+		cmd = fmt.Sprintf("echo %s | sudo -S -u %s %s", cfg.ProtectedSettings.RunAsPassword, cfg.PublicSettings.RunAsUser, runAsScriptFilePath+commandArgs)
 		ctx.Log("message", "RunAs cmd is "+cmd)
 	}
 
 	var command *exec.Cmd
-	if cfg.publicSettings.TimeoutInSeconds > 0 {
-		commandContext, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.publicSettings.TimeoutInSeconds)*time.Second)
+	if cfg.PublicSettings.TimeoutInSeconds > 0 {
+		commandContext, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.PublicSettings.TimeoutInSeconds)*time.Second)
 		defer cancel()
 		command = exec.CommandContext(commandContext, "/bin/bash", "-c", cmd)
-		ctx.Log("message", "Execute with TimeoutInSeconds="+strconv.Itoa(cfg.publicSettings.TimeoutInSeconds))
+		ctx.Log("message", "Execute with TimeoutInSeconds="+strconv.Itoa(cfg.PublicSettings.TimeoutInSeconds))
 	} else {
 		command = exec.Command("/bin/bash", "-c", cmd)
 	}
@@ -142,15 +143,15 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	return exitCode, errors.Wrapf(err, "failed to execute command")
 }
 
-func SetEnvironmentVariables(cfg *handlerSettings) (string, error) {
+func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, error) {
 	var err error
 	commandArgs := ""
-	parameters := []parameterDefinition{}
-	if cfg.publicSettings.Parameters != nil && len(cfg.publicSettings.Parameters) > 0 {
-		parameters = cfg.publicSettings.Parameters
+	parameters := []handlersettings.ParameterDefinition{}
+	if cfg.PublicSettings.Parameters != nil && len(cfg.PublicSettings.Parameters) > 0 {
+		parameters = cfg.PublicSettings.Parameters
 	}
-	if cfg.protectedSettings.ProtectedParameters != nil && len(cfg.protectedSettings.ProtectedParameters) > 0 {
-		parameters = append(parameters, cfg.protectedSettings.ProtectedParameters...)
+	if cfg.ProtectedSettings.ProtectedParameters != nil && len(cfg.ProtectedSettings.ProtectedParameters) > 0 {
+		parameters = append(parameters, cfg.ProtectedSettings.ProtectedParameters...)
 	}
 
 	for i := 0; i < len(parameters); i++ {
@@ -174,7 +175,7 @@ func SetEnvironmentVariables(cfg *handlerSettings) (string, error) {
 //
 // Ideally, we execute commands only once per sequence number in run-command-handler,
 // and save their output under /var/lib/waagent/<dir>/download/<seqnum>/*.
-func ExecCmdInDir(ctx *log.Context, scriptFilePath, workdir string, cfg *handlerSettings) (error, int) {
+func ExecCmdInDir(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
 
 	stdoutFileName, stderrFileName := logPaths(workdir)
 

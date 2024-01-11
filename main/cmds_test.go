@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
@@ -85,8 +86,8 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
-		publicSettings: publicSettings{Source: &scriptSource{Script: script}},
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
+		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}},
 	})
 	require.Nil(t, err, "command should run successfully")
 	require.Equal(t, ExitCode_Okay, exitCode)
@@ -110,8 +111,8 @@ func Test_runCmd_fail(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
-		publicSettings: publicSettings{Source: &scriptSource{Script: "non-existing-cmd"}},
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
+		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: "non-existing-cmd"}},
 	})
 	require.NotNil(t, err, "command terminated with exit status")
 	require.Contains(t, err.Error(), "failed to execute command")
@@ -128,9 +129,9 @@ func Test_downloadScriptUri(t *testing.T) {
 
 	downloadedFilePath, err := downloadScript(log.NewContext(log.NewNopLogger()),
 		dir,
-		&handlerSettings{
-			publicSettings: publicSettings{
-				Source: &scriptSource{ScriptURI: srv.URL + "/bytes/10"},
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/bytes/10"},
 			},
 		})
 	require.Nil(t, err)
@@ -176,13 +177,13 @@ func Test_downloadScriptUri_BySASFailsSucceedsByManagedIdentity(t *testing.T) {
 
 	_, err = downloadScript(log.NewContext(log.NewNopLogger()),
 		dir,
-		&handlerSettings{
-			publicSettings: publicSettings{
-				Source: &scriptSource{ScriptURI: srv.URL + "/samplecontainer/sample.sh?SASToken"},
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/samplecontainer/sample.sh?SASToken"},
 			},
-			protectedSettings: protectedSettings{
+			ProtectedSettings: handlersettings.ProtectedSettings{
 				SourceSASToken: "SASToken",
-				SourceManagedIdentity: &RunCommandManagedIdentity{
+				SourceManagedIdentity: &handlersettings.RunCommandManagedIdentity{
 					ClientId: "00b64c6a-6dbf-41e0-8707-74132d5cf53f",
 				},
 			},
@@ -193,15 +194,16 @@ func Test_downloadScriptUri_BySASFailsSucceedsByManagedIdentity(t *testing.T) {
 
 // This test just makes sure using TreatFailureAsDeploymentFailure flag, script is executed as expected.
 // The interpretation of the result (Succeeded or Failed, when TreatFailureAsDeploymentFailure is true)
-//     is done in main.go
+//
+//	is done in main.go
 func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	var script = "ech HelloWorld" // ech is an unknown command. Sh returns error and 127 status code
 	dir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
-		publicSettings: publicSettings{Source: &scriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
+		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
 	})
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "failed to execute command: command terminated with exit status=127")
@@ -210,15 +212,16 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 
 // This test just makes sure using TreatFailureAsDeploymentFailure flag, script is executed as expected.
 // The interpretation of the result (Succeeded or Failed, when TreatFailureAsDeploymentFailure is true)
-//     is done in main.go
+//
+//	is done in main.go
 func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.T) {
 	var script = "echo HelloWorld" // ech is an unknown command. Sh returns error and 127 status code
 	dir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
-		publicSettings: publicSettings{Source: &scriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
+	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
+		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
 	})
 	require.Nil(t, err)
 	require.Equal(t, ExitCode_Okay, exitCode)
