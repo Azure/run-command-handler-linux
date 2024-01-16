@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_reportStatus_fails(t *testing.T) {
-	fakeEnv := HandlerEnvironment{}
+	fakeEnv := handlersettings.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = "/non-existing/dir/"
 
 	err := reportStatus(log.NewContext(log.NewNopLogger()), fakeEnv, "", 1, StatusSuccess, cmdEnable, "")
@@ -25,7 +26,7 @@ func Test_reportStatus_fileExists(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	extName := "first"
-	fakeEnv := HandlerEnvironment{}
+	fakeEnv := handlersettings.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
 	require.Nil(t, reportStatus(log.NewContext(log.NewNopLogger()), fakeEnv, extName, 1, StatusError, cmdEnable, "FOO ERROR"))
@@ -43,7 +44,7 @@ func Test_reportStatus_checksIfShouldBeReported(t *testing.T) {
 		defer os.RemoveAll(tmpDir)
 
 		extName := "first"
-		fakeEnv := HandlerEnvironment{}
+		fakeEnv := handlersettings.HandlerEnvironment{}
 		fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 		require.Nil(t, reportStatus(log.NewContext(log.NewNopLogger()), fakeEnv, extName, 2, StatusSuccess, c, ""))
 

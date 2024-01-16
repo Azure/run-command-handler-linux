@@ -21,7 +21,14 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 		}
 
 		for _, el := range goalStates {
-			goalstate.HandleGoalState(ctx, el)
+			validSignature, err := el.ValidateSignature()
+			if err != nil {
+				return errors.Wrap(err, "failed to validate goal state signature")
+			}
+
+			if validSignature {
+				goalstate.HandleGoalState(ctx, el)
+			}
 		}
 
 		// Wait for 2 minutes before the next iteration

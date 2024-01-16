@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +47,7 @@ func Test_reportInstanceView(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	extName := "first"
-	fakeEnv := HandlerEnvironment{}
+	fakeEnv := handlersettings.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
 	require.Nil(t, reportInstanceView(log.NewContext(log.NewNopLogger()), fakeEnv, extName, 1, StatusSuccess, cmdEnable, &instanceView))

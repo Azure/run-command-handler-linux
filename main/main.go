@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 )
 
@@ -58,7 +59,7 @@ func main() {
 	ctx = ctx.With("operation", strings.ToLower(cmd.name))
 
 	// parse extension environment
-	hEnv, err := GetHandlerEnv()
+	hEnv, err := handlersettings.GetHandlerEnv()
 	if err != nil {
 		ctx.Log("message", "failed to parse handlerenv", "error", err)
 		os.Exit(cmd.failExitCode)

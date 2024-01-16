@@ -1,9 +1,8 @@
-package main
+package handlersettings
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +39,7 @@ func GetHandlerEnv() (he HandlerEnvironment, _ error) {
 	}
 	var b []byte
 	for _, p := range paths {
-		o, err := ioutil.ReadFile(p)
+		o, err := os.ReadFile(p)
 		if err != nil && !os.IsNotExist(err) {
 			return he, fmt.Errorf("vmextension: error examining HandlerEnvironment at '%s': %v", p, err)
 		} else if err == nil {

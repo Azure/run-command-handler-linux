@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 )
 
@@ -53,7 +54,7 @@ func (instanceView RunCommandInstanceView) marshal() ([]byte, error) {
 // status.
 //
 // If an error occurs reporting the status, it will be logged and returned.
-func reportInstanceView(ctx *log.Context, hEnv HandlerEnvironment, extName string, seqNum int, t StatusType, c cmd, instanceview *RunCommandInstanceView) error {
+func reportInstanceView(ctx *log.Context, hEnv handlersettings.HandlerEnvironment, extName string, seqNum int, t StatusType, c cmd, instanceview *RunCommandInstanceView) error {
 	if !c.shouldReportStatus {
 		ctx.Log("status", "not reported for operation (by design)")
 		return nil

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -17,7 +18,7 @@ import (
 // status.
 //
 // If an error occurs reporting the status, it will be logged and returned.
-func reportStatus(ctx *log.Context, hEnv HandlerEnvironment, extName string, seqNum int, t StatusType, c cmd, msg string) error {
+func reportStatus(ctx *log.Context, hEnv handlersettings.HandlerEnvironment, extName string, seqNum int, t StatusType, c cmd, msg string) error {
 	if !c.shouldReportStatus {
 		ctx.Log("status", "not reported for operation (by design)")
 		return nil

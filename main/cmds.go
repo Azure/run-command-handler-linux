@@ -30,8 +30,8 @@ const (
 	updateStatusInSeconds = 30
 )
 
-type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (stdout string, stderr string, err error, exitCode int)
-type preFunc func(ctx *log.Context, hEnv HandlerEnvironment, extName string, seqNum int) error
+type cmdFunc func(ctx *log.Context, hEnv handlersettings.HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (stdout string, stderr string, err error, exitCode int)
+type preFunc func(ctx *log.Context, hEnv handlersettings.HandlerEnvironment, extName string, seqNum int) error
 
 type cmd struct {
 	invoke             cmdFunc // associated function
@@ -100,12 +100,12 @@ var (
 )
 
 // Runs the extension as a service. This is the default behavior for when the program is initiated as a service by systemd.
-func runService(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func runService(ctx *log.Context, h handlersettings.HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	StartImmediateRunCommand(ctx)
 	return "", "", nil, ExitCode_Okay
 }
 
-func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func update(ctx *log.Context, h handlersettings.HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	// parse the extension handler settings
 	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
@@ -131,7 +131,7 @@ func update(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	return "", "", nil, ExitCode_Okay
 }
 
-func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func disable(ctx *log.Context, h handlersettings.HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	// parse the extension handler settings
 	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
@@ -158,7 +158,7 @@ func disable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceV
 	return "", "", nil, ExitCode_Okay
 }
 
-func install(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func install(ctx *log.Context, h handlersettings.HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return "", "", errors.Wrap(err, "failed to create data dir"), ExitCode_CreateDataDirectoryFailed
 	}
@@ -168,7 +168,7 @@ func install(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceV
 	return "", "", nil, ExitCode_Okay
 }
 
-func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func uninstall(ctx *log.Context, h handlersettings.HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	// parse the extension handler settings
 	cfg, err := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
@@ -202,7 +202,7 @@ func uninstall(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanc
 	return "", "", nil, ExitCode_Okay
 }
 
-func enablePre(ctx *log.Context, h HandlerEnvironment, extName string, seqNum int) error {
+func enablePre(ctx *log.Context, h handlersettings.HandlerEnvironment, extName string, seqNum int) error {
 	// exit if this sequence number (a snapshot of the configuration) is already
 	// processed. if not, save this sequence number before proceeding.
 	if shouldExit, err := checkAndSaveSeqNum(ctx, seqNum, mostRecentSequence); err != nil {
@@ -222,7 +222,7 @@ func min(a, b int) int {
 	return b
 }
 
-func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func enable(ctx *log.Context, h handlersettings.HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	// parse the extension handler settings (not available prior to 'enable')
 	cfg, err1 := GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err1 != nil {
@@ -639,7 +639,7 @@ func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity 
 	return blobSASRef, blobAppendClient, nil
 }
 
-func deleteScriptsAndSettingsExceptMostRecent(dataDir string, downloadDir string, extName string, seqNum int, h HandlerEnvironment, ctx *log.Context, runAsUser string) {
+func deleteScriptsAndSettingsExceptMostRecent(dataDir string, downloadDir string, extName string, seqNum int, h handlersettings.HandlerEnvironment, ctx *log.Context, runAsUser string) {
 	downloadParent := filepath.Join(dataDir, downloadDir)
 	runtimeSettingsRegexFormat := extName + ".\\d+.settings"
 	runtimeSettingsLastSeqNumFormat := extName + ".%d.settings"
