@@ -152,7 +152,7 @@ func Test_postProcessFile(t *testing.T) {
 	require.Equal(t, []byte("#!/bin/sh\necho 'Hello, world!'\n"), b)
 }
 
-func Test_downloadAndProcessURL(t *testing.T) {
+func Test_downloadAndProcessScript(t *testing.T) {
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
 
@@ -161,12 +161,52 @@ func Test_downloadAndProcessURL(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	cfg := handlerSettings{publicSettings{}, protectedSettings{}}
-	downloadedFilePath, err := downloadAndProcessURL(log.NewContext(log.NewNopLogger()), srv.URL+"/bytes/256", tmpDir, &cfg)
+	downloadedFilePath, err := downloadAndProcessScript(log.NewContext(log.NewNopLogger()), srv.URL+"/bytes/256", tmpDir, &cfg)
 	require.Nil(t, err)
 
 	fp := filepath.Join(tmpDir, "256")
 	require.Equal(t, fp, downloadedFilePath)
 	fi, err := os.Stat(fp)
+	require.Nil(t, err)
+	require.EqualValues(t, 256, fi.Size())
+	require.Equal(t, os.FileMode(0500).String(), fi.Mode().String())
+}
+
+func Test_downloadAndProcessArtifact(t *testing.T) {
+	srv := httptest.NewServer(httpbin.GetMux())
+	defer srv.Close()
+
+	tmpDir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// FileName is specified
+	artifact := unifiedArtifact{
+		ArtifactId:  1,
+		ArtifactUri: srv.URL + "/bytes/256",
+		FileName:    "iggy.txt",
+	}
+	downloadedFilePath, err := downloadAndProcessArtifact(log.NewContext(log.NewNopLogger()), tmpDir, &artifact)
+	require.Nil(t, err)
+
+	fp := filepath.Join(tmpDir, "iggy.txt")
+	require.Equal(t, fp, downloadedFilePath)
+	fi, err := os.Stat(fp)
+	require.Nil(t, err)
+	require.EqualValues(t, 256, fi.Size())
+	require.Equal(t, os.FileMode(0500).String(), fi.Mode().String())
+
+	// FileName is not specified
+	artifact = unifiedArtifact{
+		ArtifactId:  3,
+		ArtifactUri: srv.URL + "/bytes/256",
+	}
+	downloadedFilePath, err = downloadAndProcessArtifact(log.NewContext(log.NewNopLogger()), tmpDir, &artifact)
+	require.Nil(t, err)
+
+	fp = filepath.Join(tmpDir, "Artifact3")
+	require.Equal(t, fp, downloadedFilePath)
+	fi, err = os.Stat(fp)
 	require.Nil(t, err)
 	require.EqualValues(t, 256, fi.Size())
 	require.Equal(t, os.FileMode(0500).String(), fi.Mode().String())

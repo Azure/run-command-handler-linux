@@ -18,21 +18,39 @@ import (
 
 var UseMockSASDownloadFailure bool = false
 
-// downloadAndProcessURL downloads using the specified downloader and saves it to the
-// specified existing directory, which must be the path to the saved file. Then
-// it post-processes file based on heuristics.
-func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handlerSettings) (string, error) {
+func downloadAndProcessArtifact(ctx *log.Context, downloadDir string, artifact *unifiedArtifact) (string, error) {
+	fileName := artifact.FileName
+	if fileName == "" {
+		fileName = fmt.Sprintf("%s%d", "Artifact", artifact.ArtifactId)
+	}
+	targetFilePath, err := downloadAndProcessURL(ctx, artifact.ArtifactUri, downloadDir, fileName, artifact.ArtifactSasToken, artifact.ArtifactManagedIdentity)
+
+	return targetFilePath, err
+}
+
+func downloadAndProcessScript(ctx *log.Context, url, downloadDir string, cfg *handlerSettings) (string, error) {
 	fileName, err := urlToFileName(url)
 	if err != nil {
 		return "", err
 	}
 
+	scriptSAS := cfg.scriptSAS()
+	sourceManagedIdentity := cfg.SourceManagedIdentity
+	targetFilePath, err := downloadAndProcessURL(ctx, url, downloadDir, fileName, scriptSAS, sourceManagedIdentity)
+
+	return targetFilePath, err
+}
+
+// downloadAndProcessURL downloads using the specified downloader and saves it to the
+// specified existing directory, which must be the path to the saved file. Then
+// it post-processes file based on heuristics.
+func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName string, scriptSAS string, sourceManagedIdentity *RunCommandManagedIdentity) (string, error) {
+	var err error
 	if !urlutil.IsValidUrl(url) {
 		return "", fmt.Errorf(url + " is not a valid url") // url does not contain SAS to se can log it
 	}
 
 	targetFilePath := filepath.Join(downloadDir, fileName)
-	scriptSAS := cfg.scriptSAS()
 
 	var scriptSASDownloadErr error = nil
 	var downloadedFilePath string = ""
@@ -50,7 +68,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handl
 
 	//If there was an error downloading using SAS URI or SAS was not provided, download using managedIdentity or publicly.
 	if scriptSASDownloadErr != nil || scriptSAS == "" {
-		downloaders, getDownloadersError := getDownloaders(url, cfg.SourceManagedIdentity, download.ProdMsiDownloader{})
+		downloaders, getDownloadersError := getDownloaders(url, sourceManagedIdentity, download.ProdMsiDownloader{})
 		if getDownloadersError == nil {
 			const mode = 0500 // we assume users download scripts to execute
 			_, err = download.SaveTo(ctx, downloaders, targetFilePath, mode)
