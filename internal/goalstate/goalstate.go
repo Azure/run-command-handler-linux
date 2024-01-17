@@ -3,17 +3,15 @@ package goalstate
 import (
 	"encoding/json"
 
-	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
+	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/go-kit/kit/log"
 )
 
 const enableCommand = "enable"
 
-func HandleGoalState(ctx *log.Context, goalState hostgacommunicator.ExtensionGoalStates) error {
-	for _, setting := range goalState.Settings {
-		r, _ := json.Marshal(setting)
-		ctx.Log("content", r)
-	}
+func HandleGoalState(ctx *log.Context, setting settings.SettingsCommon) error {
+	r, _ := json.Marshal(setting)
+	ctx.Log("content", r)
 	// cmd, ok := cmds[enableCommand]
 
 	// if !ok {

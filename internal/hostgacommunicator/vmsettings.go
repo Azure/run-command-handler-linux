@@ -83,6 +83,12 @@ func (u requestFactory) GetRequest(ctx *log.Context) (*http.Request, error) {
 }
 
 func (goalState *ExtensionGoalStates) ValidateSignature() (bool, error) {
+	he, err := handlersettings.GetHandlerEnv()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to parse handlerenv")
+	}
+
+	configFolder := he.HandlerEnvironment.ConfigFolder
 	// TODO: Check that certificate exists or download it if is missing
 	// Do we need to re-download or can we assume the cert is already there?
 	for _, s := range goalState.Settings {
@@ -94,13 +100,7 @@ func (goalState *ExtensionGoalStates) ValidateSignature() (bool, error) {
 			return false, errors.New("HandlerSettings has protected settings but no cert thumbprint")
 		}
 
-		he, err := handlersettings.GetHandlerEnv()
-		if err != nil {
-			return false, errors.Wrap(err, "failed to parse handlerenv")
-		}
-
 		// go two levels up where certs are placed (/var/lib/waagent)
-		configFolder := he.HandlerEnvironment.ConfigFolder
 		crt := filepath.Join(configFolder, "..", "..", fmt.Sprintf("%s.crt", s.SettingsCertThumbprint))
 		prv := filepath.Join(configFolder, "..", "..", fmt.Sprintf("%s.prv", s.SettingsCertThumbprint))
 
