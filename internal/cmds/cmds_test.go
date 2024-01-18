@@ -145,6 +145,145 @@ func Test_downloadScriptUri(t *testing.T) {
 	require.Nil(t, err, "%s is missing from download dir", fp)
 }
 
+func Test_downloadArtifacts_Invalid(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	srv := httptest.NewServer(httpbin.GetMux())
+	defer srv.Close()
+
+	// The count of public vs protected settings differs
+	err = downloadArtifacts(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/bytes/10"},
+				Artifacts: []handlersettings.PublicArtifactSource{
+					{
+						ArtifactId:  1,
+						ArtifactUri: srv.URL + "/status/404",
+						FileName:    "flipper",
+					},
+				},
+			},
+			ProtectedSettings: handlersettings.ProtectedSettings{
+				Artifacts: []handlersettings.ProtectedArtifactSource{},
+			},
+		})
+
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")
+
+	// ArtifactIds don't match
+	err = downloadArtifacts(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/bytes/10"},
+				Artifacts: []handlersettings.PublicArtifactSource{
+					{
+						ArtifactId:  1,
+						ArtifactUri: srv.URL + "/status/404",
+						FileName:    "flipper",
+					},
+				},
+			},
+			ProtectedSettings: handlersettings.ProtectedSettings{
+				Artifacts: []handlersettings.ProtectedArtifactSource{
+					{
+						ArtifactId: 2,
+					},
+				},
+			},
+		})
+
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")
+}
+
+func Test_downloadArtifactsFail(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	srv := httptest.NewServer(httpbin.GetMux())
+	defer srv.Close()
+
+	err = downloadArtifacts(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/bytes/10"},
+				Artifacts: []handlersettings.PublicArtifactSource{
+					{
+						ArtifactId:  1,
+						ArtifactUri: srv.URL + "/status/404",
+						FileName:    "flipper",
+					},
+				},
+			},
+			ProtectedSettings: handlersettings.ProtectedSettings{
+				Artifacts: []handlersettings.ProtectedArtifactSource{
+					{
+						ArtifactId: 1,
+					},
+				},
+			},
+		})
+
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "failed to download artifact")
+}
+
+func Test_downloadArtifacts(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	srv := httptest.NewServer(httpbin.GetMux())
+	defer srv.Close()
+
+	err = downloadArtifacts(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/bytes/10"},
+				Artifacts: []handlersettings.PublicArtifactSource{
+					{
+						ArtifactId:  1,
+						ArtifactUri: srv.URL + "/bytes/255",
+						FileName:    "flipper",
+					},
+					{
+						ArtifactId:  2,
+						ArtifactUri: srv.URL + "/bytes/256",
+					},
+				},
+			},
+			ProtectedSettings: handlersettings.ProtectedSettings{
+				Artifacts: []handlersettings.ProtectedArtifactSource{
+					{
+						ArtifactId: 1,
+					},
+					{
+						ArtifactId: 2,
+					},
+				},
+			},
+		})
+	require.Nil(t, err)
+
+	// check the downloaded files
+	fp := filepath.Join(dir, "flipper")
+	_, err = os.Stat(fp)
+	require.Nil(t, err, "%s is missing from download dir", fp)
+
+	fp = filepath.Join(dir, "Artifact2")
+	_, err = os.Stat(fp)
+	require.Nil(t, err, "%s is missing from download dir", fp)
+}
+
 func Test_decodeScript(t *testing.T) {
 	testSubject := "bHMK"
 	s, info, err := decodeScript(testSubject)

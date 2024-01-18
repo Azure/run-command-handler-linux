@@ -59,8 +59,9 @@ func Test_getDownloaders_SystemIdentityVersusByClientIdOrObjectId(t *testing.T) 
 
 	// Case 0: Provide both clientId and ObjectId getting Msi.
 	d, err := getDownloaders("http://acct.blob.core.windows.net/", &mockManagedIdentityBoth, mockMsiDownloder)
+	fmt.Println(err.Error())
 	require.NotNil(t, err)
-	require.Equal(t, err.Error(), "Use either ClientId or ObjectId for managed identity. Not both.")
+	require.Equal(t, err.Error(), "use either ClientId or ObjectId for managed identity. Not both")
 
 	download.MockReturnErrorForMockMsiDownloader = false
 
@@ -153,7 +154,7 @@ func Test_postProcessFile(t *testing.T) {
 	require.Equal(t, []byte("#!/bin/sh\necho 'Hello, world!'\n"), b)
 }
 
-func Test_downloadAndProcessURL(t *testing.T) {
+func Test_downloadAndProcessScript(t *testing.T) {
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
 
@@ -162,12 +163,52 @@ func Test_downloadAndProcessURL(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	cfg := handlersettings.HandlerSettings{PublicSettings: handlersettings.PublicSettings{}, ProtectedSettings: handlersettings.ProtectedSettings{}}
-	downloadedFilePath, err := DownloadAndProcessURL(log.NewContext(log.NewNopLogger()), srv.URL+"/bytes/256", tmpDir, &cfg)
+	downloadedFilePath, err := DownloadAndProcessScript(log.NewContext(log.NewNopLogger()), srv.URL+"/bytes/256", tmpDir, &cfg)
 	require.Nil(t, err)
 
 	fp := filepath.Join(tmpDir, "256")
 	require.Equal(t, fp, downloadedFilePath)
 	fi, err := os.Stat(fp)
+	require.Nil(t, err)
+	require.EqualValues(t, 256, fi.Size())
+	require.Equal(t, os.FileMode(0500).String(), fi.Mode().String())
+}
+
+func Test_downloadAndProcessArtifact(t *testing.T) {
+	srv := httptest.NewServer(httpbin.GetMux())
+	defer srv.Close()
+
+	tmpDir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// FileName is specified
+	artifact := handlersettings.UnifiedArtifact{
+		ArtifactId:  1,
+		ArtifactUri: srv.URL + "/bytes/256",
+		FileName:    "iggy.txt",
+	}
+	downloadedFilePath, err := DownloadAndProcessArtifact(log.NewContext(log.NewNopLogger()), tmpDir, &artifact)
+	require.Nil(t, err)
+
+	fp := filepath.Join(tmpDir, "iggy.txt")
+	require.Equal(t, fp, downloadedFilePath)
+	fi, err := os.Stat(fp)
+	require.Nil(t, err)
+	require.EqualValues(t, 256, fi.Size())
+	require.Equal(t, os.FileMode(0500).String(), fi.Mode().String())
+
+	// FileName is not specified
+	artifact = handlersettings.UnifiedArtifact{
+		ArtifactId:  3,
+		ArtifactUri: srv.URL + "/bytes/256",
+	}
+	downloadedFilePath, err = DownloadAndProcessArtifact(log.NewContext(log.NewNopLogger()), tmpDir, &artifact)
+	require.Nil(t, err)
+
+	fp = filepath.Join(tmpDir, "Artifact3")
+	require.Equal(t, fp, downloadedFilePath)
+	fi, err = os.Stat(fp)
 	require.Nil(t, err)
 	require.EqualValues(t, 256, fi.Size())
 	require.Equal(t, os.FileMode(0500).String(), fi.Mode().String())
