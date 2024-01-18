@@ -50,11 +50,11 @@ var (
 	telemetryResult = telemetry.SendTelemetry(telemetry.NewTelemetryEventSender(), fullName, versionutil.Version)
 
 	CmdInstall    = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: install, Pre: nil})
-	CmdEnable     = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: enable, Pre: enablePre})
-	CmdDisable    = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: disable, Pre: nil})
-	CmdUpdate     = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: update, Pre: nil})
-	CmdUninstall  = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: uninstall, Pre: nil})
-	CmdRunService = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: runService, Pre: nil})
+	CmdEnable     = types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: enable, Pre: enablePre})
+	CmdDisable    = types.CreateCommandWithProvidedFunctions(types.CmdDisableTemplate, types.CmdFunctions{Invoke: disable, Pre: nil})
+	CmdUpdate     = types.CreateCommandWithProvidedFunctions(types.CmdUpdateTemplate, types.CmdFunctions{Invoke: update, Pre: nil})
+	CmdUninstall  = types.CreateCommandWithProvidedFunctions(types.CmdUninstallTemplate, types.CmdFunctions{Invoke: uninstall, Pre: nil})
+	CmdRunService = types.CreateCommandWithProvidedFunctions(types.CmdRunServiceTemplate, types.CmdFunctions{Invoke: runService, Pre: nil})
 
 	Cmds = map[string]types.Cmd{
 		"install":    CmdInstall,
@@ -645,7 +645,9 @@ func deleteScriptsAndSettingsExceptMostRecent(dataDir string, downloadDir string
 	runtimeSettingsRegexFormat := extName + ".\\d+.settings"
 	runtimeSettingsLastSeqNumFormat := extName + ".%d.settings"
 	ctx.Log("event", "clearing settings and script files except most recent seq num")
+	ctx.Log("message", "Try out new path")
 	err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(downloadParent, h.HandlerEnvironment.ConfigFolder, "", uint64(seqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
+	ctx.Log("message", "it succeeded")
 	if err != nil {
 		ctx.Log("event", "could not clear settings and script files")
 	}
