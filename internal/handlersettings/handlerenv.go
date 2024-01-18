@@ -6,29 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Azure/run-command-handler-linux/internal/types"
 )
 
 // HandlerEnvFileName is the file name of the Handler Environment as placed by the
 // Azure Linux Guest Agent.
 const HandlerEnvFileName = "HandlerEnvironment.json"
 
-// HandlerEnvironment describes the handler environment configuration presented
-// to the extension handler by the Azure Linux Guest Agent.
-type HandlerEnvironment struct {
-	Version            float64 `json:"version"`
-	Name               string  `json:"name"`
-	HandlerEnvironment struct {
-		HeartbeatFile string `json:"heartbeatFile"`
-		StatusFolder  string `json:"statusFolder"`
-		ConfigFolder  string `json:"configFolder"`
-		LogFolder     string `json:"logFolder"`
-	}
-}
-
 // GetHandlerEnv locates the HandlerEnvironment.json file by assuming it lives
 // next to or one level above the extension handler (read: this) executable,
 // reads, parses and returns it.
-func GetHandlerEnv() (he HandlerEnvironment, _ error) {
+func GetHandlerEnv() (he types.HandlerEnvironment, _ error) {
 	dir, err := scriptDir()
 	if err != nil {
 		return he, fmt.Errorf("vmextension: cannot find base directory of the running process: %v", err)
@@ -64,8 +53,8 @@ func scriptDir() (string, error) {
 
 // ParseHandlerEnv parses the
 // /var/lib/waagent/[extension]/HandlerEnvironment.json format.
-func ParseHandlerEnv(b []byte) (he HandlerEnvironment, _ error) {
-	var hf []HandlerEnvironment
+func ParseHandlerEnv(b []byte) (he types.HandlerEnvironment, _ error) {
+	var hf []types.HandlerEnvironment
 
 	if err := json.Unmarshal(b, &hf); err != nil {
 		return he, fmt.Errorf("vmextension: failed to parse handler env: %v", err)
