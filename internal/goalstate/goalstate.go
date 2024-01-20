@@ -18,8 +18,11 @@ const (
 
 func HandleGoalState(ctx *log.Context, setting settings.SettingsCommon) error {
 	done := make(chan bool)
-	go startAsync(ctx, setting, done)
+	err := make(chan error)
+	go startAsync(ctx, setting, done, err)
 	select {
+	case <-err:
+		return errors.Wrapf(<-err, "error when trying to execute goal state")
 	case <-done:
 		ctx.Log("message", "goal state successfully finished")
 	case <-time.After(time.Minute * time.Duration(maxExecutionTimeInMinutes)):
@@ -28,7 +31,7 @@ func HandleGoalState(ctx *log.Context, setting settings.SettingsCommon) error {
 	return nil
 }
 
-func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan bool) {
+func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan bool, err chan error) {
 	r, _ := json.Marshal(setting)
 	ctx.Log("content", r)
 
@@ -36,12 +39,13 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan boo
 	randomInt := rand.Intn(10)
 	ctx.Log("report", fmt.Sprintf("sleeping for %v seconds", randomInt))
 	time.Sleep(time.Minute * time.Duration(randomInt))
+	ctx.Log("message", "done sleeping")
 
-	// cmd, ok := cmds[enableCommand]
-
+	// cmd, ok := commands.Cmds[enableCommand]
 	// if !ok {
-	// 	return errors.New("missing enable command")
+	// 	err <- errors.New("missing enable command")
+	// 	return
 	// }
-	// ctx.Log("message", "done sleeping")
+
 	done <- true
 }

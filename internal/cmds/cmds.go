@@ -22,7 +22,6 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
-	"github.com/Azure/run-command-handler-linux/internal/immediateruncommand"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
 	"github.com/Azure/run-command-handler-linux/internal/pid"
 	"github.com/Azure/run-command-handler-linux/internal/service"
@@ -49,28 +48,20 @@ const (
 var (
 	telemetryResult = telemetry.SendTelemetry(telemetry.NewTelemetryEventSender(), fullName, versionutil.Version)
 
-	CmdInstall    = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: install, Pre: nil})
-	CmdEnable     = types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: enable, Pre: enablePre})
-	CmdDisable    = types.CreateCommandWithProvidedFunctions(types.CmdDisableTemplate, types.CmdFunctions{Invoke: disable, Pre: nil})
-	CmdUpdate     = types.CreateCommandWithProvidedFunctions(types.CmdUpdateTemplate, types.CmdFunctions{Invoke: update, Pre: nil})
-	CmdUninstall  = types.CreateCommandWithProvidedFunctions(types.CmdUninstallTemplate, types.CmdFunctions{Invoke: uninstall, Pre: nil})
-	CmdRunService = types.CreateCommandWithProvidedFunctions(types.CmdRunServiceTemplate, types.CmdFunctions{Invoke: runService, Pre: nil})
+	CmdInstall   = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: install, Pre: nil})
+	CmdEnable    = types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: enable, Pre: enablePre})
+	CmdDisable   = types.CreateCommandWithProvidedFunctions(types.CmdDisableTemplate, types.CmdFunctions{Invoke: disable, Pre: nil})
+	CmdUpdate    = types.CreateCommandWithProvidedFunctions(types.CmdUpdateTemplate, types.CmdFunctions{Invoke: update, Pre: nil})
+	CmdUninstall = types.CreateCommandWithProvidedFunctions(types.CmdUninstallTemplate, types.CmdFunctions{Invoke: uninstall, Pre: nil})
 
 	Cmds = map[string]types.Cmd{
-		"install":    CmdInstall,
-		"enable":     CmdEnable,
-		"disable":    CmdDisable,
-		"update":     CmdUpdate,
-		"uninstall":  CmdUninstall,
-		"runService": CmdRunService,
+		"install":   CmdInstall,
+		"enable":    CmdEnable,
+		"disable":   CmdDisable,
+		"update":    CmdUpdate,
+		"uninstall": CmdUninstall,
 	}
 )
-
-// Runs the extension as a service. This is the default behavior for when the program is initiated as a service by systemd.
-func runService(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
-	immediateruncommand.StartImmediateRunCommand(ctx)
-	return "", "", nil, constants.ExitCode_Okay
-}
 
 func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
 	// parse the extension handler settings

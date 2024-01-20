@@ -23,7 +23,7 @@ User=root
 Restart=always
 RestartSec=5
 WorkingDirectory=%run_command_working_directory%
-ExecStart=%run_command_working_directory%/bin/run-command-handler runService
+ExecStart=%run_command_working_directory%/bin/immediate-run-command-handler
 
 [Install]
 WantedBy=multi-user.target`
