@@ -21,6 +21,7 @@ import (
 func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSettingsFile, extensionName string, seqNum int) error {
 	ctx := initializeLogger(cmd)
 	ctx = ctx.With("extensionName", extensionName)
+	ctx.Log("event", "start")
 
 	hEnv, err := getHandlerEnv(ctx)
 	if err != nil {
@@ -43,6 +44,8 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 
 func ProcessHandlerCommand(cmd types.Cmd) error {
 	ctx := initializeLogger(cmd)
+	ctx.Log("event", "start")
+
 	hEnv, extensionName, seqNum, err := getRequiredInitialVariables(ctx)
 	if err != nil {
 		return errors.Wrap(err, "could not get initial required variables")
@@ -141,7 +144,6 @@ func initializeLogger(cmd types.Cmd) *log.Context {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp).With("version", versionutil.VersionString())
 	ctx = ctx.With("operation", strings.ToLower(cmd.Name))
-	ctx.Log("event", "start")
 	return ctx
 }
 

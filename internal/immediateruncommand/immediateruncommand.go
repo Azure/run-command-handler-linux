@@ -75,7 +75,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				executingTasks.Decrement()
 
 				if err != nil {
-					ctx.Log("error", "failed to execute goal state")
+					ctx.Log("error", "failed to execute goal state", "message", err)
 				}
 			}(newGoalStates[idx])
 		}
