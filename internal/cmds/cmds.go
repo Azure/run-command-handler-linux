@@ -22,9 +22,9 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/internal/immediatecmds"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
 	"github.com/Azure/run-command-handler-linux/internal/pid"
-	"github.com/Azure/run-command-handler-linux/internal/service"
 	"github.com/Azure/run-command-handler-linux/internal/telemetry"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
@@ -64,25 +64,9 @@ var (
 )
 
 func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
-	// parse the extension handler settings
-	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
+	exitCode, err := immediatecmds.Update(ctx, h, extName, seqNum)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed
-	}
-
-	// If installAsService == true, then upgrade the service if already been installed before
-	if cfg.InstallAsService() {
-		isInstalled, err := service.IsInstalled(ctx)
-		if err != nil {
-			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), constants.ExitCode_CreateDataDirectoryFailed
-		}
-
-		if isInstalled {
-			err = service.Register(ctx)
-			if err != nil {
-				return "", "", errors.Wrap(err, "failed to upgrade run command service"), constants.ExitCode_UpgradeInstalledServiceFailed
-			}
-		}
+		return "", "", err, exitCode
 	}
 
 	ctx.Log("event", "update")
@@ -90,25 +74,9 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 }
 
 func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
-	// parse the extension handler settings
-	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
+	exitCode, err := immediatecmds.Disable(ctx, h, extName, seqNum)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed
-	}
-
-	// If installAsService == true, then disable the service (if any)
-	if cfg.InstallAsService() {
-		isInstalled, err := service.IsInstalled(ctx)
-		if err != nil {
-			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), constants.ExitCode_DisableInstalledServiceFailed
-		}
-
-		if isInstalled {
-			err := service.Disable(ctx)
-			if err != nil {
-				return "", "", errors.Wrap(err, "failed to disable run command service"), constants.ExitCode_DisableInstalledServiceFailed
-			}
-		}
+		return "", "", err, exitCode
 	}
 
 	ctx.Log("event", "disable")
@@ -117,6 +85,11 @@ func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 }
 
 func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
+	exitCode, err := immediatecmds.Install()
+	if err != nil {
+		return "", "", err, exitCode
+	}
+
 	if err := os.MkdirAll(constants.DataDir, 0755); err != nil {
 		return "", "", errors.Wrap(err, "failed to create data dir"), constants.ExitCode_CreateDataDirectoryFailed
 	}
@@ -127,25 +100,9 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 }
 
 func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
-	// parse the extension handler settings
-	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
+	exitCode, err := immediatecmds.Uninstall(ctx, h, extName, seqNum)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed
-	}
-
-	// If installAsService == true, then uninstall the service
-	if cfg.InstallAsService() {
-		isInstalled, err := service.IsInstalled(ctx)
-		if err != nil {
-			return "", "", errors.Wrap(err, "failed to check if runcommand service is installed"), constants.ExitCode_RemoveDataDirectoryFailed
-		}
-
-		if isInstalled {
-			error := service.DeRegister(ctx)
-			if error != nil {
-				return "", "", errors.Wrap(err, "failed to uninstall run command service"), constants.ExitCode_UninstallInstalledServiceFailed
-			}
-		}
+		return "", "", err, exitCode
 	}
 
 	{ // a new context scope with path
@@ -181,38 +138,9 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		return "", "", errors.Wrap(err1, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed
 	}
 
-	// If installService == true, then install RunCommand as a service
-	if cfg.InstallAsService() {
-		isInstalled, err2 := service.IsInstalled(ctx)
-		if err2 != nil {
-			ctx.Log("message", "could not check if service is already installed. Proceeding to overwrite configuration file to make sure it gets installed.")
-		}
-
-		if !isInstalled {
-			err3 := service.Register(ctx)
-			if err3 != nil {
-				return "", "", errors.Wrap(err3, "failed to install RunCommand as a service"), constants.ExitCode_InstallServiceFailed
-			}
-		} else {
-			isEnabled, err3 := service.IsEnabled(ctx)
-			if err3 != nil {
-				return "", "", errors.Wrap(err3, "failed to check if service is already enabled"), constants.ExitCode_InstallServiceFailed
-			}
-
-			if !isEnabled {
-				err4 := service.Enable(ctx)
-
-				if err4 != nil {
-					return "", "", errors.Wrap(err4, "failed to enable service"), constants.ExitCode_InstallServiceFailed
-				}
-
-				err5 := service.Start(ctx)
-
-				if err5 != nil {
-					return "", "", errors.Wrap(err5, "failed to start service"), constants.ExitCode_InstallServiceFailed
-				}
-			}
-		}
+	exitCode, err := immediatecmds.Enable(ctx, h, extName, seqNum, cfg)
+	if err != nil {
+		return "", "", err, exitCode
 	}
 
 	dir := filepath.Join(constants.DataDir, metadata.DownloadDir, fmt.Sprintf("%d", seqNum))
@@ -275,7 +203,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	if cfg.AsyncExecution {
 		ctx.Log("message", "asycExecution is true - report success")
 		statusToReport = types.StatusSuccess
-		command := types.Cmd{Invoke: nil, Name: "Enable", ShouldReportStatus: true, Pre: nil, FailExitCode: 3}
+		command := types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: nil, Pre: nil})
 		instanceview.ReportInstanceView(ctx, h, extName, seqNum, statusToReport, command, report)
 	}
 
@@ -294,7 +222,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 				stdoutTail, stderrTail := getOutput(ctx, stdoutF, stderrF)
 				report.Output = stdoutTail
 				report.Error = stderrTail
-				command := types.Cmd{Invoke: nil, Name: "Enable", ShouldReportStatus: true, Pre: nil, FailExitCode: 3}
+				command := types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: nil, Pre: nil})
 				instanceview.ReportInstanceView(ctx, h, extName, seqNum, statusToReport, command, report)
 				outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 				errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)

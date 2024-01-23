@@ -3,7 +3,6 @@ package status
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// reportStatus saves operation status to the status file for the extension
+// ReportStatus saves operation status to the status file for the extension
 // handler with the optional given message, if the given cmd requires reporting
 // status.
 //
@@ -42,7 +41,7 @@ func Save(statusFolder string, extName string, seqNo int, r types.StatusReport) 
 		fn = extName + "." + fn
 	}
 	path := filepath.Join(statusFolder, fn)
-	tmpFile, err := ioutil.TempFile(statusFolder, fn)
+	tmpFile, err := os.CreateTemp(statusFolder, fn)
 	if err != nil {
 		return fmt.Errorf("status: failed to create temporary file: %v", err)
 	}
@@ -53,7 +52,7 @@ func Save(statusFolder string, extName string, seqNo int, r types.StatusReport) 
 		return fmt.Errorf("status: failed to marshal into json: %v", err)
 	}
 
-	if err := ioutil.WriteFile(tmpFile.Name(), b, 0644); err != nil {
+	if err := os.WriteFile(tmpFile.Name(), b, 0644); err != nil {
 		return fmt.Errorf("status: failed to path=%s error=%v", tmpFile.Name(), err)
 	}
 
