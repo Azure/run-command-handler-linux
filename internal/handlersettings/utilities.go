@@ -36,11 +36,16 @@ func GetUriForLogging(uriString string) string {
 
 // Get handler settings from config folder. Example path: /var/lib/waagent/Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.2/config
 func GetHandlerSettings(configFolder string, extensionName string, sequenceNumber int, logContext *log.Context) (HandlerSettings, error) {
+	configPath := GetConfigFilePath(configFolder, sequenceNumber, extensionName)
+	cfg, err := ParseAndValidateSettings(logContext, configPath)
+	return cfg, err
+}
+
+func GetConfigFilePath(configFolder string, sequenceNumber int, extensionName string) string {
 	configFile := fmt.Sprintf("%d.settings", sequenceNumber)
 	if extensionName != "" {
 		configFile = extensionName + "." + configFile
 	}
 	configPath := filepath.Join(configFolder, configFile)
-	cfg, err := ParseAndValidateSettings(logContext, configPath)
-	return cfg, err
+	return configPath
 }

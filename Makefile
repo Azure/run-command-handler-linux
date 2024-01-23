@@ -23,7 +23,7 @@ binary: clean
 
 	$(info building amd64 immediate run command service)
 	OOS=linux GOARCH=amd64 go build -v \
-	  -ldflags "-X main.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
+	  -ldflags "-X immediateruncommandservice.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
 	  -o $(BINDIR)/$(IMMEDIATE_BIN) ./cmd/immediateruncommandservice
 
 	$(info building arm64 binaries)
@@ -33,8 +33,8 @@ binary: clean
 	
 	$(info building amd64 immediate run command service)
 	GOOS=linux GOARCH=arm64 go build -v \
-	  -ldflags "-X main.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
-	  -o $(BINDIR)/$(IMMEDIATE_BIN_ARM64) ./cmd/main
+	  -ldflags "-X immediateruncommandservice.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
+	  -o $(BINDIR)/$(IMMEDIATE_BIN_ARM64) ./cmd/immediateruncommandservice
 
 	$(info copy run-command-shim into $(BINDIR))
 	cp ./misc/run-command-shim ./$(BINDIR)

@@ -4,19 +4,21 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/Azure/run-command-handler-linux/internal/settings"
+	"github.com/pkg/errors"
 )
 
-type handlerSettingsFile struct {
-	RuntimeSettings []struct {
-		HandlerSettings settings.SettingsCommon `json:"handlerSettings"`
-	} `json:"runtimeSettings"`
+type HandlerSettingsFile struct {
+	RuntimeSettings []RunTimeSettingsFile `json:"runtimeSettings"`
+}
+
+type RunTimeSettingsFile struct {
+	HandlerSettings settings.SettingsCommon `json:"handlerSettings"`
 }
 
 // ReadSettings locates the .settings file and returns public settings
@@ -77,7 +79,7 @@ func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) 
 		return h, nil
 	}
 
-	var f handlerSettingsFile
+	var f HandlerSettingsFile
 	if err := json.Unmarshal(b, &f); err != nil {
 		return h, fmt.Errorf("error parsing json: %v", err)
 	}

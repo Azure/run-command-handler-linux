@@ -9,7 +9,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -40,7 +39,7 @@ func SaveCurrentPidAndStartTime(path string) error {
 	}
 
 	b := []byte(fmt.Sprintf("%s\t%s", pidString, startTime))
-	return errors.Wrap(ioutil.WriteFile(path, b, chmod), "extName.pid: failed to write")
+	return errors.Wrap(os.WriteFile(path, b, chmod), "extName.pid: failed to write")
 }
 
 // DeleteCurrentPidAndStartTime delete the file created by SaveCurrentPidAndStartTime
@@ -89,13 +88,13 @@ func IsExtensionStillRunning(path string) bool {
 
 // KillPreviousExtension handles the case where a process for the same extension name is still active from previous execution.
 // We need to kill it before staring a new one.
-func KillPreviousExtension(ctx *log.Context, path string) {
-	if IsExtensionStillRunning(constants.PidFilePath) {
-		previousPid, _, _ := ReadPidAndStartTime(constants.PidFilePath)
+func KillPreviousExtension(ctx *log.Context, pidFilePath string) {
+	if IsExtensionStillRunning(pidFilePath) {
+		previousPid, _, _ := ReadPidAndStartTime(pidFilePath)
 		if ctx != nil {
 			ctx.Log("event", "check process", "Active previous execution found. Killing pid ", previousPid)
 		}
 		syscall.Kill(-previousPid, syscall.SIGKILL) // Negative pid means kill the whole process group
-		DeleteCurrentPidAndStartTime(path)
+		DeleteCurrentPidAndStartTime(pidFilePath)
 	}
 }

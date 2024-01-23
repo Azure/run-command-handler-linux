@@ -4,8 +4,8 @@ import (
 	"github.com/go-kit/kit/log"
 )
 
-type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (stdout string, stderr string, err error, exitCode int)
-type preFunc func(ctx *log.Context, hEnv HandlerEnvironment, extName string, seqNum int) error
+type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int, metadata RCMetadata) (stdout string, stderr string, err error, exitCode int)
+type preFunc func(ctx *log.Context, hEnv HandlerEnvironment, extName string, seqNum int, metadata RCMetadata) error
 
 type Cmd struct {
 	Invoke             cmdFunc // associated function

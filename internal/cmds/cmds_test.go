@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
@@ -88,9 +89,10 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	metadata := types.NewRCMetadata("extName")
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}},
-	})
+	}, metadata)
 	require.Nil(t, err, "command should run successfully")
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
 
@@ -113,9 +115,10 @@ func Test_runCmd_fail(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	metadata := types.NewRCMetadata("extName")
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: "non-existing-cmd"}},
-	})
+	}, metadata)
 	require.NotNil(t, err, "command terminated with exit status")
 	require.Contains(t, err.Error(), "failed to execute command")
 	require.NotEqual(t, constants.ExitCode_Okay, exitCode)
@@ -343,9 +346,10 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	metadata := types.NewRCMetadata("extName")
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
-	})
+	}, metadata)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "failed to execute command: command terminated with exit status=127")
 	require.NotEqual(t, constants.ExitCode_Okay, exitCode)
@@ -361,9 +365,10 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	metadata := types.NewRCMetadata("extName")
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
-	})
+	}, metadata)
 	require.Nil(t, err)
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
 }

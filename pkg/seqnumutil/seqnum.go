@@ -54,13 +54,14 @@ func SaveSeqNum(path string, num int) error {
 // than the provided num. If no number is stored, returns true and no
 // error.
 func IsSmallerThan(path string, num int) (bool, error) {
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return true, nil
 		}
 		return false, errors.Wrap(err, "seqnum: failed to read")
 	}
-	stored, err := strconv.Atoi(string(b))
+	seqNum := strings.TrimSuffix(string(b), "\n")
+	stored, err := strconv.Atoi(seqNum)
 	return stored < num, errors.Wrapf(err, "seqnum: cannot parse number %q", b)
 }

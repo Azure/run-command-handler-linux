@@ -20,8 +20,8 @@ const (
 var executingTasks counterutil.AtomicCount
 
 func StartImmediateRunCommand(ctx *log.Context) error {
-	communicator := hostgacommunicator.HostGACommunicator{}
 	ctx.Log("message", "starting immediate run command service")
+	communicator := hostgacommunicator.HostGACommunicator{}
 
 	for {
 		err := processImmediateRunCommandGoalStates(ctx, communicator)
@@ -70,7 +70,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 			go func(state settings.SettingsCommon) {
 				ctx.Log("message", "launching new goal state. Incrementing executing tasks counter")
 				executingTasks.Increment()
-				err := goalstate.HandleGoalState(ctx, state)
+				err := goalstate.HandleImmediateGoalState(ctx, state)
 				ctx.Log("message", "goal state has exited. Decrementing executing tasks counter")
 				executingTasks.Decrement()
 

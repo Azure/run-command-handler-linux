@@ -5,7 +5,7 @@ import (
 	"os"
 
 	commands "github.com/Azure/run-command-handler-linux/internal/cmds"
-	"github.com/Azure/run-command-handler-linux/internal/runcommandcommon"
+	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
 )
@@ -25,7 +25,12 @@ func main() {
 
 	// parse command line arguments
 	cmd := parseCmd(os.Args)
-	runcommandcommon.ProcessGoalState(cmd)
+	err := commandProcessor.ProcessHandlerCommand(cmd)
+
+	// If any error is returned, then exit with provided fail exit code (if any)
+	if err != nil {
+		os.Exit(cmd.FailExitCode)
+	}
 }
 
 // parseCmd looks at os.Args and parses the subcommand. If it is invalid,

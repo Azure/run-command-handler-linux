@@ -63,7 +63,7 @@ var (
 	}
 )
 
-func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
 	// parse the extension handler settings
 	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
@@ -89,7 +89,7 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
 	// parse the extension handler settings
 	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
@@ -112,11 +112,11 @@ func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 	}
 
 	ctx.Log("event", "disable")
-	pid.KillPreviousExtension(ctx, constants.PidFilePath)
+	pid.KillPreviousExtension(ctx, metadata.PidFilePath)
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
 	if err := os.MkdirAll(constants.DataDir, 0755); err != nil {
 		return "", "", errors.Wrap(err, "failed to create data dir"), constants.ExitCode_CreateDataDirectoryFailed
 	}
@@ -126,7 +126,7 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
 	// parse the extension handler settings
 	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
@@ -160,27 +160,21 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func enablePre(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int) error {
+func enablePre(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int, metadata types.RCMetadata) error {
 	// exit if this sequence number (a snapshot of the configuration) is already
 	// processed. if not, save this sequence number before proceeding.
-	if shouldExit, err := checkAndSaveSeqNum(ctx, seqNum, constants.MostRecentSequence); err != nil {
+	if shouldExit, err := checkAndSaveSeqNum(ctx, seqNum, metadata.MostRecentSequence); err != nil {
 		return errors.Wrap(err, "failed to process sequence number")
 	} else if shouldExit {
 		ctx.Log("event", "exit", "message", "the script configuration has already been processed, will not run again")
-		deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, constants.DownloadDir, extName, seqNum, h, ctx, "")
-		os.Exit(0)
+		deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, extName, seqNum, h, ctx, "")
+		return errors.New("the script configuration has already been processed, will not run again")
 	}
+
 	return nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int) (string, string, error, int) {
+func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
 	// parse the extension handler settings (not available prior to 'enable')
 	cfg, err1 := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err1 != nil {
@@ -221,7 +215,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		}
 	}
 
-	dir := filepath.Join(constants.DataDir, constants.DownloadDir, fmt.Sprintf("%d", seqNum))
+	dir := filepath.Join(constants.DataDir, metadata.DownloadDir, fmt.Sprintf("%d", seqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
 		return "",
@@ -309,7 +303,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}()
 
 	// execute the command, save its error
-	runErr, exitCode := runCmd(ctx, dir, scriptFilePath, &cfg)
+	runErr, exitCode := runCmd(ctx, dir, scriptFilePath, &cfg, metadata)
 
 	ticker.Stop()
 	done <- true
@@ -330,7 +324,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
-	deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, constants.DownloadDir, extName, seqNum, h, ctx, cfg.PublicSettings.RunAsUser)
+	deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, extName, seqNum, h, ctx, cfg.PublicSettings.RunAsUser)
 	return stdoutTail, stderrTail, runErr, exitCode
 }
 
@@ -387,11 +381,13 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 	if err != nil {
 		return false, errors.Wrap(err, "failed to check sequence number")
 	}
+
 	if !smaller {
 		// stored sequence number is equals or greater than the current
 		// sequence number.
 		return true, nil
 	}
+
 	if err := seqnum.SaveSeqNum(mrseqPath, seq); err != nil {
 		return false, errors.Wrap(err, "failed to save sequence number")
 	}
@@ -456,7 +452,7 @@ func downloadArtifacts(ctx *log.Context, dir string, cfg *handlersettings.Handle
 }
 
 // runCmd runs the command (extracted from cfg) in the given dir (assumed to exist).
-func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlersettings.HandlerSettings) (err error, exitCode int) {
+func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (err error, exitCode int) {
 	ctx.Log("event", "executing command", "output", dir)
 	var scenario string
 
@@ -477,17 +473,17 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 
 	ctx.Log("event", "prepare command", "scriptFile", scriptFilePath)
 
-	// We need to kill previous extension process if exists before staring a new one.
-	pid.KillPreviousExtension(ctx, constants.PidFilePath)
+	// We need to kill previous extension process if exists before starting a new one.
+	pid.KillPreviousExtension(ctx, metadata.PidFilePath)
 
 	// Store the active process id and start time in case its a long running process that needs to be killed later
 	// If process exited successfully the pid file is deleted
-	pid.SaveCurrentPidAndStartTime(constants.PidFilePath)
-	defer pid.DeleteCurrentPidAndStartTime(constants.PidFilePath)
+	pid.SaveCurrentPidAndStartTime(metadata.PidFilePath)
+	defer pid.DeleteCurrentPidAndStartTime(metadata.PidFilePath)
 
 	begin := time.Now()
 	err, exitCode = exec.ExecCmdInDir(ctx, scriptFilePath, dir, cfg)
-	elapsed := time.Now().Sub(begin)
+	elapsed := time.Since(begin)
 	isSuccess := err == nil
 
 	telemetryResult("scenario", scenario, isSuccess, elapsed)
@@ -498,34 +494,6 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 	}
 	ctx.Log("event", "executed command", "output", dir)
 	return nil, constants.ExitCode_Okay
-}
-
-func writeTempScript(script, dir string) (string, string, error) {
-	if len(script) > maxScriptSize {
-		return "", "", fmt.Errorf("The script's length (%d) exceeded the maximum allowed length of %d", len(script), maxScriptSize)
-	}
-
-	s, info, err := decodeScript(script)
-	if err != nil {
-		return "", "", err
-	}
-
-	cmd := fmt.Sprintf("%s/script.sh", dir)
-	f, err := os.OpenFile(cmd, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0500)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to write script.sh")
-	}
-
-	f.WriteString(s)
-	f.Close()
-
-	dos2unix := 1
-	err = files.PostProcessFile(cmd)
-	if err != nil {
-		return "", "", errors.Wrap(err, "failed to post-process script.sh")
-	}
-	dos2unix = 0
-	return cmd, fmt.Sprintf("%s;dos2unix=%d", info, dos2unix), nil
 }
 
 // base64 decode and optionally GZip decompress a script
@@ -636,9 +604,7 @@ func deleteScriptsAndSettingsExceptMostRecent(dataDir string, downloadDir string
 	runtimeSettingsRegexFormat := extName + ".\\d+.settings"
 	runtimeSettingsLastSeqNumFormat := extName + ".%d.settings"
 	ctx.Log("event", "clearing settings and script files except most recent seq num")
-	ctx.Log("message", "Try out new path")
 	err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(downloadParent, h.HandlerEnvironment.ConfigFolder, "", uint64(seqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
-	ctx.Log("message", "it succeeded")
 	if err != nil {
 		ctx.Log("event", "could not clear settings and script files")
 	}
