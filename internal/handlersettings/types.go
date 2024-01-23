@@ -1,6 +1,10 @@
 package handlersettings
 
-import "github.com/pkg/errors"
+import (
+	"strings"
+
+	"github.com/pkg/errors"
+)
 
 // handlerSettings holds the configuration of the extension handler.
 type HandlerSettings struct {
@@ -10,7 +14,7 @@ type HandlerSettings struct {
 
 // Gets the InstallAsService field from the RunCommand's properties
 func (s HandlerSettings) InstallAsService() bool {
-	return s.PublicSettings.Source.InstallAsService
+	return s.PublicSettings.Source.InstallAsService || strings.Contains(s.Script(), "installAsService=true")
 }
 
 func (s HandlerSettings) Script() string {

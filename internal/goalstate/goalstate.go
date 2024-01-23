@@ -52,7 +52,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan boo
 
 	// TODO: Remove (only for simulating long duration processes)
 	rand.Seed(time.Now().UnixNano())
-	randomInt := rand.Intn(3)
+	randomInt := rand.Intn(5) + 2
 	ctx.Log("report", fmt.Sprintf("sleeping for %v minutes", randomInt))
 	time.Sleep(time.Minute * time.Duration(randomInt))
 	ctx.Log("message", "done sleeping")
