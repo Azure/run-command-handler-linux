@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/immediatecmds"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
 	"github.com/Azure/run-command-handler-linux/internal/pid"
+	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/telemetry"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
@@ -46,13 +47,14 @@ const (
 )
 
 var (
-	telemetryResult = telemetry.SendTelemetry(telemetry.NewTelemetryEventSender(), fullName, versionutil.Version)
+	cmdDefaultReportStatusFunc = status.ReportStatusToLocalFile
+	telemetryResult            = telemetry.SendTelemetry(telemetry.NewTelemetryEventSender(), fullName, versionutil.Version)
 
-	CmdInstall   = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: install, Pre: nil})
-	CmdEnable    = types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: enable, Pre: enablePre})
-	CmdDisable   = types.CreateCommandWithProvidedFunctions(types.CmdDisableTemplate, types.CmdFunctions{Invoke: disable, Pre: nil})
-	CmdUpdate    = types.CreateCommandWithProvidedFunctions(types.CmdUpdateTemplate, types.CmdFunctions{Invoke: update, Pre: nil})
-	CmdUninstall = types.CreateCommandWithProvidedFunctions(types.CmdUninstallTemplate, types.CmdFunctions{Invoke: uninstall, Pre: nil})
+	CmdInstall   = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: install, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
+	CmdEnable    = types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: enable, Pre: enablePre, ReportStatus: cmdDefaultReportStatusFunc})
+	CmdDisable   = types.CreateCommandWithProvidedFunctions(types.CmdDisableTemplate, types.CmdFunctions{Invoke: disable, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
+	CmdUpdate    = types.CreateCommandWithProvidedFunctions(types.CmdUpdateTemplate, types.CmdFunctions{Invoke: update, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
+	CmdUninstall = types.CreateCommandWithProvidedFunctions(types.CmdUninstallTemplate, types.CmdFunctions{Invoke: uninstall, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
 
 	Cmds = map[string]types.Cmd{
 		"install":   CmdInstall,
@@ -63,8 +65,8 @@ var (
 	}
 )
 
-func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
-	exitCode, err := immediatecmds.Update(ctx, h, extName, seqNum)
+func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+	exitCode, err := immediatecmds.Update(ctx, h, metadata.ExtName, metadata.SeqNum)
 	if err != nil {
 		return "", "", err, exitCode
 	}
@@ -73,8 +75,8 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
-	exitCode, err := immediatecmds.Disable(ctx, h, extName, seqNum)
+func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+	exitCode, err := immediatecmds.Disable(ctx, h, metadata.ExtName, metadata.SeqNum)
 	if err != nil {
 		return "", "", err, exitCode
 	}
@@ -84,7 +86,7 @@ func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
+func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
 	exitCode, err := immediatecmds.Install()
 	if err != nil {
 		return "", "", err, exitCode
@@ -99,8 +101,8 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
-	exitCode, err := immediatecmds.Uninstall(ctx, h, extName, seqNum)
+func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+	exitCode, err := immediatecmds.Uninstall(ctx, h, metadata.ExtName, metadata.SeqNum)
 	if err != nil {
 		return "", "", err, exitCode
 	}
@@ -117,33 +119,33 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 	return "", "", nil, constants.ExitCode_Okay
 }
 
-func enablePre(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int, metadata types.RCMetadata) error {
+func enablePre(ctx *log.Context, h types.HandlerEnvironment, metadata types.RCMetadata, c types.Cmd) error {
 	// exit if this sequence number (a snapshot of the configuration) is already
 	// processed. if not, save this sequence number before proceeding.
-	if shouldExit, err := checkAndSaveSeqNum(ctx, seqNum, metadata.MostRecentSequence); err != nil {
+	if shouldExit, err := checkAndSaveSeqNum(ctx, metadata.SeqNum, metadata.MostRecentSequence); err != nil {
 		return errors.Wrap(err, "failed to process sequence number")
 	} else if shouldExit {
 		ctx.Log("event", "exit", "message", "the script configuration has already been processed, will not run again")
-		deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, extName, seqNum, h, ctx, "")
+		deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, metadata.ExtName, metadata.SeqNum, h, ctx, "")
 		return errors.New("the script configuration has already been processed, will not run again")
 	}
 
 	return nil
 }
 
-func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, extName string, seqNum int, metadata types.RCMetadata) (string, string, error, int) {
+func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
 	// parse the extension handler settings (not available prior to 'enable')
-	cfg, err1 := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
+	cfg, err1 := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, metadata.ExtName, metadata.SeqNum, ctx)
 	if err1 != nil {
 		return "", "", errors.Wrap(err1, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed
 	}
 
-	exitCode, err := immediatecmds.Enable(ctx, h, extName, seqNum, cfg)
+	exitCode, err := immediatecmds.Enable(ctx, h, metadata.ExtName, metadata.SeqNum, cfg)
 	if err != nil {
 		return "", "", err, exitCode
 	}
 
-	dir := filepath.Join(constants.DataDir, metadata.DownloadDir, fmt.Sprintf("%d", seqNum))
+	dir := filepath.Join(constants.DataDir, metadata.DownloadDir, fmt.Sprintf("%d", metadata.SeqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
 		return "",
@@ -203,8 +205,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	if cfg.AsyncExecution {
 		ctx.Log("message", "asycExecution is true - report success")
 		statusToReport = types.StatusSuccess
-		command := types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: nil, Pre: nil})
-		instanceview.ReportInstanceView(ctx, h, extName, seqNum, statusToReport, command, report)
+		instanceview.ReportInstanceView(ctx, h, metadata, statusToReport, c, report)
 	}
 
 	stdoutF, stderrF := exec.LogPaths(dir)
@@ -222,8 +223,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 				stdoutTail, stderrTail := getOutput(ctx, stdoutF, stderrF)
 				report.Output = stdoutTail
 				report.Error = stderrTail
-				command := types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: nil, Pre: nil})
-				instanceview.ReportInstanceView(ctx, h, extName, seqNum, statusToReport, command, report)
+				instanceview.ReportInstanceView(ctx, h, metadata, statusToReport, c, report)
 				outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 				errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 			}
@@ -252,7 +252,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
-	deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, extName, seqNum, h, ctx, cfg.PublicSettings.RunAsUser)
+	deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, metadata.ExtName, metadata.SeqNum, h, ctx, cfg.PublicSettings.RunAsUser)
 	return stdoutTail, stderrTail, runErr, exitCode
 }
 

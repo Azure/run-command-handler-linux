@@ -12,19 +12,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ReportStatus saves operation status to the status file for the extension
+// ReportStatusToLocalFile saves operation status to the status file for the extension
 // handler with the optional given message, if the given cmd requires reporting
 // status.
 //
 // If an error occurs reporting the status, it will be logged and returned.
-func ReportStatus(ctx *log.Context, hEnv types.HandlerEnvironment, extName string, seqNum int, t types.StatusType, c types.Cmd, msg string) error {
+func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, t types.StatusType, c types.Cmd, msg string) error {
 	if !c.ShouldReportStatus {
 		ctx.Log("status", "not reported for operation (by design)")
 		return nil
 	}
 
 	s := New(t, c.Name, msg)
-	if err := Save(hEnv.HandlerEnvironment.StatusFolder, extName, seqNum, s); err != nil {
+	if err := Save(hEnv.HandlerEnvironment.StatusFolder, metadata.ExtName, metadata.SeqNum, s); err != nil {
 		ctx.Log("event", "failed to save handler status", "error", err)
 		return errors.Wrap(err, "failed to save handler status")
 	}

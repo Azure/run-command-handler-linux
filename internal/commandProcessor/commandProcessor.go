@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
+	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/seqnumutil"
 	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
@@ -37,6 +38,9 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 	if err != nil {
 		return errors.Wrap(err, "failed when trying to store handler settings locally")
 	}
+
+	// TODO: overwrite and implement another function to upload status to blob
+	cmd.ReportStatus = status.ReportStatusToLocalFile
 
 	// Store handler settings locally before moving forward...
 	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum)
@@ -72,11 +76,11 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		EndTime:          "",
 	}
 
-	instanceview.ReportInstanceView(ctx, hEnv, extensionName, seqNum, types.StatusTransitioning, cmd, &instView)
+	metadata := types.NewRCMetadata(extensionName, seqNum)
+	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
 
 	// execute the subcommand
-	metadata := types.NewRCMetadata(extensionName)
-	stdout, stderr, cmdInvokeError, exitCode := cmd.Invoke(ctx, hEnv, &instView, extensionName, seqNum, metadata)
+	stdout, stderr, cmdInvokeError, exitCode := cmd.Invoke(ctx, hEnv, &instView, metadata, cmd)
 	if cmdInvokeError != nil {
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
@@ -91,7 +95,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 			statusToReport = types.StatusError
 		}
 
-		instanceview.ReportInstanceView(ctx, hEnv, extensionName, seqNum, statusToReport, cmd, &instView)
+		instanceview.ReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView)
 		return errors.Wrapf(err, "command execution failed")
 	} else { // No error. Succeeded
 		instView.ExecutionMessage = "Execution completed"
@@ -102,7 +106,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 
 	instView.Output = stdout
 	instView.Error = stderr
-	instanceview.ReportInstanceView(ctx, hEnv, extensionName, seqNum, types.StatusSuccess, cmd, &instView)
+	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusSuccess, cmd, &instView)
 	ctx.Log("event", "end")
 
 	return nil
@@ -130,8 +134,8 @@ func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironm
 	// check sub-command preconditions, if any, before executing
 	if cmd.Pre != nil {
 		ctx.Log("event", "pre-check")
-		metadata := types.NewRCMetadata(extensionName)
-		if err := cmd.Pre(ctx, hEnv, extensionName, seqNum, metadata); err != nil {
+		metadata := types.NewRCMetadata(extensionName, seqNum)
+		if err := cmd.Pre(ctx, hEnv, metadata, cmd); err != nil {
 			ctx.Log("event", "pre-check failed", "error", err)
 			return errors.Wrapf(err, "pre-check step failed")
 		}

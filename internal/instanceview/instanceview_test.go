@@ -3,11 +3,11 @@ package instanceview
 import (
 	"encoding/json"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
@@ -44,16 +44,18 @@ func Test_reportInstanceView(t *testing.T) {
 	}
 	tmpDir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
-	defer os.RemoveAll(tmpDir)
+	//defer os.RemoveAll(tmpDir)
 
 	extName := "first"
 	fakeEnv := types.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
-	require.Nil(t, ReportInstanceView(log.NewContext(log.NewNopLogger()), fakeEnv, extName, 1, types.StatusSuccess, types.CmdEnableTemplate, &instanceView))
+	metadata := types.NewRCMetadata(extName, 1)
+	cmd := types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: nil, Pre: nil, ReportStatus: status.ReportStatusToLocalFile})
+	require.Nil(t, ReportInstanceView(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, cmd, &instanceView))
 
 	path := filepath.Join(tmpDir, extName+"."+"1.status")
-	b, err := os.ReadFile(path)
+	b, err := ioutil.ReadFile(path)
 	require.Nil(t, err, ".status file exists")
 	require.NotEqual(t, 0, len(b), ".status file not empty")
 

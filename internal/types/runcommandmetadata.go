@@ -12,10 +12,18 @@ type RCMetadata struct {
 	// format and the logs as "{downloadDir}/{seqnum}/std(out|err)". Stored under dataDir
 	// multiconfig support - when extName is set we use {downloadDir}/{extName}/...
 	DownloadDir string
+
+	// The name of the current extension. E.g., RC0001
+	ExtName string
+
+	// The sequence number. E.g., 1
+	SeqNum int
 }
 
-func NewRCMetadata(extensionName string) RCMetadata {
+func NewRCMetadata(extensionName string, seqNum int) RCMetadata {
 	result := RCMetadata{}
+	result.ExtName = extensionName
+	result.SeqNum = seqNum
 	result.DownloadDir = "download/" + extensionName
 	result.MostRecentSequence = extensionName + ".mrseq"
 	result.PidFilePath = extensionName + ".pidstart"

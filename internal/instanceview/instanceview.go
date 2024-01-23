@@ -3,7 +3,6 @@ package instanceview
 import (
 	"fmt"
 
-	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/go-kit/kit/log"
 )
@@ -13,7 +12,7 @@ import (
 // status.
 //
 // If an error occurs reporting the status, it will be logged and returned.
-func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, extName string, seqNum int, t types.StatusType, c types.Cmd, instanceview *types.RunCommandInstanceView) error {
+func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, t types.StatusType, c types.Cmd, instanceview *types.RunCommandInstanceView) error {
 	if !c.ShouldReportStatus {
 		ctx.Log("status", "not reported for operation (by design)")
 		return nil
@@ -23,7 +22,8 @@ func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, extName
 	if err != nil {
 		return err
 	}
-	return status.ReportStatus(ctx, hEnv, extName, seqNum, t, c, msg)
+
+	return c.ReportStatus(ctx, hEnv, metadata, t, c, msg)
 }
 
 func serializeInstanceView(instanceview *types.RunCommandInstanceView) (string, error) {
