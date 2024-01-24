@@ -1,7 +1,25 @@
 package types
 
+import "time"
+
 // StatusReport contains one or more status items and is the parent object
 type StatusReport []StatusItem
+
+func NewStatusReport(statusType StatusType, operation string, message string) StatusReport {
+	return []StatusItem{
+		{
+			Version:      1, // this is the protocol version do not change unless you are sure
+			TimestampUTC: time.Now().UTC().Format(time.RFC3339),
+			Status: Status{
+				Operation: operation,
+				Status:    statusType,
+				FormattedMessage: FormattedMessage{
+					Lang:    "en",
+					Message: message},
+			},
+		},
+	}
+}
 
 // StatusItem is used to serialize an individual part of the status read by the server
 type StatusItem struct {

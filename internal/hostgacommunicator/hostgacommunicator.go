@@ -12,7 +12,7 @@ import (
 
 const (
 	hostGaPluginPort          = "32526"
-	wireServerFallbackAddress = "http://168.63.129.16:32526"
+	WireServerFallbackAddress = "http://168.63.129.16:32526"
 )
 
 // Interface for operations available when communicating with HostGAPlugin
@@ -59,7 +59,7 @@ func getOperationUri(ctx *log.Context, operationName string) (string, error) {
 	// TODO: investigate why other extensions use the env var AZURE_GUEST_AGENT_WIRE_PROTOCOL_ADDRESS
 	// and decide if we want to add that wire protocol address as a potential endpoint to use when provided
 	ctx.Log("message", "crearting uri to perform operation")
-	uri, _ := url.Parse(wireServerFallbackAddress)
+	uri, _ := url.Parse(WireServerFallbackAddress)
 	uri.Path = operationName
 	return uri.String(), nil
 }

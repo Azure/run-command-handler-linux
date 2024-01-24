@@ -39,9 +39,8 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 		return errors.Wrap(err, "failed when trying to store handler settings locally")
 	}
 
-	// TODO: overwrite and implement another function to upload status to blob
-	cmd.ReportStatus = status.ReportStatusToLocalFile
-
+	// Overwrite and function to report status to blob instead of a local file
+	cmd.ReportStatus = status.ReportStatusToBlob
 	// Store handler settings locally before moving forward...
 	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum)
 }

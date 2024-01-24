@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	// TODO: Change the relative path to use the upcoming immediateVMSettings API
+	// TODO: Change the relative path to use the upcoming immediateVMSettings and immediateExtensionStatus APIs
 	vmSettingsOperation = "vmSettings"
 )
 
