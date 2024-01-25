@@ -11,7 +11,6 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
-	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/seqnumutil"
 	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
@@ -39,8 +38,6 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 		return errors.Wrap(err, "failed when trying to store handler settings locally")
 	}
 
-	// Overwrite and function to report status to blob instead of a local file
-	cmd.ReportStatus = status.ReportStatusToBlob
 	// Store handler settings locally before moving forward...
 	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum)
 }
@@ -79,7 +76,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
 
 	// execute the subcommand
-	stdout, stderr, cmdInvokeError, exitCode := cmd.Invoke(ctx, hEnv, &instView, metadata, cmd)
+	stdout, stderr, cmdInvokeError, exitCode := cmd.Functions.Invoke(ctx, hEnv, &instView, metadata, cmd)
 	if cmdInvokeError != nil {
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
@@ -131,10 +128,10 @@ func getRequiredInitialVariables(ctx *log.Context) (types.HandlerEnvironment, st
 
 func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int) error {
 	// check sub-command preconditions, if any, before executing
-	if cmd.Pre != nil {
+	if cmd.Functions.Pre != nil {
 		ctx.Log("event", "pre-check")
 		metadata := types.NewRCMetadata(extensionName, seqNum)
-		if err := cmd.Pre(ctx, hEnv, metadata, cmd); err != nil {
+		if err := cmd.Functions.Pre(ctx, hEnv, metadata, cmd); err != nil {
 			ctx.Log("event", "pre-check failed", "error", err)
 			return errors.Wrapf(err, "pre-check step failed")
 		}

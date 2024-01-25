@@ -23,7 +23,7 @@ func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, metadat
 		return err
 	}
 
-	return c.ReportStatus(ctx, hEnv, metadata, t, c, msg)
+	return c.Functions.ReportStatus(ctx, hEnv, metadata, t, c, msg)
 }
 
 func serializeInstanceView(instanceview *types.RunCommandInstanceView) (string, error) {

@@ -7,26 +7,24 @@ import (
 type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, metadata RCMetadata, c Cmd) (stdout string, stderr string, err error, exitCode int)
 type reportStatusFunc func(ctx *log.Context, hEnv HandlerEnvironment, metadata RCMetadata, statusType StatusType, c Cmd, msg string) error
 type preFunc func(ctx *log.Context, hEnv HandlerEnvironment, metadata RCMetadata, c Cmd) error
+type cleanupFunc func(ctx *log.Context, metadata RCMetadata, h HandlerEnvironment, runAsUser string)
 
 type Cmd struct {
-	Invoke             cmdFunc          // associated function
-	Name               string           // human readable string
-	ShouldReportStatus bool             // determines if running this should report the status of the run command
-	Pre                preFunc          // executed before any status is reported
-	FailExitCode       int              // exitCode to use when commands fail
-	ReportStatus       reportStatusFunc // function to report status. Useful to write in .status file for RC and upload to blob for ImmediateRC
+	Name               string       // human readable string
+	ShouldReportStatus bool         // determines if running this should report the status of the run command
+	FailExitCode       int          // exitCode to use when commands fail
+	Functions          CmdFunctions // functions used by the command
 }
 
 type CmdFunctions struct {
 	Invoke       cmdFunc          // associated function
 	Pre          preFunc          // executed before any status is reported
-	ReportStatus reportStatusFunc // to report the status of the process
+	ReportStatus reportStatusFunc // function to report status. Useful to write in .status file for RC and upload to blob for ImmediateRC
+	Cleanup      cleanupFunc      // function called after the extension has reached a terminal state to perform cleanup steps
 }
 
-func CreateCommandWithProvidedFunctions(command Cmd, input CmdFunctions) Cmd {
-	command.Invoke = input.Invoke
-	command.Pre = input.Pre
-	command.ReportStatus = input.ReportStatus
+func (command Cmd) InitializeFunctions(input CmdFunctions) Cmd {
+	command.Functions = input
 	return command
 }
 

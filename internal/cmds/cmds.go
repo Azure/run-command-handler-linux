@@ -10,14 +10,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
-	utils "github.com/Azure/azure-extension-platform/pkg/utils"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/run-command-handler-linux/internal/cleanup"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/files"
@@ -48,13 +47,14 @@ const (
 
 var (
 	cmdDefaultReportStatusFunc = status.ReportStatusToLocalFile
+	cmdDefaultCleanupFunc      = cleanup.RunCommandCleanup
 	telemetryResult            = telemetry.SendTelemetry(telemetry.NewTelemetryEventSender(), fullName, versionutil.Version)
 
-	CmdInstall   = types.CreateCommandWithProvidedFunctions(types.CmdInstallTemplate, types.CmdFunctions{Invoke: install, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
-	CmdEnable    = types.CreateCommandWithProvidedFunctions(types.CmdEnableTemplate, types.CmdFunctions{Invoke: enable, Pre: enablePre, ReportStatus: cmdDefaultReportStatusFunc})
-	CmdDisable   = types.CreateCommandWithProvidedFunctions(types.CmdDisableTemplate, types.CmdFunctions{Invoke: disable, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
-	CmdUpdate    = types.CreateCommandWithProvidedFunctions(types.CmdUpdateTemplate, types.CmdFunctions{Invoke: update, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
-	CmdUninstall = types.CreateCommandWithProvidedFunctions(types.CmdUninstallTemplate, types.CmdFunctions{Invoke: uninstall, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc})
+	CmdInstall   = types.CmdInstallTemplate.InitializeFunctions(types.CmdFunctions{Invoke: install, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc, Cleanup: cmdDefaultCleanupFunc})
+	CmdEnable    = types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{Invoke: enable, Pre: enablePre, ReportStatus: cmdDefaultReportStatusFunc, Cleanup: cmdDefaultCleanupFunc})
+	CmdDisable   = types.CmdDisableTemplate.InitializeFunctions(types.CmdFunctions{Invoke: disable, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc, Cleanup: cmdDefaultCleanupFunc})
+	CmdUpdate    = types.CmdUpdateTemplate.InitializeFunctions(types.CmdFunctions{Invoke: update, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc, Cleanup: cmdDefaultCleanupFunc})
+	CmdUninstall = types.CmdUninstallTemplate.InitializeFunctions(types.CmdFunctions{Invoke: uninstall, Pre: nil, ReportStatus: cmdDefaultReportStatusFunc, Cleanup: cmdDefaultCleanupFunc})
 
 	Cmds = map[string]types.Cmd{
 		"install":   CmdInstall,
@@ -126,7 +126,7 @@ func enablePre(ctx *log.Context, h types.HandlerEnvironment, metadata types.RCMe
 		return errors.Wrap(err, "failed to process sequence number")
 	} else if shouldExit {
 		ctx.Log("event", "exit", "message", "the script configuration has already been processed, will not run again")
-		deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, metadata.ExtName, metadata.SeqNum, h, ctx, "")
+		c.Functions.Cleanup(ctx, metadata, h, "")
 		return errors.New("the script configuration has already been processed, will not run again")
 	}
 
@@ -252,7 +252,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
-	deleteScriptsAndSettingsExceptMostRecent(constants.DataDir, metadata.DownloadDir, metadata.ExtName, metadata.SeqNum, h, ctx, cfg.PublicSettings.RunAsUser)
+	c.Functions.Cleanup(ctx, metadata, h, cfg.PublicSettings.RunAsUser)
 	return stdoutTail, stderrTail, runErr, exitCode
 }
 
@@ -525,23 +525,4 @@ func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity 
 		}
 	}
 	return blobSASRef, blobAppendClient, nil
-}
-
-func deleteScriptsAndSettingsExceptMostRecent(dataDir string, downloadDir string, extName string, seqNum int, h types.HandlerEnvironment, ctx *log.Context, runAsUser string) {
-	downloadParent := filepath.Join(dataDir, downloadDir)
-	runtimeSettingsRegexFormat := extName + ".\\d+.settings"
-	runtimeSettingsLastSeqNumFormat := extName + ".%d.settings"
-	ctx.Log("event", "clearing settings and script files except most recent seq num")
-	err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(downloadParent, h.HandlerEnvironment.ConfigFolder, "", uint64(seqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
-	if err != nil {
-		ctx.Log("event", "could not clear settings and script files")
-	}
-
-	if runAsUser != "" {
-		runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), downloadDir)
-		err = utils.TryDeleteDirectoriesExcept(runAsDownloadParent, strconv.Itoa(seqNum))
-		if err != nil {
-			ctx.Log("event", "could not clear runas script")
-		}
-	}
 }

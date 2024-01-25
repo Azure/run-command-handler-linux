@@ -1,15 +1,16 @@
 package goalstate
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/cleanup"
 	commands "github.com/Azure/run-command-handler-linux/internal/cmds"
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
+	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -35,14 +36,15 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon)
 }
 
 func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan bool, err chan error) {
-	r, _ := json.Marshal(setting)
-	ctx.Log("content", r)
-
 	cmd, ok := commands.Cmds[enableCommand]
 	if !ok {
 		err <- errors.New("missing enable command")
 		return
 	}
+
+	// Overwrite function to report status to blob instead of a local file and the cleanup phase to delete everything after reaching a goal state
+	cmd.Functions.ReportStatus = status.ReportStatusToBlob
+	cmd.Functions.Cleanup = cleanup.ImmediateRunCommandCleanup
 
 	var hs handlersettings.HandlerSettingsFile
 	var runtimeSettings []handlersettings.RunTimeSettingsFile
