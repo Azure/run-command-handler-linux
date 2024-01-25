@@ -23,7 +23,6 @@ func RunCommandCleanup(ctx *log.Context, metadata types.RCMetadata, h types.Hand
 func deleteAllScriptsAndSettings(ctx *log.Context, metadata types.RCMetadata, h types.HandlerEnvironment, runAsUser string) {
 	downloadParent := filepath.Join(constants.DataDir, metadata.DownloadDir)
 	runtimeSettingsRegexFormat := metadata.ExtName + ".\\d+.settings"
-	//runtimeSettingsRegexFormat := metadata.ExtName + "\\.\\d+\\.settings"
 
 	ctx.Log("message", "removing settings and script files")
 	err := linuxutils.TryClearExtensionScriptsDirectoriesAndSettingsFiles(ctx, downloadParent, h.HandlerEnvironment.ConfigFolder, "", runtimeSettingsRegexFormat)
