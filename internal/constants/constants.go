@@ -20,4 +20,7 @@ const (
 
 	// General failed exit code when extension provisioning fails due to service errors.
 	FailedExitCodeGeneral = -1
+
+	// The output directory for logs of immediate run command
+	ImmediateRCOutputDirectory = "/var/log/azure/run-command-handler/ImmediateRunCommandService.log"
 )

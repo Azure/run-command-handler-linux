@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/servicehandler"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
 	"github.com/go-kit/kit/log"
@@ -14,8 +15,8 @@ const (
 	systemdUnitName                          = "managedruncommand.service"
 	systemdUnitConfigurationPath             = "misc/managedruncommand.service"
 	runcommand_working_directory_placeholder = "%run_command_working_directory%"
-	systemdUnitConfigurationTemplate         = `
-[Unit]
+	runcommand_output_directory_placeholder  = "%run_command_output_directory%"
+	systemdUnitConfigurationTemplate         = `[Unit]
 Description=Managed RunCommand Service
 
 [Service] 
@@ -24,6 +25,8 @@ Restart=always
 RestartSec=5
 WorkingDirectory=%run_command_working_directory%
 ExecStart=%run_command_working_directory%/bin/immediate-run-command-handler
+StandardOutput=append:%run_command_output_directory%
+StandardError=append:%run_command_output_directory%
 
 [Install]
 WantedBy=multi-user.target`
@@ -185,7 +188,8 @@ func getSystemdHandler(ctx *log.Context) *servicehandler.Handler {
 
 func generateServiceConfigurationContent(ctx *log.Context) string {
 	workingDirectory := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_PATH")
-	systemdConfigContent := strings.Replace(systemdUnitConfigurationTemplate, runcommand_working_directory_placeholder, workingDirectory, -1)
+	systemdConfigContentWithOutputDir := strings.ReplaceAll(systemdUnitConfigurationTemplate, runcommand_output_directory_placeholder, constants.ImmediateRCOutputDirectory)
+	systemdConfigContent := strings.ReplaceAll(systemdConfigContentWithOutputDir, runcommand_working_directory_placeholder, workingDirectory)
 	ctx.Log("message", "Using working directory: "+workingDirectory)
 	return systemdConfigContent
 }

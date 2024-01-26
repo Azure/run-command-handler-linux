@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	maxConcurrentTasks int32 = 5
+	maxConcurrentTasks             int32 = 5
+	statePollingFrequencyInSeconds int32 = 60 // This should be almost immediate when creating a 'PENDING GET' to se the server as the HGAP server returns a response within 60 seconds
 )
 
 var executingTasks counterutil.AtomicCount
@@ -30,7 +31,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 		}
 
 		ctx.Log("message", "sleep for 2 minutes before the next attempt")
-		time.Sleep(time.Second * 120)
+		time.Sleep(time.Second * time.Duration(statePollingFrequencyInSeconds))
 	}
 }
 
