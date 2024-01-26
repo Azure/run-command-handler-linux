@@ -20,11 +20,11 @@ type RCMetadata struct {
 	SeqNum int
 }
 
-func NewRCMetadata(extensionName string, seqNum int) RCMetadata {
+func NewRCMetadata(extensionName string, seqNum int, downloadFolder string) RCMetadata {
 	result := RCMetadata{}
 	result.ExtName = extensionName
 	result.SeqNum = seqNum
-	result.DownloadDir = "download/" + extensionName
+	result.DownloadDir = downloadFolder + extensionName
 	result.MostRecentSequence = extensionName + ".mrseq"
 	result.PidFilePath = extensionName + ".pidstart"
 	return result

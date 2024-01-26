@@ -23,4 +23,10 @@ const (
 
 	// The output directory for logs of immediate run command
 	ImmediateRCOutputDirectory = "/var/log/azure/run-command-handler/ImmediateRunCommandService.log"
+
+	// Download folder to use for standard managed run command
+	DownloadFolder = "download/"
+
+	// Download folder to use for immediate run command
+	ImmediateDownloadFolder = "immediateDownload/"
 )

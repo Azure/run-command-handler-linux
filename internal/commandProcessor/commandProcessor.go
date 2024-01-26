@@ -28,7 +28,7 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 		return errors.Wrap(err, "could not get handler environment")
 	}
 
-	err = executePreSteps(ctx, cmd, hEnv, extensionName, seqNum)
+	err = executePreSteps(ctx, cmd, hEnv, extensionName, seqNum, constants.ImmediateDownloadFolder)
 	if err != nil {
 		return errors.Wrap(err, "failed on pre steps")
 	}
@@ -39,7 +39,7 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 	}
 
 	// Store handler settings locally before moving forward...
-	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum)
+	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.ImmediateDownloadFolder)
 }
 
 func ProcessHandlerCommand(cmd types.Cmd) error {
@@ -52,15 +52,15 @@ func ProcessHandlerCommand(cmd types.Cmd) error {
 	}
 	ctx = ctx.With("extensionName", extensionName)
 
-	err = executePreSteps(ctx, cmd, hEnv, extensionName, seqNum)
+	err = executePreSteps(ctx, cmd, hEnv, extensionName, seqNum, constants.DownloadFolder)
 	if err != nil {
 		return errors.Wrap(err, "failed on pre steps")
 	}
 
-	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum)
+	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.DownloadFolder)
 }
 
-func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int) error {
+func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string) error {
 	ctx.Log("message", fmt.Sprintf("processing command for extensionName: %v and seqNum: %v", extensionName, seqNum))
 	instView := types.RunCommandInstanceView{
 		ExecutionState:   types.Running,
@@ -72,7 +72,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		EndTime:          "",
 	}
 
-	metadata := types.NewRCMetadata(extensionName, seqNum)
+	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder)
 	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
 
 	// execute the subcommand
@@ -126,11 +126,11 @@ func getRequiredInitialVariables(ctx *log.Context) (types.HandlerEnvironment, st
 	return hEnv, extensionName, seqNum, nil
 }
 
-func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int) error {
+func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string) error {
 	// check sub-command preconditions, if any, before executing
 	if cmd.Functions.Pre != nil {
 		ctx.Log("event", "pre-check")
-		metadata := types.NewRCMetadata(extensionName, seqNum)
+		metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder)
 		if err := cmd.Functions.Pre(ctx, hEnv, metadata, cmd); err != nil {
 			ctx.Log("event", "pre-check failed", "error", err)
 			return errors.Wrapf(err, "pre-check step failed")

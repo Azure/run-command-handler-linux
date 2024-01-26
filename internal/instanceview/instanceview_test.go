@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/go-kit/kit/log"
@@ -51,7 +52,7 @@ func Test_reportInstanceView(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
-	metadata := types.NewRCMetadata(extName, 1)
+	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder)
 	cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{Invoke: nil, Pre: nil, ReportStatus: status.ReportStatusToLocalFile, Cleanup: cleanup.RunCommandCleanup})
 	require.Nil(t, ReportInstanceView(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, cmd, &instanceView))
 
