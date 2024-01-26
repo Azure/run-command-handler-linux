@@ -30,7 +30,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 			ctx.Log("error", errors.Wrapf(err, "could not process new immediate run command states"))
 		}
 
-		ctx.Log("message", "sleep for 2 minutes before the next attempt")
+		ctx.Log("message", fmt.Sprintf("sleep for %v seconds before the next attempt", statePollingFrequencyInSeconds))
 		time.Sleep(time.Second * time.Duration(statePollingFrequencyInSeconds))
 	}
 }
