@@ -1,5 +1,9 @@
 package types
 
+import (
+	"path/filepath"
+)
+
 type RCMetadata struct {
 	// Most recent sequence, which was previously traced by seqNumFile. This was
 	// incorrect. The correct way is mrseq.  This file is auto-preserved by the agent.
@@ -13,6 +17,10 @@ type RCMetadata struct {
 	// multiconfig support - when extName is set we use {downloadDir}/{extName}/...
 	DownloadDir string
 
+	// Download path is the full path where the files are stored.
+	// E.g., /var/lib/waagent/run-command-handler/{downloadDir}/{seqnum}/file
+	DownloadPath string
+
 	// The name of the current extension. E.g., RC0001
 	ExtName string
 
@@ -20,11 +28,12 @@ type RCMetadata struct {
 	SeqNum int
 }
 
-func NewRCMetadata(extensionName string, seqNum int, downloadFolder string) RCMetadata {
+func NewRCMetadata(extensionName string, seqNum int, downloadFolder string, dataDir string) RCMetadata {
 	result := RCMetadata{}
 	result.ExtName = extensionName
 	result.SeqNum = seqNum
-	result.DownloadDir = downloadFolder + extensionName
+	result.DownloadDir = filepath.Join(downloadFolder, extensionName)
+	result.DownloadPath = filepath.Join(dataDir, result.DownloadDir)
 	result.MostRecentSequence = extensionName + ".mrseq"
 	result.PidFilePath = extensionName + ".pidstart"
 	return result

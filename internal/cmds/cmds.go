@@ -145,7 +145,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		return "", "", err, exitCode
 	}
 
-	dir := filepath.Join(constants.DataDir, metadata.DownloadDir, fmt.Sprintf("%d", metadata.SeqNum))
+	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
 		return "",

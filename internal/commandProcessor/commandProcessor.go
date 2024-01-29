@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
@@ -72,7 +73,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		EndTime:          "",
 	}
 
-	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder)
+	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, constants.DataDir)
 	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
 
 	// execute the subcommand
@@ -130,7 +131,7 @@ func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironm
 	// check sub-command preconditions, if any, before executing
 	if cmd.Functions.Pre != nil {
 		ctx.Log("event", "pre-check")
-		metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder)
+		metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, constants.DataDir)
 		if err := cmd.Functions.Pre(ctx, hEnv, metadata, cmd); err != nil {
 			ctx.Log("event", "pre-check failed", "error", err)
 			return errors.Wrapf(err, "pre-check step failed")
@@ -141,6 +142,7 @@ func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironm
 }
 
 func initializeLogger(cmd types.Cmd) *log.Context {
+	logging.New(nil)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp).With("version", versionutil.VersionString())
 	ctx = ctx.With("operation", strings.ToLower(cmd.Name))

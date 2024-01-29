@@ -16,7 +16,7 @@ func Test_reportStatus_fails(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = "/non-existing/dir/"
 
-	metadata := types.NewRCMetadata("", 1, constants.DownloadFolder)
+	metadata := types.NewRCMetadata("", 1, constants.DownloadFolder, constants.DataDir)
 	err := ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "")
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "failed to save handler status")
@@ -31,7 +31,7 @@ func Test_reportStatus_fileExists(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
-	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder)
+	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder, constants.DataDir)
 	require.Nil(t, ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusError, types.CmdEnableTemplate, "FOO ERROR"))
 
 	path := filepath.Join(tmpDir, "first.1.status")
@@ -49,7 +49,7 @@ func Test_reportStatus_checksIfShouldBeReported(t *testing.T) {
 		extName := "first"
 		fakeEnv := types.HandlerEnvironment{}
 		fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
-		metadata := types.NewRCMetadata(extName, 2, constants.DownloadFolder)
+		metadata := types.NewRCMetadata(extName, 2, constants.DownloadFolder, constants.DataDir)
 		require.Nil(t, ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, c, ""))
 
 		fp := filepath.Join(tmpDir, "first.2.status")

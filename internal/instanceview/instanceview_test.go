@@ -52,7 +52,7 @@ func Test_reportInstanceView(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
-	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder)
+	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder, constants.DataDir)
 	cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{Invoke: nil, Pre: nil, ReportStatus: status.ReportStatusToLocalFile, Cleanup: cleanup.RunCommandCleanup})
 	require.Nil(t, ReportInstanceView(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, cmd, &instanceView))
 

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
-	requesthelper "github.com/Azure/run-command-handler-linux/internal/request"
+	requesthelper "github.com/Azure/run-command-handler-linux/internal/requesthelper"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"

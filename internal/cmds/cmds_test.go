@@ -89,7 +89,7 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}},
 	}, metadata)
@@ -115,7 +115,7 @@ func Test_runCmd_fail(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: "non-existing-cmd"}},
 	}, metadata)
@@ -346,7 +346,7 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
 	}, metadata)
@@ -365,7 +365,7 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
 	}, metadata)

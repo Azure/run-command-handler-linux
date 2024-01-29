@@ -21,17 +21,16 @@ func RunCommandCleanup(ctx *log.Context, metadata types.RCMetadata, h types.Hand
 }
 
 func deleteAllScriptsAndSettings(ctx *log.Context, metadata types.RCMetadata, h types.HandlerEnvironment, runAsUser string) {
-	downloadParent := filepath.Join(constants.DataDir, metadata.DownloadDir)
 	runtimeSettingsRegexFormat := metadata.ExtName + ".\\d+.settings"
 
 	ctx.Log("message", "removing settings and script files")
-	err := linuxutils.TryClearExtensionScriptsDirectoriesAndSettingsFiles(ctx, downloadParent, h.HandlerEnvironment.ConfigFolder, "", runtimeSettingsRegexFormat)
+	err := linuxutils.TryClearExtensionScriptsDirectoriesAndSettingsFiles(ctx, metadata.DownloadPath, h.HandlerEnvironment.ConfigFolder, "", runtimeSettingsRegexFormat)
 	if err != nil {
 		ctx.Log("warning", "failed to remove both. See error for more details", "error", err)
 	}
 
 	if runAsUser != "" {
-		runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), constants.DataDir)
+		runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), metadata.DownloadDir)
 		ctx.Log("message", "removing all files from the download 'runas' directory "+runAsDownloadParent)
 		err = linuxutils.TryDeleteDirectories(ctx, runAsDownloadParent)
 		if err != nil {
@@ -41,19 +40,18 @@ func deleteAllScriptsAndSettings(ctx *log.Context, metadata types.RCMetadata, h 
 }
 
 func deleteScriptsAndSettingsExceptMostRecent(ctx *log.Context, metadata types.RCMetadata, h types.HandlerEnvironment, runAsUser string) {
-	downloadParent := filepath.Join(constants.DataDir, metadata.DownloadDir)
 	runtimeSettingsRegexFormat := metadata.ExtName + ".\\d+.settings"
 	runtimeSettingsLastSeqNumFormat := metadata.ExtName + ".%d.settings"
 
 	ctx.Log("event", "clearing settings and script files except most recent seq num")
-	err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(downloadParent, h.HandlerEnvironment.ConfigFolder, "",
+	err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(metadata.DownloadPath, h.HandlerEnvironment.ConfigFolder, "",
 		uint64(metadata.SeqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
 	if err != nil {
-		ctx.Log("event", "could not clear settings and script files")
+		ctx.Log("event", "could not clear settings and script files", "error", err)
 	}
 
 	if runAsUser != "" {
-		runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), constants.DataDir)
+		runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), metadata.DownloadDir)
 		seqNumString := strconv.Itoa(metadata.SeqNum)
 		ctx.Log("message", "removing all files from the download 'runas' directory "+runAsDownloadParent)
 		err = utils.TryDeleteDirectoriesExcept(runAsDownloadParent, seqNumString)
