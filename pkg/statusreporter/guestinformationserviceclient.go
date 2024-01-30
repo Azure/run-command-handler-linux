@@ -11,6 +11,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+type IGuestInformationServiceClient interface {
+	ReportStatus(statusToUpload string) (*http.Response, error)
+	GetEndpoint() string
+}
+
 type GuestInformationServiceClient struct {
 	Endpoint string
 }
@@ -19,11 +24,15 @@ func NewGuestInformationServiceClient(e string) GuestInformationServiceClient {
 	return GuestInformationServiceClient{Endpoint: e}
 }
 
-func (client GuestInformationServiceClient) ReportStatus(statusToUpload string) (*http.Response, error) {
+func (c GuestInformationServiceClient) GetEndpoint() string {
+	return c.Endpoint
+}
+
+func (c GuestInformationServiceClient) ReportStatus(statusToUpload string) (*http.Response, error) {
 	if statusToUpload == "" {
 		return nil, errors.New("provided status to upload is empty")
 	}
 
-	putStatusUri := fmt.Sprintf(constants.PutStatusFormatString, client.Endpoint)
+	putStatusUri := fmt.Sprintf(constants.PutStatusFormatString, c.GetEndpoint())
 	return ReportStatus(putStatusUri, statusToUpload)
 }

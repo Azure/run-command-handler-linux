@@ -14,25 +14,8 @@ import (
 )
 
 func ReportStatusToBlob(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
-	if !c.ShouldReportStatus {
-		ctx.Log("status", "not reported for operation (by design)")
-		return nil
-	}
-
-	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, false)
-	if err != nil {
-		return errors.Wrap(err, "failed to get json for status report")
-	}
 	reporter := statusreporter.NewGuestInformationServiceClient(hostgacommunicator.WireServerFallbackAddress)
-
-	ctx.Log("message", "create request to upload status to: "+reporter.Endpoint)
-	response, err := reporter.ReportStatus(string(rootStatusJson))
-	if err != nil {
-		return errors.Wrap(err, "failed to report status to HGAP")
-	}
-	ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
-	ctx.Log("message", "Successfully uploaded status")
-	return nil
+	return reportStatusToEndpoint(ctx, hEnv, metadata, statusType, c, msg, reporter)
 }
 
 // ReportStatusToLocalFile saves operation status to the status file for the extension
@@ -107,4 +90,30 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 	}
 
 	return b, nil
+}
+
+func reportStatusToEndpoint(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, reporter statusreporter.IGuestInformationServiceClient) error {
+	if !c.ShouldReportStatus {
+		ctx.Log("status", "not reported for operation (by design)")
+		return nil
+	}
+
+	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, false)
+	if err != nil {
+		return errors.Wrap(err, "failed to get json for status report")
+	}
+
+	ctx.Log("message", "create request to upload status to: "+reporter.GetEndpoint())
+	response, err := reporter.ReportStatus(string(rootStatusJson))
+	if err != nil {
+		return errors.Wrap(err, "failed to report status to HGAP")
+	}
+
+	if response.StatusCode != 200 {
+		return errors.New("failed to report status with error code " + response.Status)
+	}
+
+	ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
+	ctx.Log("message", "Successfully uploaded status")
+	return nil
 }
