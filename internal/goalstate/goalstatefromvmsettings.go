@@ -14,8 +14,11 @@ func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommu
 		return nil, errors.Wrapf(err, "failed to retrieve VMSettings")
 	}
 
-	extensionGoalStates := filterImmediateRunCommandGoalStates(vmSettings.ExtensionGoalStates)
-	return extensionGoalStates, nil
+	if vmSettings != nil {
+		return filterImmediateRunCommandGoalStates(vmSettings.ExtensionGoalStates), nil
+	}
+
+	return []hostgacommunicator.ExtensionGoalStates{}, nil
 }
 
 func filterImmediateRunCommandGoalStates(extensionGoalStates []hostgacommunicator.ExtensionGoalStates) []hostgacommunicator.ExtensionGoalStates {
