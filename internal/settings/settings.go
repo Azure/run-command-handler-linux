@@ -44,3 +44,14 @@ func (li *SettingsCommon) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+func (li SettingsCommon) MarshalJSON() ([]byte, error) {
+	type SettingsCommonHelper SettingsCommon
+	s := SettingsCommonHelper(li)
+	publicSettingsRaw, err := json.Marshal(s.PublicSettings)
+	if err != nil {
+		return []byte{}, errors.Wrap(err, "could not marshal public settings")
+	}
+	s.PublicSettingsRaw = string(publicSettingsRaw)
+	return json.Marshal(s)
+}

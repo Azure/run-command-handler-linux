@@ -18,9 +18,9 @@ func TestRunCommandCleanupSuccess_DeletesAllFilesExceptMostRecent(t *testing.T) 
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	extName, seqNum := "testExtension", 5
 	dataDir, err := os.MkdirTemp("", "")
+	defer os.RemoveAll(dataDir)
 	require.Nil(t, err)
 	require.DirExists(t, dataDir)
-	defer os.RemoveAll(dataDir)
 
 	downloadFolder, fakeEnv, scriptFilePathsForSeqs, runtimeSettingsForSeqs := createTempScriptsAndSettingsAndGetVariables(t, dataDir, extName, seqNum)
 
@@ -33,9 +33,9 @@ func TestRunCommandCleanupSuccessMultipleExtensions_DeletesAllFilesExceptMostRec
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	extName, seqNum := "testExtension", 5
 	dataDir, err := os.MkdirTemp("", "")
+	defer os.RemoveAll(dataDir)
 	require.Nil(t, err)
 	require.DirExists(t, dataDir)
-	defer os.RemoveAll(dataDir)
 
 	downloadFolder, fakeEnv, scriptFilePathsForSeqs, runtimeSettingsForSeqs := createTempScriptsAndSettingsAndGetVariables(t, dataDir, extName, seqNum)
 	_, _, scriptFilePathsNotRelatedExt, runtimeSettingsNotRelatedExt := createTempScriptsAndSettingsAndGetVariables(t, dataDir, "notRelatedExtension", seqNum)
@@ -50,9 +50,9 @@ func TestRunCommandCleanupSuccess_DeletesAllFiles(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	extName, seqNum := "testExtension", 5
 	dataDir, err := os.MkdirTemp("", "")
+	defer os.RemoveAll(dataDir)
 	require.Nil(t, err)
 	require.DirExists(t, dataDir)
-	defer os.RemoveAll(dataDir)
 
 	downloadFolder, fakeEnv, scriptFilePathsForSeqs, runtimeSettingsForSeqs := createTempScriptsAndSettingsAndGetVariables(t, dataDir, extName, seqNum)
 
@@ -75,9 +75,9 @@ func TestRunCommandCleanupSuccessMultipleExtensions_DeletesAllFilesForSelectedEx
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	extName, seqNum := "testExtension", 5
 	dataDir, err := os.MkdirTemp("", "")
+	defer os.RemoveAll(dataDir)
 	require.Nil(t, err)
 	require.DirExists(t, dataDir)
-	defer os.RemoveAll(dataDir)
 
 	downloadFolder, fakeEnv, scriptFilePathsForSeqs, runtimeSettingsForSeqs := createTempScriptsAndSettingsAndGetVariables(t, dataDir, extName, seqNum)
 	_, _, scriptFilePathsNotRelatedExt, runtimeSettingsNotRelatedExt := createTempScriptsAndSettingsAndGetVariables(t, dataDir, "notRelatedExtension", seqNum)

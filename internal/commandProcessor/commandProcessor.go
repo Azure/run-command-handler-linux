@@ -34,7 +34,7 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 		return errors.Wrap(err, "failed on pre steps")
 	}
 
-	err = storeHandlerSettingsFileForLocalExecution(ctx, hs, hEnv, extensionName, seqNum)
+	err = storeConfigSettingsFileForLocalExecution(ctx, hs, hEnv, extensionName, seqNum)
 	if err != nil {
 		return errors.Wrap(err, "failed when trying to store handler settings locally")
 	}
@@ -119,7 +119,7 @@ func getRequiredInitialVariables(ctx *log.Context) (types.HandlerEnvironment, st
 	}
 
 	extensionName = getExtensionName(ctx)
-	seqNum, err = getSeqNum(ctx, hEnv, extensionName)
+	seqNum, err = getSeqNum(&ctx, hEnv, extensionName)
 	if err != nil {
 		return hEnv, extensionName, seqNum, errors.Wrap(err, "failed to get seqNum")
 	}
@@ -165,7 +165,7 @@ func getExtensionName(ctx *log.Context) string {
 	return extensionName
 }
 
-func getSeqNum(ctx *log.Context, hEnv types.HandlerEnvironment, extensionName string) (int, error) {
+func getSeqNum(ctx **log.Context, hEnv types.HandlerEnvironment, extensionName string) (int, error) {
 	// Multiconfig support: Agent should set env variables for the extension name and sequence number
 	seqNum := -1
 	var err error = nil
@@ -174,7 +174,7 @@ func getSeqNum(ctx *log.Context, hEnv types.HandlerEnvironment, extensionName st
 		seqNum, err = strconv.Atoi(seqNumVariable)
 		if err != nil {
 			msg := fmt.Sprintf("failed to parse env variable ConfigSequenceNumber: %v", seqNumVariable)
-			ctx.Log("message", msg, "error", err)
+			(*ctx).Log("message", msg, "error", err)
 			return seqNum, errors.Wrap(err, msg)
 		}
 	}
@@ -183,18 +183,18 @@ func getSeqNum(ctx *log.Context, hEnv types.HandlerEnvironment, extensionName st
 	if seqNum == -1 {
 		seqNum, err = seqnumutil.FindSequenceNumberFromConfig(hEnv.HandlerEnvironment.ConfigFolder, constants.ConfigFileExtension, extensionName)
 		if err != nil {
-			ctx.Log("FindSequenceNumberFromConfig", "failed to find sequence number from config folder.", "error", err)
+			(*ctx).Log("FindSequenceNumberFromConfig", "failed to find sequence number from config folder.", "error", err)
 		} else {
-			ctx.Log("FindSequenceNumberFromConfig", fmt.Sprintf("Sequence number determined from config folder: %d", seqNum))
+			(*ctx).Log("FindSequenceNumberFromConfig", fmt.Sprintf("Sequence number determined from config folder: %d", seqNum))
 		}
 	}
 
-	ctx = ctx.With("seq", seqNum)
-	ctx.Log("seqNum", seqNum)
+	(*ctx) = (*ctx).With("seq", seqNum)
+	(*ctx).Log("seqNum", seqNum)
 	return seqNum, nil
 }
 
-func storeHandlerSettingsFileForLocalExecution(ctx *log.Context, hs handlersettings.HandlerSettingsFile, hEnv types.HandlerEnvironment, extensionName string, seqNum int) error {
+func storeConfigSettingsFileForLocalExecution(ctx *log.Context, hs handlersettings.HandlerSettingsFile, hEnv types.HandlerEnvironment, extensionName string, seqNum int) error {
 	configFolder := hEnv.HandlerEnvironment.ConfigFolder
 	configFilePath := handlersettings.GetConfigFilePath(configFolder, seqNum, extensionName)
 	ctx.Log("message", fmt.Sprintf("saving handler settings in file: %v", configFilePath))
