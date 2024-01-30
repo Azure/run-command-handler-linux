@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
+	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/pkg/counterutil"
 	"github.com/go-kit/kit/log"
@@ -20,9 +21,15 @@ const (
 
 var executingTasks counterutil.AtomicCount
 
+type VMSettingsRequestManager struct{}
+
+func (*VMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
+	return hostgacommunicator.GetVMSettingsRequestManager(ctx)
+}
+
 func StartImmediateRunCommand(ctx *log.Context) error {
 	ctx.Log("message", "starting immediate run command service")
-	communicator := hostgacommunicator.HostGACommunicator{}
+	communicator := hostgacommunicator.NewHostGACommunicator(new(VMSettingsRequestManager))
 
 	for {
 		err := processImmediateRunCommandGoalStates(ctx, communicator)

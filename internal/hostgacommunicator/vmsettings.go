@@ -19,7 +19,7 @@ const (
 	vmSettingsOperation = "vmSettings"
 )
 
-var (
+const (
 	vmSettingsRequestTimeout = 30 * time.Second
 )
 
@@ -56,7 +56,7 @@ type requestFactory struct {
 }
 
 // Returns a new RequestManager object useful to make GET Requests
-func getVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
+func GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
 	factory, err := newVMSettingsRequestFactory(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create request factory")

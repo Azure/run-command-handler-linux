@@ -21,12 +21,22 @@ type IHostGACommunicator interface {
 }
 
 // HostGaCommunicator provides methods for retrieving VMSettings from the HostGAPlugin
-type HostGACommunicator struct{}
+type HostGACommunicator struct {
+	vmRequestManager IVMSettingsRequestManager
+}
+
+func NewHostGACommunicator(requestManager IVMSettingsRequestManager) HostGACommunicator {
+	return HostGACommunicator{vmRequestManager: requestManager}
+}
+
+type IVMSettingsRequestManager interface {
+	GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error)
+}
 
 // GetVMSettings returns the VMSettings for the current machine
-func (*HostGACommunicator) GetImmediateVMSettings(ctx *log.Context) (*VMSettings, error) {
+func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context) (*VMSettings, error) {
 	ctx.Log("message", "getting request manager")
-	requestManager, err := getVMSettingsRequestManager(ctx)
+	requestManager, err := c.vmRequestManager.GetVMSettingsRequestManager(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not create the request manager")
 	}
@@ -59,7 +69,10 @@ func getOperationUri(ctx *log.Context, operationName string) (string, error) {
 	// TODO: investigate why other extensions use the env var AZURE_GUEST_AGENT_WIRE_PROTOCOL_ADDRESS
 	// and decide if we want to add that wire protocol address as a potential endpoint to use when provided
 	ctx.Log("message", "creating uri to perform operation")
-	uri, _ := url.Parse(WireServerFallbackAddress)
+	uri, err := url.Parse(WireServerFallbackAddress)
+	if err != nil {
+		return "", errors.Wrap(err, "could not parse address "+WireServerFallbackAddress)
+	}
 	uri.Path = operationName
 	return uri.String(), nil
 }
