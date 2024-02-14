@@ -9,6 +9,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/pkg/servicehandler"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -33,25 +34,26 @@ WantedBy=multi-user.target`
 )
 
 func Register(ctx *log.Context) error {
-	if isSystemdSupported(ctx) {
-		ctx.Log("message", "Generating service configuration files")
-		systemdUnitContent := generateServiceConfigurationContent(ctx)
-		serviceHandler := getSystemdHandler(ctx)
-
-		ctx.Log("message", "Registering service")
-		err := serviceHandler.Register(ctx, systemdUnitContent)
-		if err != nil {
-			return err
-		}
-
-		err = Start(ctx)
-		if err != nil {
-			return err
-		}
-
-		ctx.Log("message", "Service registration complete")
+	if !isSystemdSupported(ctx) {
+		return errors.New("Systemd not supported. Failed to register service")
 	}
 
+	ctx.Log("message", "Generating service configuration files")
+	systemdUnitContent := generateServiceConfigurationContent(ctx)
+	serviceHandler := getSystemdHandler(ctx)
+
+	ctx.Log("message", "Registering service")
+	err := serviceHandler.Register(ctx, systemdUnitContent)
+	if err != nil {
+		return err
+	}
+
+	err = Start(ctx)
+	if err != nil {
+		return err
+	}
+
+	ctx.Log("message", "Service registration complete")
 	return nil
 }
 
