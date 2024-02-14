@@ -22,10 +22,9 @@ const (
 	systemctl_status       = "status"
 	systemctl_stop         = "stop"
 
-	unitConfigurationBasePath_preferred   = "/lib/systemd/system"
-	unitConfigurationBasePath_alternative = "/usr/lib/systemd/system"
-
-	unitConfigurationFilePermission = 0644
+	unitConfigurationBasePath_preferred   = "/etc/systemd/system"           // system units created by the administrator path
+	unitConfigurationBasePath_alternative = "/usr/local/lib/systemd/system" // system units installed by the administrator path
+	unitConfigurationFilePermission       = 0644
 )
 
 type Manager struct {

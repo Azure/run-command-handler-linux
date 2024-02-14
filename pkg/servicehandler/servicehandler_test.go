@@ -11,8 +11,8 @@ import (
 
 const (
 	testUnitName                         = "testunit.service"
-	systemdUnitDirectorypath             = "/lib/systemd/system"
-	systemdUnitDirectorypath_alternative = "/usr/lib/systemd/system"
+	systemdUnitDirectorypath             = "/etc/systemd/system"           // system units created by the administrator path
+	systemdUnitDirectorypath_alternative = "/usr/local/lib/systemd/system" // system units installed by the administrator path
 )
 
 var systemdUnitPath = fmt.Sprintf("%v/%v", systemdUnitDirectorypath, testUnitName)
