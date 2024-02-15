@@ -65,6 +65,7 @@ func Install() (int, error) {
 }
 
 func Uninstall(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int) (int, error) {
+	ctx.Log("message", "proceeding to uninstall immediate run command")
 	// parse the extension handler settings
 	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {

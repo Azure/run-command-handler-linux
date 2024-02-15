@@ -104,24 +104,19 @@ func (handler *Handler) Register(ctx *log.Context, unitConfigContent string) err
 }
 
 func (handler *Handler) DeRegister(ctx *log.Context) error {
-	err := handler.DaemonReload()
+	err := handler.Stop()
 	if err != nil {
-		return fmt.Errorf("error while reloading daemon : %v", err)
-	}
-
-	err = handler.Stop()
-	if err != nil {
-		return fmt.Errorf("error while stopping unit : %v", err)
+		return fmt.Errorf("error while stopping unit: %v", err)
 	}
 
 	err = handler.Disable()
 	if err != nil {
-		return fmt.Errorf("error while disabling unit : %v", err)
+		return fmt.Errorf("error while disabling unit: %v", err)
 	}
 
 	err = handler.manager.RemoveUnitConfigurationFile(handler.config.Name, ctx)
 	if err != nil {
-		return fmt.Errorf("error while removing unit configuration : %v", err)
+		return fmt.Errorf("error while removing unit configuration: %v", err)
 	}
 
 	return nil
