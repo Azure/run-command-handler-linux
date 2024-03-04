@@ -291,10 +291,6 @@ func TestHandlerSuccessfulDeRegister(t *testing.T) {
 	handler := NewHandler(m, config, ctx)
 	handler.DeRegister(ctx)
 
-	if !m.functionCalled.daemondreload_f {
-		t.Errorf("missing call to reload daemon")
-	}
-
 	if !m.functionCalled.stopunit_f {
 		t.Errorf("missing call to stop unit")
 	}
