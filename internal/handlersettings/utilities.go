@@ -41,6 +41,8 @@ func GetHandlerSettings(configFolder string, extensionName string, sequenceNumbe
 	return cfg, err
 }
 
+// Gets the config file path for the current extension name and sequence number.
+// Example config file path: RC0001_02.0.settings
 func GetConfigFilePath(configFolder string, sequenceNumber int, extensionName string) string {
 	configFile := fmt.Sprintf("%d.settings", sequenceNumber)
 	if extensionName != "" {

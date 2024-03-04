@@ -10,6 +10,7 @@ import (
 )
 
 func Update(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int) (int, error) {
+	ctx.Log("message", "updating immediate run command")
 	// parse the extension handler settings
 	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {
@@ -49,9 +50,18 @@ func Disable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNu
 		}
 
 		if isInstalled {
-			err := service.Disable(ctx)
+			isEnabled, err := service.IsEnabled(ctx)
 			if err != nil {
-				return constants.ExitCode_DisableInstalledServiceFailed, errors.Wrap(err, "failed to disable run command service")
+				return constants.ExitCode_InstallServiceFailed, errors.Wrap(err, "failed to check if service is enabled")
+			}
+
+			if isEnabled {
+				err := service.Disable(ctx)
+				if err != nil {
+					return constants.ExitCode_DisableInstalledServiceFailed, errors.Wrap(err, "failed to disable run command service")
+				}
+			} else {
+				ctx.Log("message", "Service installed but already got disabled. Skipping request to disable")
 			}
 		}
 	}
