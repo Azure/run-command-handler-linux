@@ -78,6 +78,9 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 
 	// execute the subcommand
 	stdout, stderr, cmdInvokeError, exitCode := cmd.Functions.Invoke(ctx, hEnv, &instView, metadata, cmd)
+
+	instView.Output = stdout
+	instView.Error = stderr
 	if cmdInvokeError != nil {
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
@@ -101,8 +104,6 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		instView.ExitCode = constants.ExitCode_Okay
 	}
 
-	instView.Output = stdout
-	instView.Error = stderr
 	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusSuccess, cmd, &instView)
 	ctx.Log("event", "end")
 

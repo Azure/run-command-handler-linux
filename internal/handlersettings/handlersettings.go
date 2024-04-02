@@ -1,8 +1,6 @@
 package handlersettings
 
 import (
-	"encoding/json"
-
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -20,12 +18,6 @@ func ParseAndValidateSettings(ctx *log.Context, configFilePath string) (h Handle
 		return h, err
 	}
 	ctx.Log("event", "read configuration")
-
-	ctx.Log("event", "validating json schema")
-	if err := validateSettingsSchema(pubJSON, protJSON); err != nil {
-		return h, errors.Wrap(err, "json validation error")
-	}
-	ctx.Log("event", "json schema valid")
 
 	ctx.Log("event", "parsing configuration json")
 	if err := UnmarshalHandlerSettings(pubJSON, protJSON, &h.PublicSettings, &h.ProtectedSettings); err != nil {
@@ -48,34 +40,4 @@ func readSettings(configFilePath string) (pubSettingsJSON, protSettingsJSON map[
 	pubSettingsJSON, protSettingsJSON, err = ReadSettings(configFilePath)
 	err = errors.Wrapf(err, "error reading extension configuration")
 	return
-}
-
-// validateSettings takes publicSettings and protectedSettings as JSON objects
-// and runs JSON schema validation on them.
-func validateSettingsSchema(pubSettingsJSON, protSettingsJSON map[string]interface{}) error {
-	pubJSON, err := toJSON(pubSettingsJSON)
-	if err != nil {
-		return errors.Wrap(err, "failed to unmarshal public settings into json")
-	}
-	protJSON, err := toJSON(protSettingsJSON)
-	if err != nil {
-		return errors.Wrap(err, "failed to unmarshal protected settings into json")
-	}
-
-	if err := validatePublicSettings(pubJSON); err != nil {
-		return err
-	}
-	if err := validateProtectedSettings(protJSON); err != nil {
-		return err
-	}
-	return nil
-}
-
-// toJSON converts given in-memory JSON object representation into a JSON object string.
-func toJSON(o map[string]interface{}) (string, error) {
-	if o == nil { // instead of JSON 'null' assume empty object '{}'
-		return "{}", nil
-	}
-	b, err := json.Marshal(o)
-	return string(b), errors.Wrap(err, "failed to marshal into json")
 }

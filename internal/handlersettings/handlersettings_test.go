@@ -128,19 +128,6 @@ func Test_scriptUri(t *testing.T) {
 // 			}}.validate(), "validation didn't fail for settings with both MSI and storage account")
 // }
 
-func Test_toJSON_empty(t *testing.T) {
-	s, err := toJSON(nil)
-	require.Nil(t, err)
-	require.Equal(t, "{}", s)
-}
-
-func Test_toJSON(t *testing.T) {
-	s, err := toJSON(map[string]interface{}{
-		"a": 3})
-	require.Nil(t, err)
-	require.Equal(t, `{"a":3}`, s)
-}
-
 // func Test_toJSONUmarshallForManagedIdentity(t *testing.T) {
 // 	testString := `{"commandToExecute" : "echo hello", "fileUris":["https://a.com/file.txt", "https://b.com/file2.txt"]}`
 // 	require.NoError(t, validateProtectedSettings(testString), "protected settings should be valid")
