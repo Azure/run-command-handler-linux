@@ -3,13 +3,15 @@ package preprocess
 import (
 	"bytes"
 	"crypto/md5"
-	"fmt"
-	"os"
-	"path/filepath"
+	"io/ioutil"
 	"testing"
+
+	"path/filepath"
 
 	"github.com/stretchr/testify/require"
 )
+
+import "fmt"
 
 const testDataDir = "testdata"
 
@@ -33,7 +35,7 @@ var bomTestFiles = map[string]string{
 func TestBOM_CheckTestDataIntegrity(t *testing.T) {
 	for f, sum := range bomTestFiles {
 		fp := filepath.Join(testDataDir, f)
-		b, err := os.ReadFile(fp)
+		b, err := ioutil.ReadFile(fp)
 		require.Nil(t, err, "error reading %s", fp)
 
 		hash := fmt.Sprintf("%x", md5.Sum(b))
@@ -44,7 +46,7 @@ func TestBOM_CheckTestDataIntegrity(t *testing.T) {
 func TestRemoveBOM(t *testing.T) {
 	for fn := range bomTestFiles {
 		fp := filepath.Join(testDataDir, fn)
-		b, err := os.ReadFile(fp)
+		b, err := ioutil.ReadFile(fp)
 		require.Nil(t, err, "error reading %s", fp)
 
 		n := RemoveBOM(b)
