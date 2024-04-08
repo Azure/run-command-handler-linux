@@ -1,6 +1,6 @@
 module github.com/Azure/run-command-handler-linux
 
-go 1.18
+go 1.21
 
 require (
 	github.com/Azure/azure-extension-foundation v0.0.0-20190726000431-02f4f599e64a
@@ -10,11 +10,11 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1
 	github.com/ahmetalpbalkan/go-httpbin v0.0.0-20200921172446-862fbad56b77
+	github.com/ahmetb/go-httpbin v0.0.0-20200921172446-862fbad56b77
 	github.com/go-kit/kit v0.12.0
 	github.com/google/uuid v1.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.7.1
-	github.com/xeipuuv/gojsonschema v0.0.0-20160623135812-c539bca196be
 	golang.org/x/text v0.3.7
 )
 
@@ -28,7 +28,6 @@ require (
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
-	github.com/ahmetb/go-httpbin v0.0.0-20200921172446-862fbad56b77 // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
@@ -41,8 +40,6 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/xeipuuv/gojsonpointer v0.0.0-20151027082146-e0fe6f683076 // indirect
-	github.com/xeipuuv/gojsonreference v0.0.0-20150808065054-e02fc20de94c // indirect
 	golang.org/x/crypto v0.0.0-20221010152910-d6f0a8c073c2 // indirect
 	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4 // indirect
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
