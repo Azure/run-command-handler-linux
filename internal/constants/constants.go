@@ -29,4 +29,7 @@ const (
 
 	// Download folder to use for immediate run command
 	ImmediateDownloadFolder = "immediateDownload/"
+
+	// Name of the run command extension
+	RunCommandExtensionName = "Microsoft.CPlat.Core.RunCommandHandlerLinux"
 )

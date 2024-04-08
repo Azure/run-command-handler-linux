@@ -1,6 +1,8 @@
 package immediatecmds
 
 import (
+	"os"
+
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/service"
@@ -10,7 +12,8 @@ import (
 )
 
 func Update(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int) (int, error) {
-	ctx.Log("message", "updating immediate run command")
+	updatingFromVersion := os.Getenv("AZURE_GUEST_AGENT_UPDATING_FROM_VERSION")
+	ctx.Log("message", "updating immediate run command from version "+updatingFromVersion)
 	// parse the extension handler settings
 	cfg, err := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, extName, seqNum, ctx)
 	if err != nil {

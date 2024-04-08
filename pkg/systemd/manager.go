@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -120,6 +121,22 @@ func (*Manager) RemoveUnitConfigurationFile(unitName string, ctx *log.Context) e
 
 	ctx.Log("message", "removing unit configuration file from "+unitConfigPath)
 	return os.Remove(unitConfigPath)
+}
+
+func (*Manager) GetInstalledVersion(unitName string, ctx *log.Context) (string, error) {
+	unitConfigPath, err := GetUnitConfigurationFilePath(unitName, ctx)
+	if err != nil {
+		return "", err
+	}
+
+	ctx.Log("message", "Getting content from "+unitConfigPath)
+	content, err := os.ReadFile(unitConfigPath)
+
+	ctx.Log("message", "Extracting version from service definition")
+	firstSplit := strings.Split(string(content), fmt.Sprintf("ExecStart=/var/lib/waagent/%s-", constants.RunCommandExtensionName))
+	secondSplit := strings.Split(firstSplit[1], "/bin/immediate-run-command-handler")
+	installedVersion := secondSplit[0]
+	return installedVersion, err
 }
 
 var GetUnitConfigurationFilePath = func(unitName string, ctx *log.Context) (string, error) {
