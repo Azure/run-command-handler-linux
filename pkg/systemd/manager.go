@@ -123,6 +123,9 @@ func (*Manager) RemoveUnitConfigurationFile(unitName string, ctx *log.Context) e
 	return os.Remove(unitConfigPath)
 }
 
+// Gets the installed version of the extension. The version will look at the service definition and extract it from the
+// ExecStart field as there isn't a way to include a version parameter in the definition. The field looks as follows:
+// ExecStart=/var/lib/waagent/Microsoft.CPlat.Core.RunCOmmandHandlerLinux-1.0.0/bin/immediate-run-command-handler
 func (*Manager) GetInstalledVersion(unitName string, ctx *log.Context) (string, error) {
 	unitConfigPath, err := GetUnitConfigurationFilePath(unitName, ctx)
 	if err != nil {

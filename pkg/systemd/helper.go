@@ -13,11 +13,6 @@ func IsSystemDPresent() bool {
 	return err == nil
 }
 
-func GetCurrentInstalledVersion() bool {
-	_, err := os.Stat("/run/systemd/system")
-	return err == nil
-}
-
 func GetSystemDConfigurationBasePath(ctx *log.Context) (string, error) {
 	ctx.Log("message", "Getting systemd configuration path available in the system")
 	info, err := os.Stat(unitConfigurationBasePath_preferred)
