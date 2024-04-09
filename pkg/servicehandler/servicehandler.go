@@ -109,10 +109,13 @@ func (handler *Handler) DeRegister(ctx *log.Context) error {
 	// We need to make sure the version that the VM Agent is trying to uninstall is the correct one.
 	// Failing to check this can cause to uninstall the service during the update workflow.
 	targetVersion := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_VERSION")
+	ctx.Log("message", "trying to uninstall extension with version: "+targetVersion)
+
 	installedVersion, err := handler.manager.GetInstalledVersion(handler.config.Name, ctx)
 	if err != nil {
 		return errors.Wrap(err, "Could not get the current installed version of the service")
 	}
+	ctx.Log("message", "current installed version: "+installedVersion)
 
 	if targetVersion == installedVersion {
 		err = handler.Stop()
