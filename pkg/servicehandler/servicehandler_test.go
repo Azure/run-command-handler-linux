@@ -369,7 +369,6 @@ func TestHandlerFailsOnGettingInstalledVersionDeRegister(t *testing.T) {
 	m := getManagerMock()
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp)
-	os.Setenv("AZURE_GUEST_AGENT_EXTENSION_VERSION", installedTargetVersion)
 	handler := NewHandler(m, config, ctx)
 
 	// mock get installed version function
