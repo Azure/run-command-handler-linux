@@ -111,11 +111,10 @@ func (handler *Handler) DeRegister(ctx *log.Context) error {
 	targetVersion := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_VERSION")
 	ctx.Log("message", "trying to uninstall extension with version: "+targetVersion)
 
-	installedVersion, err := handler.manager.GetInstalledVersion(handler.config.Name, ctx)
+	installedVersion, err := handler.GetInstalledVersion(ctx)
 	if err != nil {
-		return errors.Wrap(err, "Could not get the current installed version of the service")
+		return errors.Wrap(err, "error while checking the installed version of the service")
 	}
-	ctx.Log("message", "current installed version: "+installedVersion)
 
 	if targetVersion == installedVersion {
 		err = handler.Stop()
@@ -137,4 +136,8 @@ func (handler *Handler) DeRegister(ctx *log.Context) error {
 	}
 
 	return nil
+}
+
+func (handler *Handler) GetInstalledVersion(ctx *log.Context) (string, error) {
+	return handler.manager.GetInstalledVersion(handler.config.Name, ctx)
 }

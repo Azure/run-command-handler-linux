@@ -132,14 +132,18 @@ func (*Manager) GetInstalledVersion(unitName string, ctx *log.Context) (string, 
 		return "", err
 	}
 
-	ctx.Log("message", "Getting content from "+unitConfigPath)
+	ctx.Log("message", "getting content from "+unitConfigPath)
 	content, err := os.ReadFile(unitConfigPath)
+	if err != nil {
+		return "", err
+	}
 
-	ctx.Log("message", "Extracting version from service definition")
+	ctx.Log("message", "extracting version from service definition")
 	firstSplit := strings.Split(string(content), fmt.Sprintf("ExecStart=/var/lib/waagent/%s-", constants.RunCommandExtensionName))
 	secondSplit := strings.Split(firstSplit[1], "/bin/immediate-run-command-handler")
 	installedVersion := secondSplit[0]
-	return installedVersion, err
+	ctx.Log("message", "current installed version: "+installedVersion)
+	return installedVersion, nil
 }
 
 var GetUnitConfigurationFilePath = func(unitName string, ctx *log.Context) (string, error) {

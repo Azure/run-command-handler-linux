@@ -37,13 +37,33 @@ func Register(ctx *log.Context) error {
 	if !isSystemdSupported(ctx) {
 		return errors.New("Systemd not supported. Failed to register service")
 	}
+	targetVersion := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_VERSION")
+	ctx.Log("message", "trying to register extension with version: "+targetVersion)
 
 	ctx.Log("message", "Generating service configuration files")
 	systemdUnitContent := generateServiceConfigurationContent(ctx)
 	serviceHandler := getSystemdHandler(ctx)
 
-	ctx.Log("message", "Registering service")
-	err := serviceHandler.Register(ctx, systemdUnitContent)
+	isInstalled, err := IsInstalled(ctx)
+	if err != nil {
+		return err
+	}
+
+	// If the service is installed, check if it needs to be upgraded.
+	if isInstalled {
+		installedVersion, err := serviceHandler.GetInstalledVersion(ctx)
+		if err != nil {
+			return err
+		}
+
+		if installedVersion == targetVersion {
+			ctx.Log("message", "installed service already match the target version")
+			return nil
+		}
+	}
+
+	ctx.Log("message", "Registering service using version: "+targetVersion)
+	err = serviceHandler.Register(ctx, systemdUnitContent)
 	if err != nil {
 		return err
 	}
