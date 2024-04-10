@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -137,13 +137,7 @@ func (*Manager) GetInstalledVersion(unitName string, ctx *log.Context) (string, 
 	if err != nil {
 		return "", err
 	}
-
-	ctx.Log("message", "extracting version from service definition")
-	firstSplit := strings.Split(string(content), fmt.Sprintf("ExecStart=/var/lib/waagent/%s-", constants.RunCommandExtensionName))
-	secondSplit := strings.Split(firstSplit[1], "/bin/immediate-run-command-handler")
-	installedVersion := secondSplit[0]
-	ctx.Log("message", "current installed version: "+installedVersion)
-	return installedVersion, nil
+	return versionutil.ExtractFromServiceDefinition(string(content), ctx)
 }
 
 var GetUnitConfigurationFilePath = func(unitName string, ctx *log.Context) (string, error) {
