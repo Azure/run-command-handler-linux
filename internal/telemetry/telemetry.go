@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	telemetryEventsPath = constants.WaAgentDirectory + "events"
+	telemetryEventsPath = constants.WaAgentDirectory + "/events"
 )
 
 type telemetryParameterString struct {
