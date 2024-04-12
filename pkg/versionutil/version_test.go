@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -18,8 +19,8 @@ var (
 	User=root
 	Restart=always
 	RestartSec=5
-	WorkingDirectory=/var/lib/waagent/Microsoft.CPlat.Core.RunCommandHandlerLinux-%run_command_version_placeholder%
-	ExecStart=/var/lib/waagent/Microsoft.CPlat.Core.RunCommandHandlerLinux-%run_command_version_placeholder%/bin/immediate-run-command-handler
+	WorkingDirectory=%run_command_waagent_location%/Microsoft.CPlat.Core.RunCommandHandlerLinux-%run_command_version_placeholder%
+	ExecStart=%run_command_waagent_location%/Microsoft.CPlat.Core.RunCommandHandlerLinux-%run_command_version_placeholder%/bin/immediate-run-command-handler
 	StandardOutput=append:/var/log/azure/run-command-handler/ImmediateRunCommandService.log
 	StandardError=append:/var/log/azure/run-command-handler/ImmediateRunCommandService.log
 	
@@ -64,6 +65,7 @@ func TestFailToExtractVersion(t *testing.T) {
 
 func getServiceDefinitionWithVersion(version string) string {
 	definition := strings.ReplaceAll(systemdUnitConfigurationTemplateTest, "%run_command_version_placeholder%", version)
+	definition = strings.ReplaceAll(definition, "%run_command_waagent_location%", constants.WaAgentDirectory)
 	return definition
 }
 

@@ -1,9 +1,12 @@
 package constants
 
 const (
+	// The directory of the Microsoft Azure Linux VM Agent (waagent).
+	WaAgentDirectory = "/var/lib/waagent"
+
 	// dataDir is where we store the downloaded files, logs and state for
 	// the extension handler
-	DataDir = "/var/lib/waagent/run-command-handler"
+	DataDir = WaAgentDirectory + "/run-command-handler"
 
 	// Directory used for copying the Run Command script file to be able to RunAs a different user.
 	// It needs to copied because of permission restrictions. RunAsUser does not have permission to execute under /var/lib/waagent and its subdirectories.
@@ -32,4 +35,12 @@ const (
 
 	// Name of the run command extension
 	RunCommandExtensionName = "Microsoft.CPlat.Core.RunCommandHandlerLinux"
+
+	// The current version of the extension. This value is provided by the agent for all commands.
+	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
+	ExtensionVersionEnvName = "AZURE_GUEST_AGENT_EXTENSION_VERSION"
+
+	// The path of the extension in the VM with full name. This value is provided by the agent for all commands.
+	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
+	ExtensionPathEnvName = "AZURE_GUEST_AGENT_EXTENSION_PATH"
 )

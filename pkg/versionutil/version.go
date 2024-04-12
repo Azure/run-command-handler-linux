@@ -43,9 +43,9 @@ func DetailedVersionString() string {
 // Current extracting it from the ExecStart field that includes the version as a substring.
 func ExtractFromServiceDefinition(content string, ctx *log.Context) (string, error) {
 	ctx.Log("message", "extracting version from service definition "+content)
-	firstSplit := strings.Split(string(content), fmt.Sprintf("ExecStart=/var/lib/waagent/%s-", constants.RunCommandExtensionName))
+	firstSplit := strings.Split(string(content), fmt.Sprintf("ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandExtensionName))
 	if len(firstSplit) < 2 {
-		return "", errors.New("wrong service definition found. Missing field " + fmt.Sprintf("ExecStart=/var/lib/waagent/%s-", constants.RunCommandExtensionName))
+		return "", errors.New("wrong service definition found. Missing field " + fmt.Sprintf("ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandExtensionName))
 	}
 
 	secondSplit := strings.Split(firstSplit[1], "/bin/immediate-run-command-handler")

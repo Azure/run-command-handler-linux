@@ -1,6 +1,8 @@
 package goalstate
 
 import (
+	"strings"
+
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/go-kit/kit/log"
@@ -31,5 +33,5 @@ func filterImmediateRunCommandGoalStates(extensionGoalStates []hostgacommunicato
 }
 
 func isRunCommandGoalState(goalState hostgacommunicator.ExtensionGoalStates) bool {
-	return goalState.Name == constants.RunCommandExtensionName
+	return strings.EqualFold(goalState.Name, constants.RunCommandExtensionName)
 }

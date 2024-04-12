@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -108,7 +109,7 @@ func (handler *Handler) Register(ctx *log.Context, unitConfigContent string) err
 func (handler *Handler) DeRegister(ctx *log.Context) error {
 	// We need to make sure the version that the VM Agent is trying to uninstall is the correct one.
 	// Failing to check this can cause to uninstall the service during the update workflow.
-	targetVersion := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_VERSION")
+	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	ctx.Log("message", "trying to uninstall extension with version: "+targetVersion)
 
 	installedVersion, err := handler.GetInstalledVersion(ctx)

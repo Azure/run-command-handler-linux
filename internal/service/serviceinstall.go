@@ -37,7 +37,7 @@ func Register(ctx *log.Context) error {
 	if !isSystemdSupported(ctx) {
 		return errors.New("Systemd not supported. Failed to register service")
 	}
-	targetVersion := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_VERSION")
+	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	ctx.Log("message", "trying to register extension with version: "+targetVersion)
 
 	ctx.Log("message", "Generating service configuration files")
@@ -57,7 +57,7 @@ func Register(ctx *log.Context) error {
 		}
 
 		if installedVersion == targetVersion {
-			ctx.Log("message", "installed service already match the target version")
+			ctx.Log("message", "installed service already matches the target version")
 			return nil
 		}
 	}
@@ -209,7 +209,7 @@ func getSystemdHandler(ctx *log.Context) *servicehandler.Handler {
 }
 
 func generateServiceConfigurationContent(ctx *log.Context) string {
-	workingDirectory := os.Getenv("AZURE_GUEST_AGENT_EXTENSION_PATH")
+	workingDirectory := os.Getenv(constants.ExtensionPathEnvName)
 	systemdConfigContentWithOutputDir := strings.ReplaceAll(systemdUnitConfigurationTemplate, runcommand_output_directory_placeholder, constants.ImmediateRCOutputDirectory)
 	systemdConfigContent := strings.ReplaceAll(systemdConfigContentWithOutputDir, runcommand_working_directory_placeholder, workingDirectory)
 	ctx.Log("message", "Using working directory: "+workingDirectory)

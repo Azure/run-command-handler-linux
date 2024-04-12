@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
 	"github.com/go-kit/kit/log"
 )
@@ -300,7 +301,7 @@ func TestHandlerSuccessfulDeRegister(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp)
 
-	os.Setenv("AZURE_GUEST_AGENT_EXTENSION_VERSION", installedTargetVersion)
+	os.Setenv(constants.ExtensionVersionEnvName, installedTargetVersion)
 	handler := NewHandler(m, config, ctx)
 	err := handler.DeRegister(ctx)
 	if err != nil {
@@ -335,7 +336,7 @@ func TestHandlerSkipDeRegisterForNonInstalledTargetVersion(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp)
 
-	os.Setenv("AZURE_GUEST_AGENT_EXTENSION_VERSION", nonInstalledTargetVersion)
+	os.Setenv(constants.ExtensionVersionEnvName, nonInstalledTargetVersion)
 	handler := NewHandler(m, config, ctx)
 	err := handler.DeRegister(ctx)
 	if err != nil {
