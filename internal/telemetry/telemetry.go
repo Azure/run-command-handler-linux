@@ -8,11 +8,12 @@ import (
 	"path"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/pkg/errors"
 )
 
 const (
-	telemetryEventsPath = "/var/lib/waagent/events"
+	telemetryEventsPath = constants.WaAgentDirectory + "/events"
 )
 
 type telemetryParameterString struct {

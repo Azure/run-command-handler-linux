@@ -1,12 +1,13 @@
 package goalstate
 
 import (
+	"strings"
+
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
-
-const runCommandExtensionName = "Microsoft.CPlat.Core.RunCommandHandlerLinux"
 
 func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator) ([]hostgacommunicator.ExtensionGoalStates, error) {
 	vmSettings, err := communicator.GetImmediateVMSettings(ctx)
@@ -32,5 +33,5 @@ func filterImmediateRunCommandGoalStates(extensionGoalStates []hostgacommunicato
 }
 
 func isRunCommandGoalState(goalState hostgacommunicator.ExtensionGoalStates) bool {
-	return goalState.Name == runCommandExtensionName
+	return strings.EqualFold(goalState.Name, constants.RunCommandExtensionName)
 }

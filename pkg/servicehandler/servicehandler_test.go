@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
 	"github.com/go-kit/kit/log"
 )
@@ -13,6 +14,8 @@ const (
 	testUnitName                         = "testunit.service"
 	systemdUnitDirectorypath             = "/etc/systemd/system"           // system units created by the administrator path
 	systemdUnitDirectorypath_alternative = "/usr/local/lib/systemd/system" // system units installed by the administrator path
+	installedTargetVersion               = "2.0.0"
+	nonInstalledTargetVersion            = "1.0.0"
 )
 
 var systemdUnitPath = fmt.Sprintf("%v/%v", systemdUnitDirectorypath, testUnitName)
@@ -30,6 +33,7 @@ type functionCalled struct {
 	isunitinstalled_f      bool
 	removeunitconfigfile_f bool
 	createunitconfigfile_f bool
+	getinstalledversion_f  bool
 }
 
 // Struct with all the methods needed to mock the UnitManager interface.
@@ -44,6 +48,7 @@ type ManagerMock struct {
 	isinstalled_f             func(unitName string, ctx *log.Context) (bool, error)
 	removeUnitConfiguration_f func(unitName string, ctx *log.Context) error
 	createUnitConfiguration_f func(unitName string, content []byte, ctx *log.Context) error
+	getInstalledVersion_f     func(unitName string, ctx *log.Context) (string, error)
 	functionCalled            functionCalled
 }
 
@@ -97,6 +102,11 @@ func (s *ManagerMock) CreateUnitConfigurationFile(unitName string, content []byt
 	return s.createUnitConfiguration_f(unitName, content, ctx)
 }
 
+func (s *ManagerMock) GetInstalledVersion(unitName string, ctx *log.Context) (string, error) {
+	s.functionCalled.getinstalledversion_f = true
+	return s.getInstalledVersion_f(unitName, ctx)
+}
+
 func getManagerMock() *ManagerMock {
 	return &ManagerMock{
 		start_f: func(unitName string, ctx *log.Context) error {
@@ -128,6 +138,9 @@ func getManagerMock() *ManagerMock {
 		},
 		createUnitConfiguration_f: func(unitName string, content []byte, ctx *log.Context) error {
 			return nil
+		},
+		getInstalledVersion_f: func(unitName string, ctx *log.Context) (string, error) {
+			return installedTargetVersion, nil
 		},
 		functionCalled: functionCalled{
 			daemondreload_f: false,
@@ -288,8 +301,16 @@ func TestHandlerSuccessfulDeRegister(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp)
 
+	os.Setenv(constants.ExtensionVersionEnvName, installedTargetVersion)
 	handler := NewHandler(m, config, ctx)
-	handler.DeRegister(ctx)
+	err := handler.DeRegister(ctx)
+	if err != nil {
+		t.Errorf("unexpected failure deregistration call")
+	}
+
+	if !m.functionCalled.getinstalledversion_f {
+		t.Errorf("missing call to verify target version")
+	}
 
 	if !m.functionCalled.stopunit_f {
 		t.Errorf("missing call to stop unit")
@@ -301,6 +322,79 @@ func TestHandlerSuccessfulDeRegister(t *testing.T) {
 
 	if !m.functionCalled.removeunitconfigfile_f {
 		t.Errorf("missing call to remove unit configuration file from system")
+	}
+
+	if m.functionCalled.enableunit_f || m.functionCalled.startunit_f || m.functionCalled.createunitconfigfile_f {
+		t.Errorf("unexpected systemctl command")
+	}
+}
+
+func TestHandlerSkipDeRegisterForNonInstalledTargetVersion(t *testing.T) {
+	config := NewConfiguration(testUnitName)
+
+	m := getManagerMock()
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
+		os.Stdout))).With("time", log.DefaultTimestamp)
+
+	os.Setenv(constants.ExtensionVersionEnvName, nonInstalledTargetVersion)
+	handler := NewHandler(m, config, ctx)
+	err := handler.DeRegister(ctx)
+	if err != nil {
+		t.Errorf("unexpected failure deregistration call")
+	}
+
+	if !m.functionCalled.getinstalledversion_f {
+		t.Errorf("missing call to verify target version")
+	}
+
+	if m.functionCalled.stopunit_f {
+		t.Errorf("target version is not installed. Unexpected call to stop unit")
+	}
+
+	if m.functionCalled.disableunit_f {
+		t.Errorf("target version is not installed. Unexpected call to disable unit")
+	}
+
+	if m.functionCalled.removeunitconfigfile_f {
+		t.Errorf("target version is not installed. Unexpected call to remove unit configuration file from system")
+	}
+
+	if m.functionCalled.enableunit_f || m.functionCalled.startunit_f || m.functionCalled.createunitconfigfile_f {
+		t.Errorf("unexpected systemctl command")
+	}
+}
+
+func TestHandlerFailsOnGettingInstalledVersionDeRegister(t *testing.T) {
+	config := NewConfiguration(testUnitName)
+
+	m := getManagerMock()
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
+		os.Stdout))).With("time", log.DefaultTimestamp)
+	handler := NewHandler(m, config, ctx)
+
+	// mock get installed version function
+	m.getInstalledVersion_f = func(unitName string, ctx *log.Context) (string, error) {
+		return "", fmt.Errorf("failed to get installed version")
+	}
+	err := handler.DeRegister(ctx)
+	if err == nil {
+		t.Errorf("an error should be thrown due to not being able to get the installed version")
+	}
+
+	if !m.functionCalled.getinstalledversion_f {
+		t.Errorf("missing call to verify target version")
+	}
+
+	if m.functionCalled.stopunit_f {
+		t.Errorf("target version is not installed. Unexpected call to stop unit")
+	}
+
+	if m.functionCalled.disableunit_f {
+		t.Errorf("target version is not installed. Unexpected call to disable unit")
+	}
+
+	if m.functionCalled.removeunitconfigfile_f {
+		t.Errorf("target version is not installed. Unexpected call to remove unit configuration file from system")
 	}
 
 	if m.functionCalled.enableunit_f || m.functionCalled.startunit_f || m.functionCalled.createunitconfigfile_f {

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 )
 
 type UnitManager interface {
@@ -18,6 +20,7 @@ type UnitManager interface {
 	IsUnitInstalled(unitName string, ctx *log.Context) (bool, error)
 	RemoveUnitConfigurationFile(unitName string, ctx *log.Context) error
 	CreateUnitConfigurationFile(unitName string, content []byte, ctx *log.Context) error
+	GetInstalledVersion(unitName string, ctx *log.Context) (string, error)
 }
 
 type Configuration struct {
@@ -104,20 +107,38 @@ func (handler *Handler) Register(ctx *log.Context, unitConfigContent string) err
 }
 
 func (handler *Handler) DeRegister(ctx *log.Context) error {
-	err := handler.Stop()
+	// We need to make sure the version that the VM Agent is trying to uninstall is the correct one.
+	// Failing to check this can cause to uninstall the service during the update workflow.
+	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	ctx.Log("message", "trying to uninstall extension with version: "+targetVersion)
+
+	installedVersion, err := handler.GetInstalledVersion(ctx)
 	if err != nil {
-		return fmt.Errorf("error while stopping unit: %v", err)
+		return errors.Wrap(err, "error while checking the installed version of the service")
 	}
 
-	err = handler.Disable()
-	if err != nil {
-		return fmt.Errorf("error while disabling unit: %v", err)
-	}
+	if targetVersion == installedVersion {
+		err = handler.Stop()
+		if err != nil {
+			return fmt.Errorf("error while stopping unit: %v", err)
+		}
 
-	err = handler.manager.RemoveUnitConfigurationFile(handler.config.Name, ctx)
-	if err != nil {
-		return fmt.Errorf("error while removing unit configuration: %v", err)
+		err = handler.Disable()
+		if err != nil {
+			return fmt.Errorf("error while disabling unit: %v", err)
+		}
+
+		err = handler.manager.RemoveUnitConfigurationFile(handler.config.Name, ctx)
+		if err != nil {
+			return fmt.Errorf("error while removing unit configuration: %v", err)
+		}
+	} else {
+		ctx.Log("message", "Skipping action. Target version is not current installed")
 	}
 
 	return nil
+}
+
+func (handler *Handler) GetInstalledVersion(ctx *log.Context) (string, error) {
+	return handler.manager.GetInstalledVersion(handler.config.Name, ctx)
 }
