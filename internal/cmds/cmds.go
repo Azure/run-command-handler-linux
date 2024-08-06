@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -69,6 +70,13 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	exitCode, err := immediatecmds.Update(ctx, h, metadata.ExtName, metadata.SeqNum)
 	if err != nil {
 		return "", "", err, exitCode
+	}
+
+	// Copy any .mrseq files -Most Recently executed Sequence number for Run Commands from old version to new version.
+	// This is necessary to prevent rerunning of already executed Run Commands after upgrade of extension version.
+	copMreError := copyMrseqFiles(ctx)
+	if(copMreError != nil){
+		return "","", errors.New("Copying *.mrseq files failed during update."), constants.ExitCode_CopyingMreSequenceFilesFailed
 	}
 
 	ctx.Log("event", "update")
@@ -321,6 +329,80 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 	}
 	ctx.Log("event", "seqnum saved", "path", mrseqPath)
 	return false, nil
+}
+
+// Copy *.mrseq (Most Recently executed Sequence number) files from old extension version to new extension version during update.
+func copyMrseqFiles(ctx log.Logger) (error) {	
+
+	newExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	oldExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
+
+	ctx.Log("message", fmt.Sprintf("Migrating .mrseq (Most Recently executed Sequence number) files from extension version '%s' to '%s'",oldExtensionVersion, newExtensionVersion ))
+	
+	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
+	oldExtensionDirectory := strings.ReplaceAll(newExtensionDirectory, newExtensionVersion, oldExtensionVersion)
+
+	if oldExtensionDirectory == "" || newExtensionDirectory == "" {
+		return errors.New("oldExtesionDirectory or newExtensionDirectory is empty")
+	}
+	
+	// Check if the directory exists
+	sourceDirectoryFDRef, err := os.Open(oldExtensionDirectory)
+	if err != nil {
+		errMessage := fmt.Sprintf("could not open sourceDirectory %s", oldExtensionDirectory)
+		ctx.Log("message", errMessage)
+		return errors.Wrap(err, errMessage)
+	}
+
+	directoryEntries, err := sourceDirectoryFDRef.ReadDir(0)
+	if err != nil {
+		errMessage := fmt.Sprintf("could not read directory entries from sourceDirectory %s", oldExtensionDirectory)
+		ctx.Log("message", errMessage)
+		return errors.Wrap(err, errMessage)
+	}
+
+	mreSeqSuffix := ".mrseq"
+	numberOfFilesMigrated := 0
+
+	for _, dirEntry := range directoryEntries {
+		fileName := dirEntry.Name()
+
+		if strings.HasSuffix(fileName, mreSeqSuffix) {
+			sourceFileFullPath := filepath.Join(oldExtensionDirectory, fileName)
+			destinationFileFullPath := filepath.Join(newExtensionDirectory, fileName)
+
+			sourceFile, sourceFileOpenError := os.OpenFile(sourceFileFullPath, os.O_RDONLY, 0400)
+			if sourceFileOpenError != nil {
+				errMessage := "Failed to open .mrseq file '%s' for reading. Contact ICM team AzureRT\\Extensions for this service error."
+				ctx.Log("message", fmt.Sprintf(errMessage, sourceFileFullPath))
+				return errors.Wrapf(sourceFileOpenError, errMessage)
+			}
+
+			destFile, destFileCreateError := os.Create(destinationFileFullPath)
+			if destFileCreateError != nil {
+				errMessage := "Failed to create .mrseq file '%s'. Contact ICM team AzureRT\\Extensions for this service error."
+				ctx.Log("message", fmt.Sprintf(errMessage, destFile))
+				return errors.Wrapf(destFileCreateError, errMessage)
+			}
+
+			_, copyError := io.Copy(destFile, sourceFile)
+			if copyError != nil {
+				errMessage := fmt.Sprintf("Failed to copy .mrseq file '%s' to path '%s'. Contact ICM team AzureRT\\Extensions for this service error.", sourceFileFullPath, destinationFileFullPath)
+				ctx.Log("message", errMessage)
+				return errors.Wrapf(copyError, errMessage)
+			} else {
+				ctx.Log("message", fmt.Sprintf("File '%s' was copied successfully to '%s'", sourceFileFullPath, destinationFileFullPath))
+				numberOfFilesMigrated++
+			}
+			 
+			sourceFile.Close()
+			destFile.Close()
+		}
+	}
+
+	ctx.Log("message", fmt.Sprintf("Migrated '%d' .mrseq (Most Recently executed Sequence number) files from extension version '%s' to '%s'", numberOfFilesMigrated, oldExtensionVersion, newExtensionVersion ))
+
+	return nil
 }
 
 // downloadScript downloads the script file specified in cfg into dir (creates if does
