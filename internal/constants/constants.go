@@ -40,6 +40,10 @@ const (
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
 	ExtensionVersionEnvName = "AZURE_GUEST_AGENT_EXTENSION_VERSION"
 
+	// This is the version the extension is updating from
+	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
+	ExtensionVersionUpdatingFromEnvName = "AZURE_GUEST_AGENT_UPDATING_FROM_VERSION"
+
 	// The path of the extension in the VM with full name. This value is provided by the agent for all commands.
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
 	ExtensionPathEnvName = "AZURE_GUEST_AGENT_EXTENSION_PATH"
