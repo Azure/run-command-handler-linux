@@ -371,7 +371,7 @@ func copyMrseqFiles(ctx log.Logger) (error) {
 			sourceFileFullPath := filepath.Join(oldExtensionDirectory, fileName)
 			destinationFileFullPath := filepath.Join(newExtensionDirectory, fileName)
 
-			sourceFile, sourceFileOpenError := os.OpenFile(sourceFileFullPath, os.O_RDONLY, 0400)
+			sourceFile, sourceFileOpenError := os.Open(sourceFileFullPath)
 			if sourceFileOpenError != nil {
 				errMessage := "Failed to open .mrseq file '%s' for reading. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, sourceFileFullPath))
