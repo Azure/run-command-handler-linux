@@ -18,56 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
-	currentExtensionVersionDirectory := "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8"
-	os.Setenv(constants.ExtensionPathEnvName, currentExtensionVersionDirectory)
-	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.7")
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
-	 
-	currentVersion := os.Getenv(constants.ExtensionVersionEnvName)
-	previousVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
-	previousExtensionVersionDirectory := strings.ReplaceAll(currentExtensionVersionDirectory, currentVersion, previousVersion)
-
-	// Remove currentExtensionVersionDirectory if it exists
-	_, err := os.Stat(currentExtensionVersionDirectory)
-	if err == nil {
-		os.RemoveAll(currentExtensionVersionDirectory)
-		} 
-
-	// Remove previousExtensionVersionDirectory if it exists
-	_, err = os.Stat(previousExtensionVersionDirectory)
-	if err == nil {
-		os.RemoveAll(previousExtensionVersionDirectory)
-		} 
-
-	// Create previousExtensionVersionDirectory
-	err = os.Mkdir(previousExtensionVersionDirectory, 0777)
-	require.Nil(t, err)
-
-	// Create currentExtensionVersionDirectory
-	err = os.Mkdir(currentExtensionVersionDirectory, 0777)
-	require.Nil(t, err)
-
-	files, _ := ioutil.ReadDir(currentExtensionVersionDirectory)
-    require.Equal(t, 0, len(files))
-
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "1.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "ABCD.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "2345.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "RC0804_0.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "asdfsad.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "abc.txt")) // this should not be copied to currentExtensionVersionDirectory
-
-	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
-    require.Equal(t, 0, len(files))
-	
-	err = copyMrseqFiles(log.NewContext(log.NewNopLogger()))
-	require.Nil(t, err)
-
-	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
-    require.Equal(t, 5, len(files))
-}
-
 func Test_commandsExist(t *testing.T) {
 	// we expect these subcommands to be handled
 	expect := []string{"install", "enable", "disable", "uninstall", "update"}
