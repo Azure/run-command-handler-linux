@@ -377,6 +377,7 @@ func copyMrseqFiles(ctx log.Logger) (error) {
 				ctx.Log("message", fmt.Sprintf(errMessage, sourceFileFullPath))
 				return errors.Wrapf(sourceFileOpenError, errMessage)
 			}
+			defer sourceFile.Close()
 
 			destFile, destFileCreateError := os.Create(destinationFileFullPath)
 			if destFileCreateError != nil {
@@ -384,6 +385,7 @@ func copyMrseqFiles(ctx log.Logger) (error) {
 				ctx.Log("message", fmt.Sprintf(errMessage, destFile))
 				return errors.Wrapf(destFileCreateError, errMessage)
 			}
+			defer destFile.Close()
 
 			_, copyError := io.Copy(destFile, sourceFile)
 			if copyError != nil {
@@ -393,10 +395,7 @@ func copyMrseqFiles(ctx log.Logger) (error) {
 			} else {
 				ctx.Log("message", fmt.Sprintf("File '%s' was copied successfully to '%s'", sourceFileFullPath, destinationFileFullPath))
 				numberOfFilesMigrated++
-			}
-			 
-			sourceFile.Close()
-			destFile.Close()
+			}		 
 		}
 	}
 
