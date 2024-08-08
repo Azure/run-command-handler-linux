@@ -13,7 +13,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/types"
-	"github.com/ahmetalpbalkan/go-httpbin"
+	"github.com/ahmetb/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	os.Setenv(constants.ExtensionPathEnvName, currentExtensionVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.7")
 	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
-	 
+
 	currentVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	previousVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
 	previousExtensionVersionDirectory := strings.ReplaceAll(currentExtensionVersionDirectory, currentVersion, previousVersion)
@@ -32,13 +32,13 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	_, err := os.Stat(currentExtensionVersionDirectory)
 	if err == nil {
 		os.RemoveAll(currentExtensionVersionDirectory)
-		} 
+	}
 
 	// Remove previousExtensionVersionDirectory if it exists
 	_, err = os.Stat(previousExtensionVersionDirectory)
 	if err == nil {
 		os.RemoveAll(previousExtensionVersionDirectory)
-		} 
+	}
 
 	// Create previousExtensionVersionDirectory
 	err = os.Mkdir(previousExtensionVersionDirectory, 0777)
@@ -49,7 +49,7 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	require.Nil(t, err)
 
 	files, _ := ioutil.ReadDir(currentExtensionVersionDirectory)
-    require.Equal(t, 0, len(files))
+	require.Equal(t, 0, len(files))
 
 	os.Create(filepath.Join(previousExtensionVersionDirectory, "1.mrseq"))
 	os.Create(filepath.Join(previousExtensionVersionDirectory, "ABCD.mrseq"))
@@ -58,14 +58,45 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	os.Create(filepath.Join(previousExtensionVersionDirectory, "asdfsad.mrseq"))
 	os.Create(filepath.Join(previousExtensionVersionDirectory, "abc.txt")) // this should not be copied to currentExtensionVersionDirectory
 
-	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
-    require.Equal(t, 0, len(files))
-	
-	err = copyMrseqFiles(log.NewContext(log.NewNopLogger()))
+	statusSubdirectory := "status"
+	previousStatusDirectory := filepath.Join(previousExtensionVersionDirectory, statusSubdirectory)
+	// Create previousStatusDirectory
+	err = os.Mkdir(previousStatusDirectory, 0777)
+	require.Nil(t, err)
+	os.Create(filepath.Join(previousStatusDirectory, "1.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "ABCD.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "2345.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "RC0804_0.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "asdfsad.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "xyusfd.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "234434534.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "abc.cs")) // this should not be copied to currentExtensionVersionDirectory
+
+	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()))
 	require.Nil(t, err)
 
 	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
-    require.Equal(t, 5, len(files))
+	require.Equal(t, 6, len(files))
+	statusDirectoryCount := 0
+	mrseqFileCount := 0
+	for _, file := range files {
+		if file.IsDir() {
+			require.Equal(t, "status", file.Name())
+			statusDirectoryCount++
+		} else {
+			require.True(t, strings.HasSuffix(file.Name(), ".mrseq"))
+			mrseqFileCount++
+		}
+	}
+	require.Equal(t, 1, statusDirectoryCount)
+	require.Equal(t, 5, mrseqFileCount)
+
+	currentStatusDirectory := filepath.Join(currentExtensionVersionDirectory, statusSubdirectory)
+	files, _ = ioutil.ReadDir(currentStatusDirectory)
+	require.Equal(t, 7, len(files))
+	for _, file := range files {
+		require.True(t, strings.HasSuffix(file.Name(), ".status"))
+	}
 }
 
 func Test_commandsExist(t *testing.T) {
