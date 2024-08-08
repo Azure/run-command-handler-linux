@@ -30,7 +30,7 @@ const (
 	ExitCode_InstallServiceFailed                         = -217
 	ExitCode_UninstallInstalledServiceFailed              = -218
 	ExitCode_DisableInstalledServiceFailed                = -219
-	ExitCode_CopyingMreSequenceFilesFailed 			= -220
+	ExitCode_CopyStateForUpdateFailed                     = -220
 
 	// Unknown errors (-300s):
 )

@@ -73,10 +73,10 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}
 
 	// Copy any .mrseq or .status files -Most Recently executed Sequence number files and status files for Run Commands from old version to new version.
-	// This is necessary to prevent rerunning of already executed Run Commands after upgrade of extension version.
+	// This is necessary to prevent rerunning of already executed Run Commands after upgrade of extension version, and also return their statuses.
 	copyError := CopyStateForUpdate(ctx)
 	if copyError != nil {
-		return "", "", errors.New("Migrating *.mrseq or .status files failed during update."), constants.ExitCode_CopyingMreSequenceFilesFailed
+		return "", "", errors.Wrap(copyError, "Migrating *.mrseq or .status files failed during update."), constants.ExitCode_CopyStateForUpdateFailed
 	}
 
 	ctx.Log("event", "update")
