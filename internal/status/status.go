@@ -35,7 +35,7 @@ func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, me
 	}
 
 	ctx.Log("message", "reporting status by writing status file locally")
-	err = saveStatusReport(hEnv.HandlerEnvironment.StatusFolder, metadata.ExtName, metadata.SeqNum, rootStatusJson)
+	err = SaveStatusReport(hEnv.HandlerEnvironment.StatusFolder, metadata.ExtName, metadata.SeqNum, rootStatusJson)
 	if err != nil {
 		ctx.Log("event", "failed to save handler status", "error", err)
 		return errors.Wrap(err, "failed to save handler status")
@@ -48,7 +48,7 @@ func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, me
 // SaveStatusReport persists the status message to the specified status folder using the
 // sequence number. The operation consists of writing to a temporary file in the
 // same folder and moving it to the final destination for atomicity.
-func saveStatusReport(statusFolder string, extName string, seqNo int, rootStatusJson []byte) error {
+func SaveStatusReport(statusFolder string, extName string, seqNo int, rootStatusJson []byte) error {
 	fn := fmt.Sprintf("%d.status", seqNo)
 	// Support multiconfig extensions where status file name should be: extName.seqNo.status
 	if extName != "" {
@@ -77,6 +77,15 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 	ctx.Log("message", "creating json to report status")
 	statusReport := types.NewStatusReport(statusType, c.Name, msg)
 
+	b, err := MarshalStatusReportIntoJson(statusReport, indent)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal status report into json")
+	}
+
+	return b, nil
+}
+
+func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) ([]byte, error) {
 	var b []byte
 	var err error
 	if indent {
@@ -85,11 +94,7 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 		b, err = json.Marshal(statusReport)
 	}
 
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal status report into json")
-	}
-
-	return b, nil
+	return b, err
 }
 
 func reportStatusToEndpoint(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, reporter statusreporter.IGuestInformationServiceClient) error {

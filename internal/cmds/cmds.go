@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"container/list"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -334,21 +336,30 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 // Copy state of the extension from old version to new version during update (.mrseq files, .status files)
 func CopyStateForUpdate(ctx log.Logger) error {
 	// Copy .mrseq files (Most Recently executed Sequence number) that helps determine whether a sequence number of Run Command has been previously executed or not.
-	err := copyFiles(ctx, ".mrseq", "")
-	if err != nil {
-		return err
+	mrseqFilesNameList, mrseqFileCopyErr := copyFiles(ctx, ".mrseq", "")
+	if mrseqFileCopyErr != nil {
+		return mrseqFileCopyErr
 	}
 
 	// Copy .status files of already executed sequence numbers
-	err = copyFiles(ctx, ".status", "status")
-	if err != nil {
-		return err
+	_, statusFileCopyErr := copyFiles(ctx, ".status", constants.StatusFileDirectory)
+	if statusFileCopyErr != nil {
+		return statusFileCopyErr
 	}
+
+	// If status file corresponding to a .mrseq file does not exist, create a dummy status file to prevent poll status timeouts for already executed Run Commands after upgrade.
+	if mrseqFilesNameList != nil && mrseqFilesNameList.Len() > 0 {
+		createDummyStatusFilesErr := createDummyStatusFilesIfNeeded(ctx, mrseqFilesNameList)
+		if createDummyStatusFilesErr != nil {
+			return createDummyStatusFilesErr
+		}
+	}
+
 	return nil
 }
 
-// Copy *.mrseq (Most Recently executed Sequence number) files from old extension version to new extension version during update.
-func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory string) error {
+// Copy files like *.mrseq (Most Recently executed Sequence number), .status files from old extension version to new extension version during update.
+func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory string) (*list.List, error) {
 
 	newExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	oldExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
@@ -368,13 +379,13 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		if err != nil {
 			errr := os.Mkdir(newExtensionDirectory, 0700)
 			if errr != nil {
-				return errors.Wrap(errr, fmt.Sprintf("Failed to create directory '%s'", newExtensionDirectory))
+				return nil, errors.Wrap(errr, fmt.Sprintf("Failed to create directory '%s'", newExtensionDirectory))
 			}
 		}
 	}
 
 	if oldExtensionDirectory == "" || newExtensionDirectory == "" {
-		return errors.New("oldExtesionDirectory or newExtensionDirectory is empty")
+		return nil, errors.New("oldExtesionDirectory or newExtensionDirectory is empty")
 	}
 
 	// Check if the directory exists
@@ -382,17 +393,18 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 	if err != nil {
 		errMessage := fmt.Sprintf("could not open sourceDirectory %s", oldExtensionDirectory)
 		ctx.Log("message", errMessage)
-		return errors.Wrap(err, errMessage)
+		return nil, errors.Wrap(err, errMessage)
 	}
 
 	directoryEntries, err := sourceDirectoryFDRef.ReadDir(0)
 	if err != nil {
 		errMessage := fmt.Sprintf("could not read directory entries from sourceDirectory %s", oldExtensionDirectory)
 		ctx.Log("message", errMessage)
-		return errors.Wrap(err, errMessage)
+		return nil, errors.Wrap(err, errMessage)
 	}
 
 	numberOfFilesMigrated := 0
+	fileNamesMigrated := list.New()
 
 	for _, dirEntry := range directoryEntries {
 		fileName := dirEntry.Name()
@@ -405,7 +417,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 			if sourceFileOpenError != nil {
 				errMessage := "Failed to open '%s' file '%s' for reading. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, sourceFileFullPath))
-				return errors.Wrapf(sourceFileOpenError, errMessage)
+				return fileNamesMigrated, errors.Wrapf(sourceFileOpenError, errMessage)
 			}
 			defer sourceFile.Close()
 
@@ -413,7 +425,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 			if destFileCreateError != nil {
 				errMessage := "Failed to create '%s' file '%s'. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, destinationFileFullPath))
-				return errors.Wrapf(destFileCreateError, errMessage)
+				return fileNamesMigrated, errors.Wrapf(destFileCreateError, errMessage)
 			}
 			defer destFile.Close()
 
@@ -422,16 +434,89 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 				errMessage := fmt.Sprintf("Failed to copy '%s' file '%s' to path '%s'. Contact ICM team AzureRT\\Extensions for this service error.",
 					fileExtensionSuffix, sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", errMessage)
-				return errors.Wrapf(copyError, errMessage)
+				return fileNamesMigrated, errors.Wrapf(copyError, errMessage)
 			} else {
 				ctx.Log("message", fmt.Sprintf("File '%s' was copied successfully to '%s'", sourceFileFullPath, destinationFileFullPath))
 				numberOfFilesMigrated++
+				fileNamesMigrated.PushBack(fileName)
 			}
 		}
 	}
 
 	ctx.Log("message", fmt.Sprintf("Migrated %d '%s' files from extension version '%s' to '%s'", numberOfFilesMigrated, fileExtensionSuffix, oldExtensionVersion, newExtensionVersion))
 
+	return fileNamesMigrated, nil
+}
+
+// This need to be only executed by Update operation
+func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.List) error {
+	if mrseqFilesNameList == nil || mrseqFilesNameList.Len() <= 0 {
+		return nil
+	}
+
+	// Create dummy status file for .mrseq file if status file is not available.
+	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
+	statusFileDirectoryPath := filepath.Join(newExtensionDirectory, constants.StatusFileDirectory)
+
+	var mrSeqFileName string
+	var mrSeqFileFullPath string
+	var extensionName string
+	var mrSeqFileExtensionIndex int
+	var statusFileName string
+	var statusFilePath string
+	for mreSeqFileNameElement := mrseqFilesNameList.Front(); mreSeqFileNameElement != nil; mreSeqFileNameElement = mreSeqFileNameElement.Next() {
+		mrSeqFileName = (mreSeqFileNameElement.Value).(string)
+
+		// Read the most recently executed sequence number from the .mrseq file
+		mrSeqFileFullPath = filepath.Join(newExtensionDirectory, mrSeqFileName)
+		content, err := os.ReadFile(mrSeqFileFullPath)
+		if err != nil {
+			ctx.Log("error", fmt.Sprintf("Reading mrseq (Most Recently executed Sequence number) from file '%s' failed with error '%s'", mrSeqFileFullPath, err.Error()))
+			return err
+		}
+
+		var mrseqNumber int
+		if content != nil {
+			mrseqNumberString := string(content)
+			mrseqNum, errr := strconv.Atoi(mrseqNumberString)
+			if errr != nil {
+				ctx.Log("error", fmt.Sprintf("mrseqNumberString to mrseqNumber conversion (string to int) of '%s' failed with error '%s'", mrseqNumberString, errr.Error()))
+				return errr
+			} else {
+				mrseqNumber = mrseqNum
+			}
+
+		} else {
+			errorMessage := fmt.Sprintf("Empty .mrseq file content. No sequence number was found inside file  '%s' ", mrSeqFileFullPath)
+			ctx.Log("error", errorMessage)
+			return errors.New(errorMessage)
+		}
+
+		// Find extension name from the .mrseq file
+		mrSeqFileExtensionIndex = strings.Index(mrSeqFileName, constants.MrSeqFileExtension)
+		if mrSeqFileExtensionIndex == -1 {
+			return errors.New(fmt.Sprintf("Invalid mrseq file '%s'", mrSeqFileName))
+		}
+		extensionName = mrSeqFileName[0:mrSeqFileExtensionIndex]
+
+		// Determine status file name and status file path
+		statusFileName = fmt.Sprintf("%s.%d.status", extensionName, mrseqNumber)
+		statusFilePath = filepath.Join(statusFileDirectoryPath, statusFileName)
+
+		// If status file path does not exist, create a dummy status file to prevent poll status timeouts for already executed Run Commands after upgrade.
+		if !handlersettings.DoesFileExist(statusFilePath) {
+			statusReport := types.NewStatusReport(types.StatusSuccess, "Enable", "The script has been executed. However, the real execution state, output, error are unknown.")
+			rootStatusJson, err := status.MarshalStatusReportIntoJson(statusReport, true)
+			if err != nil {
+				return errors.Wrapf(err, fmt.Sprintf("failed to marshal status report into json for status file '%s'", statusFilePath))
+			}
+
+			err = status.SaveStatusReport(statusFileDirectoryPath, extensionName, mrseqNumber, rootStatusJson)
+			if err != nil {
+				return errors.Wrapf(err, fmt.Sprintf("Failed to create a dummy status file '%s' as it was not existing for .mrseq file '%s'", statusFilePath, mrSeqFileFullPath))
+			}
+		}
+	}
 	return nil
 }
 
