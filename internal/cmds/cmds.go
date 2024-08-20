@@ -349,10 +349,9 @@ func CopyStateForUpdate(ctx log.Logger) error {
 
 	// If status file corresponding to a .mrseq file does not exist, create a dummy status file to prevent poll status timeouts for already executed Run Commands after upgrade.
 	if mrseqFilesNameList != nil && mrseqFilesNameList.Len() > 0 {
-		createDummyStatusFilesErr := createDummyStatusFilesIfNeeded(ctx, mrseqFilesNameList)
-		if createDummyStatusFilesErr != nil {
-			return createDummyStatusFilesErr
-		}
+		// This is best effort - Do not return error if any case of failures.
+		// Worst case that could happen is poll status timeouts for those few cases where creating dummy status file failed for some reason.
+		createDummyStatusFilesIfNeeded(ctx, mrseqFilesNameList)
 	}
 
 	return nil
@@ -464,38 +463,48 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 	var mrSeqFileExtensionIndex int
 	var statusFileName string
 	var statusFilePath string
+	var errorMessage string
+	var err error
+	var content []byte
+	var allErr error = errors.New("Refer to all error messages above.")
+
 	for mreSeqFileNameElement := mrseqFilesNameList.Front(); mreSeqFileNameElement != nil; mreSeqFileNameElement = mreSeqFileNameElement.Next() {
 		mrSeqFileName = (mreSeqFileNameElement.Value).(string)
 
 		// Read the most recently executed sequence number from the .mrseq file
 		mrSeqFileFullPath = filepath.Join(newExtensionDirectory, mrSeqFileName)
-		content, err := os.ReadFile(mrSeqFileFullPath)
+		content, err = os.ReadFile(mrSeqFileFullPath)
 		if err != nil {
-			ctx.Log("error", fmt.Sprintf("Reading mrseq (Most Recently executed Sequence number) from file '%s' failed with error '%s'", mrSeqFileFullPath, err.Error()))
-			return err
+			errorMessage = fmt.Sprintf("Reading mrseq (Most Recently executed Sequence number) from file '%s' failed with error '%s'", mrSeqFileFullPath, err.Error())
+			ctx.Log("error", errorMessage)
+			allErr = errors.Wrap(allErr, errorMessage)
+			continue
 		}
 
 		var mrseqNumber int
 		if content != nil {
 			mrseqNumberString := string(content)
-			mrseqNum, errr := strconv.Atoi(mrseqNumberString)
-			if errr != nil {
-				ctx.Log("error", fmt.Sprintf("mrseqNumberString to mrseqNumber conversion (string to int) of '%s' failed with error '%s'", mrseqNumberString, errr.Error()))
-				return errr
-			} else {
-				mrseqNumber = mrseqNum
+			mrseqNumber, err = strconv.Atoi(mrseqNumberString)
+			if err != nil {
+				errorMessage = fmt.Sprintf("mrseqNumberString to mrseqNumber conversion (string to int) of '%s' failed with error '%s'", mrseqNumberString, err.Error())
+				ctx.Log("error", errorMessage)
+				allErr = errors.Wrap(allErr, errorMessage)
+				continue
 			}
-
 		} else {
-			errorMessage := fmt.Sprintf("Empty .mrseq file content. No sequence number was found inside file  '%s' ", mrSeqFileFullPath)
+			errorMessage = fmt.Sprintf("Empty .mrseq file content. No sequence number was found inside file  '%s' ", mrSeqFileFullPath)
 			ctx.Log("error", errorMessage)
-			return errors.New(errorMessage)
+			allErr = errors.Wrap(allErr, errorMessage)
+			continue
 		}
 
 		// Find extension name from the .mrseq file
 		mrSeqFileExtensionIndex = strings.Index(mrSeqFileName, constants.MrSeqFileExtension)
 		if mrSeqFileExtensionIndex == -1 {
-			return errors.New(fmt.Sprintf("Invalid mrseq file '%s'", mrSeqFileName))
+			errorMessage = fmt.Sprintf("Invalid mrseq file '%s'", mrSeqFileName)
+			ctx.Log("error", errorMessage)
+			allErr = errors.Wrap(allErr, errorMessage)
+			continue
 		}
 		extensionName = mrSeqFileName[0:mrSeqFileExtensionIndex]
 
@@ -503,21 +512,26 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 		statusFileName = fmt.Sprintf("%s.%d.status", extensionName, mrseqNumber)
 		statusFilePath = filepath.Join(statusFileDirectoryPath, statusFileName)
 
+		var rootStatusJson []byte
 		// If status file path does not exist, create a dummy status file to prevent poll status timeouts for already executed Run Commands after upgrade.
 		if !handlersettings.DoesFileExist(statusFilePath) {
-			statusReport := types.NewStatusReport(types.StatusSuccess, "Enable", "The script has been executed. However, the real execution state, output, error are unknown.")
-			rootStatusJson, err := status.MarshalStatusReportIntoJson(statusReport, true)
+			statusReport := types.NewStatusReport(types.StatusWarning, "Enable", "The script has been executed. However, the execution state, output, error are unknown.")
+			rootStatusJson, err = status.MarshalStatusReportIntoJson(statusReport, true)
 			if err != nil {
-				return errors.Wrapf(err, fmt.Sprintf("failed to marshal status report into json for status file '%s'", statusFilePath))
+				errorMessage = fmt.Sprintf("failed to marshal status report into json for status file '%s' with error '%s'", statusFilePath, err.Error())
+				allErr = errors.Wrap(allErr, errorMessage)
+				continue
 			}
 
 			err = status.SaveStatusReport(statusFileDirectoryPath, extensionName, mrseqNumber, rootStatusJson)
 			if err != nil {
-				return errors.Wrapf(err, fmt.Sprintf("Failed to create a dummy status file '%s' as it was not existing for .mrseq file '%s'", statusFilePath, mrSeqFileFullPath))
+				errorMessage = fmt.Sprintf("Failed to create a dummy status file '%s' as it was not existing for .mrseq file '%s' with error '%s'", statusFilePath, mrSeqFileFullPath, err.Error())
+				allErr = errors.Wrap(allErr, errorMessage)
+				continue
 			}
 		}
 	}
-	return nil
+	return allErr
 }
 
 // downloadScript downloads the script file specified in cfg into dir (creates if does
