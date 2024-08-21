@@ -464,6 +464,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 	var statusFileName string
 	var statusFilePath string
 	var errorMessage string
+	var instanceViewMessage string
 	var err error
 	var content []byte
 	var allErr error = errors.New("Refer to all error messages above.")
@@ -515,7 +516,25 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 		var rootStatusJson []byte
 		// If status file path does not exist, create a dummy status file to prevent poll status timeouts for already executed Run Commands after upgrade.
 		if !handlersettings.DoesFileExist(statusFilePath) {
-			statusReport := types.NewStatusReport(types.StatusWarning, "Enable", "The script has been executed. However, the execution state, output, error are unknown.")
+
+			timeNow := time.Now().UTC().Format(time.RFC3339)
+			instanceView := types.RunCommandInstanceView{
+				ExecutionState:   types.Unknown, // InstanceView executionState is Unknown because we do not know whether previously executed Run command's state for sure.
+				ExecutionMessage: "The script has been executed. However, the instanceView's execution state, output, error are unknown.",
+				ExitCode:         0,
+				Output:           "Unknown",
+				Error:            "Unknown",
+				StartTime:        timeNow,
+				EndTime:          timeNow,
+			}
+			instanceViewMessage, err = instanceview.SerializeInstanceView(&instanceView)
+			if err != nil {
+				errorMessage = fmt.Sprintf("Failed to serialize unknown instanceView, error is '%s'", err.Error())
+				allErr = errors.Wrap(allErr, errorMessage)
+				continue
+			}
+
+			statusReport := types.NewStatusReport(types.StatusSuccess, "Enable", instanceViewMessage)
 			rootStatusJson, err = status.MarshalStatusReportIntoJson(statusReport, true)
 			if err != nil {
 				errorMessage = fmt.Sprintf("failed to marshal status report into json for status file '%s' with error '%s'", statusFilePath, err.Error())
