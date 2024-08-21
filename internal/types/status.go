@@ -40,10 +40,6 @@ const (
 
 	// StatusSuccess indicates the operation succeeded
 	StatusSuccess StatusType = "success"
-
-	// StatusWarning indicates the operation was executed, but with one of the below conditions:
-	// 1) Status files have been lost. So, exact execution status (error or success), output and error are not known.
-	StatusWarning StatusType = "warning"
 )
 
 // Status is used for serializing status in a manner the server understands
