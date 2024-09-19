@@ -1,24 +1,26 @@
-package handlersettings
+package main
 
 import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"os/exec"
 	"path/filepath"
-
-	"github.com/Azure/run-command-handler-linux/internal/settings"
-	"github.com/pkg/errors"
 )
 
-type HandlerSettingsFile struct {
-	RuntimeSettings []RunTimeSettingsFile `json:"runtimeSettings"`
+type handlerSettingsFile struct {
+	RuntimeSettings []struct {
+		HandlerSettings handlerSettingsCommon `json:"handlerSettings"`
+	} `json:"runtimeSettings"`
 }
 
-type RunTimeSettingsFile struct {
-	HandlerSettings settings.SettingsCommon `json:"handlerSettings"`
+type handlerSettingsCommon struct {
+	PublicSettings          map[string]interface{} `json:"publicSettings"`
+	ProtectedSettingsBase64 string                 `json:"protectedSettings"`
+	SettingsCertThumbprint  string                 `json:"protectedSettingsCertThumbprint"`
 }
 
 // ReadSettings locates the .settings file and returns public settings
@@ -70,16 +72,16 @@ func unmarshalSettings(in interface{}, v interface{}) error {
 
 // parseHandlerSettings parses a handler settings file (e.g. 0.settings) and
 // returns it as a structured object.
-func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) {
-	b, err := os.ReadFile(path)
+func parseHandlerSettingsFile(path string) (h handlerSettingsCommon, _ error) {
+	b, err := ioutil.ReadFile(path)
 	if err != nil {
-		return h, fmt.Errorf("error reading %s: %v", path, err)
+		return h, fmt.Errorf("Error reading %s: %v", path, err)
 	}
 	if len(b) == 0 { // if no config is specified, we get an empty file
 		return h, nil
 	}
 
-	var f HandlerSettingsFile
+	var f handlerSettingsFile
 	if err := json.Unmarshal(b, &f); err != nil {
 		return h, fmt.Errorf("error parsing json: %v", err)
 	}
@@ -92,7 +94,7 @@ func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) 
 // unmarshalProtectedSettings decodes the protected settings from handler
 // runtime settings JSON file, decrypts it using the certificates and unmarshals
 // into the given struct v.
-func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon, v interface{}) error {
+func unmarshalProtectedSettings(configFolder string, hs handlerSettingsCommon, v interface{}) error {
 	if hs.ProtectedSettingsBase64 == "" {
 		return nil
 	}
@@ -112,27 +114,14 @@ func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon,
 	// we use os/exec instead of azure-docker-extension/pkg/executil here as
 	// other extension handlers depend on this package for parsing handler
 	// settings.
-
-	//using cms command to support for FIPS 140-3
-	cmd := exec.Command("openssl", "cms", "-inform", "DER", "-decrypt", "-recip", crt, "-inkey", prv)
+	cmd := exec.Command("openssl", "smime", "-inform", "DER", "-decrypt", "-recip", crt, "-inkey", prv)
 	var bOut, bErr bytes.Buffer
-	var errMsg error
 	cmd.Stdin = bytes.NewReader(decoded)
 	cmd.Stdout = &bOut
 	cmd.Stderr = &bErr
 
-	//back up smime command in case cms fails
 	if err := cmd.Run(); err != nil {
-		errMsg = fmt.Errorf("decrypting protected settings with cms command failed: error=%v stderr=%s \n now decrypting with smime command", err, bErr.String())
-		cmd = exec.Command("openssl", "smime", "-inform", "DER", "-decrypt", "-recip", crt, "-inkey", prv)
-		cmd.Stdin = bytes.NewReader(decoded)
-		bOut.Reset()
-		bErr.Reset()
-		cmd.Stdout = &bOut
-		cmd.Stderr = &bErr
-		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(errMsg, "decrypting protected settings with smime command failed: error=%v stderr=%s", err, bErr.String())
-		}
+		return fmt.Errorf("decrypting protected settings failed: error=%v stderr=%s", err, string(bErr.Bytes()))
 	}
 
 	// decrypted: json object for protected settings
