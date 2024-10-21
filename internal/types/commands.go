@@ -31,8 +31,8 @@ func (command Cmd) InitializeFunctions(input CmdFunctions) Cmd {
 var (
 	CmdInstallTemplate    = Cmd{Name: "Install", ShouldReportStatus: false, FailExitCode: 52}
 	CmdEnableTemplate     = Cmd{Name: "Enable", ShouldReportStatus: true, FailExitCode: 3}
-	CmdDisableTemplate    = Cmd{Name: "Disable", ShouldReportStatus: true, FailExitCode: 3}
-	CmdUpdateTemplate     = Cmd{Name: "Update", ShouldReportStatus: true, FailExitCode: 3}
+	CmdDisableTemplate    = Cmd{Name: "Disable", ShouldReportStatus: false, FailExitCode: 3}
+	CmdUpdateTemplate     = Cmd{Name: "Update", ShouldReportStatus: false, FailExitCode: 3}
 	CmdUninstallTemplate  = Cmd{Name: "Uninstall", ShouldReportStatus: false, FailExitCode: 3}
 	CmdRunServiceTemplate = Cmd{Name: "RunService", ShouldReportStatus: true, FailExitCode: 3}
 

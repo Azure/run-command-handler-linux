@@ -24,7 +24,7 @@ func Test_serializeInstanceView(t *testing.T) {
 		StartTime:        time.Date(2000, 2, 1, 12, 30, 0, 0, time.UTC).Format(time.RFC3339),
 		EndTime:          time.Date(2000, 2, 1, 12, 35, 0, 0, time.UTC).Format(time.RFC3339),
 	}
-	msg, err := serializeInstanceView(&instanceView)
+	msg, err := SerializeInstanceView(&instanceView)
 	require.Nil(t, err)
 	require.NotNil(t, msg)
 	expectedMsg := "{\"executionState\":\"Running\",\"executionMessage\":\"Completed\",\"output\":\"Script output stream with \\\\ \\n \\t \\\"  \",\"error\":\"Script error stream\",\"exitCode\":0,\"startTime\":\"2000-02-01T12:30:00Z\",\"endTime\":\"2000-02-01T12:35:00Z\"}"
@@ -67,6 +67,6 @@ func Test_reportInstanceView(t *testing.T) {
 	require.Equal(t, types.StatusSuccess, r[0].Status.Status)
 	require.Equal(t, types.CmdEnableTemplate.Name, r[0].Status.Operation)
 
-	msg, _ := serializeInstanceView(&instanceView)
+	msg, _ := SerializeInstanceView(&instanceView)
 	require.Equal(t, msg, r[0].Status.FormattedMessage.Message)
 }

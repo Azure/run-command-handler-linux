@@ -21,6 +21,10 @@ const (
 
 	ConfigFileExtension = ".settings"
 
+	MrSeqFileExtension = ".mrseq"
+
+	StatusFileDirectory = "status"
+
 	// General failed exit code when extension provisioning fails due to service errors.
 	FailedExitCodeGeneral = -1
 

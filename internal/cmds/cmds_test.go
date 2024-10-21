@@ -51,11 +51,11 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	files, _ := ioutil.ReadDir(currentExtensionVersionDirectory)
 	require.Equal(t, 0, len(files))
 
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "1.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "ABCD.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "2345.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "RC0804_0.mrseq"))
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "asdfsad.mrseq"))
+	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "1.mrseq"), "0", t)
+	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "ABCD.mrseq"), "1", t)
+	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "2345.mrseq"), "0", t)
+	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "RC0804_0.mrseq"), "5", t)
+	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "asdfsad.mrseq"), "20", t)
 	os.Create(filepath.Join(previousExtensionVersionDirectory, "abc.txt")) // this should not be copied to currentExtensionVersionDirectory
 
 	statusSubdirectory := "status"
@@ -63,13 +63,11 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	// Create previousStatusDirectory
 	err = os.Mkdir(previousStatusDirectory, 0777)
 	require.Nil(t, err)
-	os.Create(filepath.Join(previousStatusDirectory, "1.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "ABCD.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "2345.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "RC0804_0.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "asdfsad.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "xyusfd.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "234434534.status"))
+
+	// Only two status files are available. The rest of the 3 status files should be created during Update operation which would have dummy status.
+	// Dummy status files would be created to prevent poll status timeouts for already executed Run Commands after upgrade.
+	os.Create(filepath.Join(previousStatusDirectory, "1.0.status"))
+	os.Create(filepath.Join(previousStatusDirectory, "ABCD.1.status"))
 	os.Create(filepath.Join(previousStatusDirectory, "abc.cs")) // this should not be copied to currentExtensionVersionDirectory
 
 	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()))
@@ -93,10 +91,16 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 
 	currentStatusDirectory := filepath.Join(currentExtensionVersionDirectory, statusSubdirectory)
 	files, _ = ioutil.ReadDir(currentStatusDirectory)
-	require.Equal(t, 7, len(files))
+	require.Equal(t, 5, len(files))
 	for _, file := range files {
 		require.True(t, strings.HasSuffix(file.Name(), ".status"))
 	}
+}
+
+func createMrseqFile(mrseqFilePath string, mrseqNum string, t *testing.T) {
+	os.Create(mrseqFilePath)
+	err := os.WriteFile(mrseqFilePath, []byte(mrseqNum), 0644)
+	require.Nil(t, err)
 }
 
 func Test_commandsExist(t *testing.T) {
@@ -119,8 +123,8 @@ func Test_commands_shouldReportStatus(t *testing.T) {
 
 	// these subcommands SHOULD report status
 	require.True(t, Cmds["enable"].ShouldReportStatus, "enable should report status")
-	require.True(t, Cmds["disable"].ShouldReportStatus, "disable should report status")
-	require.True(t, Cmds["update"].ShouldReportStatus, "update should report status")
+	require.False(t, Cmds["disable"].ShouldReportStatus, "disable should report status")
+	require.False(t, Cmds["update"].ShouldReportStatus, "update should report status")
 }
 
 func Test_checkAndSaveSeqNum_fails(t *testing.T) {
