@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	maxConcurrentTasks             int32 = 5
-	statePollingFrequencyInSeconds int32 = 60 // This should be almost immediate when creating a 'PENDING GET' to se the server as the HGAP server returns a response within 60 seconds
+	maxConcurrentTasks int32 = 5
 )
 
 var executingTasks counterutil.AtomicCount
@@ -29,37 +28,44 @@ func (*VMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (
 
 func StartImmediateRunCommand(ctx *log.Context) error {
 	ctx.Log("message", "starting immediate run command service")
-	communicator := hostgacommunicator.NewHostGACommunicator(new(VMSettingsRequestManager))
+	var vmRequestManager = new(VMSettingsRequestManager)
+	var lastProcessedETag string = ""
+	communicator := hostgacommunicator.NewHostGACommunicator(vmRequestManager)
 
 	for {
-		err := processImmediateRunCommandGoalStates(ctx, communicator)
+		ctx.Log("message", "processing new immediate run command goal states. Last processed ETag: "+lastProcessedETag)
+		newProcessedETag, err := processImmediateRunCommandGoalStates(ctx, communicator, lastProcessedETag)
+		lastProcessedETag = newProcessedETag
+
 		if err != nil {
 			ctx.Log("error", errors.Wrapf(err, "could not process new immediate run command states"))
+			ctx.Log("message", "sleep for 5 seconds before retrying")
+			time.Sleep(time.Second * time.Duration(5))
 		}
 
-		ctx.Log("message", fmt.Sprintf("sleep for %v seconds before the next attempt", statePollingFrequencyInSeconds))
-		time.Sleep(time.Second * time.Duration(statePollingFrequencyInSeconds))
+		// Sleep for 1 second before the next iteration
+		time.Sleep(time.Second)
 	}
 }
 
-func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.HostGACommunicator) error {
+func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.HostGACommunicator, lastProcessedETag string) (string, error) {
 	maxTasksToFetch := int(math.Max(float64(maxConcurrentTasks-executingTasks.Get()), 0))
 	ctx.Log("message", fmt.Sprintf("concurrent tasks: %v out of max %v", executingTasks.Get(), maxConcurrentTasks))
 	if maxTasksToFetch == 0 {
 		ctx.Log("warning", "will not fetch new tasks in this iteration as we have reached maximum capacity...")
-		return nil
+		return lastProcessedETag, nil
 	}
 
-	goalStates, err := goalstate.GetImmediateRunCommandGoalStates(ctx, &communicator)
+	goalStates, newEtag, err := goalstate.GetImmediateRunCommandGoalStates(ctx, &communicator, lastProcessedETag)
 	if err != nil {
-		return errors.Wrapf(err, "could not retrieve goal states for immediate run command")
+		return newEtag, errors.Wrapf(err, "could not retrieve goal states for immediate run command")
 	}
 
 	var newGoalStates []settings.SettingsCommon
 	for _, el := range goalStates {
 		validSignature, err := el.ValidateSignature()
 		if err != nil {
-			return errors.Wrap(err, "failed to validate goal state signature")
+			return newEtag, errors.Wrap(err, "failed to validate goal state signature")
 		}
 
 		if validSignature {
@@ -93,5 +99,5 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		ctx.Log("message", "no new goal states were found in this iteration")
 	}
 
-	return nil
+	return newEtag, nil
 }

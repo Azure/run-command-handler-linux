@@ -9,17 +9,22 @@ import (
 	"github.com/pkg/errors"
 )
 
-func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator) ([]hostgacommunicator.ExtensionGoalStates, error) {
-	vmSettings, err := communicator.GetImmediateVMSettings(ctx)
+func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ExtensionGoalStates, string, error) {
+	vmSettings, eTag, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to retrieve VMSettings")
+		return nil, lastProcessedETag, errors.Wrapf(err, "failed to retrieve VMSettings")
 	}
 
 	if vmSettings != nil {
-		return filterImmediateRunCommandGoalStates(vmSettings.ExtensionGoalStates), nil
+		if eTag != lastProcessedETag {
+			ctx.Log("message", "new VMSettings retrieved", "eTag", eTag)
+		} else {
+			ctx.Log("message", "no new VMSettings retrieved", "eTag", eTag)
+		}
+		return filterImmediateRunCommandGoalStates(vmSettings.ExtensionGoalStates), eTag, nil
 	}
 
-	return []hostgacommunicator.ExtensionGoalStates{}, nil
+	return []hostgacommunicator.ExtensionGoalStates{}, lastProcessedETag, nil
 }
 
 func filterImmediateRunCommandGoalStates(extensionGoalStates []hostgacommunicator.ExtensionGoalStates) []hostgacommunicator.ExtensionGoalStates {

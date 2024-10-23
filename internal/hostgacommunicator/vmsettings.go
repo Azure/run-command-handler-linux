@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	requesthelper "github.com/Azure/run-command-handler-linux/internal/requesthelper"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
@@ -15,8 +16,7 @@ import (
 )
 
 const (
-	// TODO: Change the relative path to use the upcoming immediateVMSettings and immediateExtensionStatus APIs
-	vmSettingsOperation = "vmSettings"
+	vmSettingsOperation = "immediateGoalState"
 )
 
 const (
@@ -77,9 +77,16 @@ func newVMSettingsRequestFactory(ctx *log.Context) (*requestFactory, error) {
 }
 
 // GetRequest returns a new request with the provided url
-func (u requestFactory) GetRequest(ctx *log.Context) (*http.Request, error) {
+func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request, error) {
 	ctx.Log("message", fmt.Sprintf("performing make request to %v", u.url))
-	return http.NewRequest("GET", u.url, nil)
+	request, err := http.NewRequest("GET", u.url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create request")
+	}
+
+	ctx.Log("message", "setting request headers to include ETag"+eTag)
+	request.Header.Set(constants.ETagHeaderName, eTag)
+	return request, err
 }
 
 func (goalState *ExtensionGoalStates) ValidateSignature() (bool, error) {

@@ -13,7 +13,7 @@ import (
 
 type TestCommunicator struct{}
 
-func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context) (*hostgacommunicator.VMSettings, error) {
+func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
 	return &hostgacommunicator.VMSettings{
 		HostGAPluginVersion:       "1.0.8.143",
 		VmSettingsSchemaVersion:   "0.0",
@@ -42,31 +42,31 @@ func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context) (*hostgacomm
 				Version: "1.0.1",
 			},
 		},
-	}, nil
+	}, "", nil
 }
 
 type BadCommunicator struct{}
 
-func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context) (*hostgacommunicator.VMSettings, error) {
-	return nil, errors.New("http expected failure")
+func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
+	return nil, "", errors.New("http expected failure")
 }
 
 type NilCommunicator struct{}
 
-func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context) (*hostgacommunicator.VMSettings, error) {
-	return nil, nil
+func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
+	return nil, "", nil
 }
 
 type EmptyCommunicator struct{}
 
-func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context) (*hostgacommunicator.VMSettings, error) {
-	return &hostgacommunicator.VMSettings{}, nil
+func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
+	return &hostgacommunicator.VMSettings{}, "", nil
 }
 
 func Test_GetFilteredImmediateVMSettings(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	communicator := new(TestCommunicator)
-	actualIRCGoalStates, err := goalstate.GetImmediateRunCommandGoalStates(ctx, communicator)
+	actualIRCGoalStates, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, communicator, "")
 	require.Nil(t, err)
 	require.Equal(t, 3, len(actualIRCGoalStates))
 }
@@ -74,7 +74,7 @@ func Test_GetFilteredImmediateVMSettings(t *testing.T) {
 func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	badCommunicator := new(BadCommunicator)
-	_, err := goalstate.GetImmediateRunCommandGoalStates(ctx, badCommunicator)
+	_, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, badCommunicator, "")
 	require.ErrorContains(t, err, "failed to retrieve VMSettings")
 	require.ErrorContains(t, err, "http expected failure")
 }
@@ -82,12 +82,12 @@ func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
 func Test_GetFilteredImmediateVMSettingsHandleEmptyResults(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	nilCommunicator := new(NilCommunicator)
-	actualIRCGoalStates, err := goalstate.GetImmediateRunCommandGoalStates(ctx, nilCommunicator)
+	actualIRCGoalStates, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, nilCommunicator, "")
 	require.Nil(t, err)
 	require.Zero(t, len(actualIRCGoalStates))
 
 	emptyCommunicator := new(EmptyCommunicator)
-	actualIRCGoalStates, err = goalstate.GetImmediateRunCommandGoalStates(ctx, emptyCommunicator)
+	actualIRCGoalStates, _, err = goalstate.GetImmediateRunCommandGoalStates(ctx, emptyCommunicator, "")
 	require.Nil(t, err)
 	require.Zero(t, len(actualIRCGoalStates))
 }
