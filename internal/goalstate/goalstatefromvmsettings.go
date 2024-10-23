@@ -21,6 +21,7 @@ func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommu
 		} else {
 			ctx.Log("message", "no new VMSettings retrieved", "eTag", eTag)
 		}
+
 		return filterImmediateRunCommandGoalStates(vmSettings.ExtensionGoalStates), eTag, nil
 	}
 
