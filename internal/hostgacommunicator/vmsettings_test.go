@@ -42,7 +42,7 @@ func Test_GetImmediateVMSettingsFailedToParseJson(t *testing.T) {
 	testRequest.testUrlRequest = NewTestUrlRequest(srv.URL + "/status/200") // ok with no valid response
 	communicator := NewHostGACommunicator(testRequest)
 
-	_, _, err := communicator.GetImmediateVMSettings(ctx, "")
+	_, err := communicator.GetImmediateVMSettings(ctx, "")
 	require.NotNil(t, err)
 	require.ErrorContains(t, err, "failed to parse json")
 }
@@ -56,7 +56,7 @@ func Test_GetImmediateVMSettingsHandleNotFound(t *testing.T) {
 	testRequest.testUrlRequest = NewTestUrlRequest(srv.URL + "/status/404") // not found
 	communicator := NewHostGACommunicator(testRequest)
 
-	_, _, err := communicator.GetImmediateVMSettings(ctx, "")
+	_, err := communicator.GetImmediateVMSettings(ctx, "")
 	require.NotNil(t, err)
 	require.ErrorContains(t, err, "metadata request failed with retries")
 	require.ErrorContains(t, err, "404")

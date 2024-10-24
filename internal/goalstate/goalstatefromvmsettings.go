@@ -10,19 +10,14 @@ import (
 )
 
 func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ExtensionGoalStates, string, error) {
-	vmSettings, eTag, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)
+	responseData, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)
 	if err != nil {
 		return nil, lastProcessedETag, errors.Wrapf(err, "failed to retrieve VMSettings")
 	}
 
-	if vmSettings != nil {
-		if eTag != lastProcessedETag {
-			ctx.Log("message", "new VMSettings retrieved", "eTag", eTag)
-		} else {
-			ctx.Log("message", "no new VMSettings retrieved", "eTag", eTag)
-		}
-
-		return filterImmediateRunCommandGoalStates(vmSettings.ExtensionGoalStates), eTag, nil
+	if responseData != nil && responseData.Modified && responseData.VMSettings != nil {
+		ctx.Log("message", "VMSettings have been modified. New ETag: "+responseData.ETag)
+		return filterImmediateRunCommandGoalStates(responseData.VMSettings.ExtensionGoalStates), responseData.ETag, nil
 	}
 
 	return []hostgacommunicator.ExtensionGoalStates{}, lastProcessedETag, nil

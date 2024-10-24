@@ -13,8 +13,8 @@ import (
 
 type TestCommunicator struct{}
 
-func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
-	return &hostgacommunicator.VMSettings{
+func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+	vmSettings := &hostgacommunicator.VMSettings{
 		HostGAPluginVersion:       "1.0.8.143",
 		VmSettingsSchemaVersion:   "0.0",
 		ActivityId:                "cfba1e29-4d19-4f6f-a709-d2a7c413c1b9",
@@ -42,25 +42,26 @@ func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string)
 				Version: "1.0.1",
 			},
 		},
-	}, "", nil
+	}
+	return &hostgacommunicator.ResponseData{VMSettings: vmSettings, ETag: "123456", Modified: true}, nil
 }
 
 type BadCommunicator struct{}
 
-func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
-	return nil, "", errors.New("http expected failure")
+func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+	return nil, errors.New("http expected failure")
 }
 
 type NilCommunicator struct{}
 
-func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
-	return nil, "", nil
+func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+	return nil, nil
 }
 
 type EmptyCommunicator struct{}
 
-func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.VMSettings, string, error) {
-	return &hostgacommunicator.VMSettings{}, "", nil
+func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+	return &hostgacommunicator.ResponseData{VMSettings: &hostgacommunicator.VMSettings{}, ETag: "123456", Modified: true}, nil
 }
 
 func Test_GetFilteredImmediateVMSettings(t *testing.T) {

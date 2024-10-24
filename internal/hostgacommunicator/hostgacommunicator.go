@@ -16,9 +16,15 @@ const (
 	WireServerFallbackAddress = "http://168.63.129.16:32526"
 )
 
+type ResponseData struct {
+	VMSettings *VMSettings
+	ETag       string
+	Modified   bool
+}
+
 // Interface for operations available when communicating with HostGAPlugin
 type IHostGACommunicator interface {
-	GetImmediateVMSettings(ctx *log.Context, eTag string) (*VMSettings, string, error)
+	GetImmediateVMSettings(ctx *log.Context, eTag string) (*ResponseData, error)
 }
 
 // HostGaCommunicator provides methods for retrieving VMSettings from the HostGAPlugin
@@ -35,17 +41,17 @@ type IVMSettingsRequestManager interface {
 }
 
 // GetVMSettings returns the VMSettings for the current machine
-func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*VMSettings, string, error) {
+func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*ResponseData, error) {
 	ctx.Log("message", "getting request manager")
 	requestManager, err := c.vmRequestManager.GetVMSettingsRequestManager(ctx)
 	if err != nil {
-		return nil, "", errors.Wrapf(err, "could not create the request manager")
+		return nil, errors.Wrapf(err, "could not create the request manager")
 	}
 
 	ctx.Log("message", "attempting to make request with retries to retrieve VMSettings")
 	resp, err := requesthelper.WithRetries(ctx, requestManager, requesthelper.ActualSleep, eTag)
 	if err != nil {
-		return nil, "", errors.Wrapf(err, "metadata request failed with retries.")
+		return nil, errors.Wrapf(err, "metadata request failed with retries.")
 	}
 	ctx.Log("message", "request completed. Reading body content from response")
 
@@ -58,17 +64,17 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 	ctx.Log("message", "attempting to parse VMSettings from json response")
 	var vmSettings VMSettings
 	if err := json.Unmarshal(body, &vmSettings); err != nil {
-		return nil, "", errors.Wrapf(err, "failed to parse json")
+		return nil, errors.Wrapf(err, "failed to parse json")
 	}
 	ctx.Log("message", "VMSettings successfully parsed")
 
 	ctx.Log("Retrieving ETag from response header")
 	newETag := resp.Header.Get(constants.ETagHeaderName)
 	if newETag == "" {
-		return nil, "", errors.New("ETag not found in response header")
+		return nil, errors.New("ETag not found in response header")
 	}
 
-	return &vmSettings, newETag, nil
+	return &ResponseData{VMSettings: &vmSettings, ETag: newETag, Modified: true}, nil
 }
 
 // Gets the URI to use to call the given operation name
