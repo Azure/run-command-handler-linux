@@ -3,6 +3,7 @@ package hostgacommunicator
 import (
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/url"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
@@ -53,6 +54,12 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 	if err != nil {
 		return nil, errors.Wrapf(err, "metadata request failed with retries.")
 	}
+
+	if resp.StatusCode == http.StatusNotModified {
+		ctx.Log("message", "ETag has not changed. No need to parse response body")
+		return &ResponseData{VMSettings: nil, ETag: eTag, Modified: false}, nil
+	}
+
 	ctx.Log("message", "request completed. Reading body content from response")
 
 	defer resp.Body.Close()
@@ -74,7 +81,7 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 		return nil, errors.New("ETag not found in response header")
 	}
 
-	return &ResponseData{VMSettings: &vmSettings, ETag: newETag, Modified: true}, nil
+	return &ResponseData{VMSettings: &vmSettings, ETag: newETag, Modified: eTag != newETag}, nil
 }
 
 // Gets the URI to use to call the given operation name
