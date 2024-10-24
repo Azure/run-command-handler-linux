@@ -12,4 +12,5 @@
   <SupportedOS>Linux</SupportedOS>
   <CompanyName>Microsoft</CompanyName>
   <SupportsMultipleExtensions>true</SupportsMultipleExtensions>
+  <SafeDeploymentPolicy>Standard</SafeDeploymentPolicy>
 </ExtensionImage>
