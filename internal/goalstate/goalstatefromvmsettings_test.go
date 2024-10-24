@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
+	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -14,33 +15,48 @@ import (
 type TestCommunicator struct{}
 
 func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
-	vmSettings := &hostgacommunicator.VMSettings{
-		HostGAPluginVersion:       "1.0.8.143",
-		VmSettingsSchemaVersion:   "0.0",
-		ActivityId:                "cfba1e29-4d19-4f6f-a709-d2a7c413c1b9",
-		CorrelationId:             "cfba1e29-4d19-4f6f-a709-d2a7c413c1b9",
-		ExtensionGoalStatesSource: "FastTrack",
-		ExtensionGoalStates: []hostgacommunicator.ExtensionGoalStates{
+	extName, seqNum := "testExtension", 5
+	immediateGoalState := hostgacommunicator.ImmediateExtensionGoalState{
+		Name: "Microsoft.CPlat.Core.RunCommandHandlerLinux",
+		Settings: []settings.SettingsCommon{
 			{
-				Name:    "Microsoft.CPlat.Core.RunCommandHandlerLinux",
-				Version: "1.0.0",
+				PublicSettings: map[string]interface{}{
+					"string": "string",
+					"int":    5,
+				},
+				ProtectedSettingsBase64: "protectedsettings",
+				SettingsCertThumbprint:  "thumprint",
+				SeqNo:                   &seqNum,
+				ExtensionName:           &extName,
+				ExtensionState:          &extName,
 			},
+		},
+	}
+
+	nonImmediateGoalState := hostgacommunicator.ImmediateExtensionGoalState{
+		Name: "Microsoft.CPlat.Core.NonRunCommandHandler",
+		Settings: []settings.SettingsCommon{
 			{
-				Name:    "Microsoft.CPlat.Core.RunCommandHandlerLinux",
-				Version: "1.0.1",
+				PublicSettings: map[string]interface{}{
+					"string": "string",
+					"int":    5,
+				},
+				ProtectedSettingsBase64: "protectedsettings",
+				SettingsCertThumbprint:  "thumprint",
+				SeqNo:                   &seqNum,
+				ExtensionName:           &extName,
+				ExtensionState:          &extName,
 			},
-			{
-				Name:    "Microsoft.CPlat.Core.RunCommandHandlerLinux",
-				Version: "1.0.2",
-			},
-			{
-				Name:    "Microsoft.CPlat.Core.NonRunCommandHandler",
-				Version: "1.0.0",
-			},
-			{
-				Name:    "Microsoft.CPlat.Core.NonRunCommandHandler",
-				Version: "1.0.1",
-			},
+		},
+	}
+
+	vmSettings := &hostgacommunicator.VMImmediateExtensionsGoalState{
+		ImmediateExtensionGoalStates: []hostgacommunicator.ImmediateExtensionGoalState{
+			immediateGoalState,
+			immediateGoalState,
+			immediateGoalState,
+			nonImmediateGoalState,
+			nonImmediateGoalState,
 		},
 	}
 	return &hostgacommunicator.ResponseData{VMSettings: vmSettings, ETag: "123456", Modified: true}, nil
@@ -61,7 +77,7 @@ func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) 
 type EmptyCommunicator struct{}
 
 func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
-	return &hostgacommunicator.ResponseData{VMSettings: &hostgacommunicator.VMSettings{}, ETag: "123456", Modified: true}, nil
+	return &hostgacommunicator.ResponseData{VMSettings: &hostgacommunicator.VMImmediateExtensionsGoalState{}, ETag: "123456", Modified: true}, nil
 }
 
 func Test_GetFilteredImmediateVMSettings(t *testing.T) {

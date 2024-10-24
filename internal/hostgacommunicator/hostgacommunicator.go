@@ -18,7 +18,7 @@ const (
 )
 
 type ResponseData struct {
-	VMSettings *VMSettings
+	VMSettings *VMImmediateExtensionsGoalState
 	ETag       string
 	Modified   bool
 }
@@ -69,7 +69,7 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 	}
 
 	ctx.Log("message", "attempting to parse VMSettings from json response")
-	var vmSettings VMSettings
+	var vmSettings VMImmediateExtensionsGoalState
 	if err := json.Unmarshal(body, &vmSettings); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse json")
 	}

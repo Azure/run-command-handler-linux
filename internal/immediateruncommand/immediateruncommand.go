@@ -121,7 +121,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 }
 
 // Remove the goal states that have already been processed from the event map
-func removeProcessedGoalStates(ctx *log.Context, goalStates []hostgacommunicator.ExtensionGoalStates) {
+func removeProcessedGoalStates(ctx *log.Context, goalStates []hostgacommunicator.ImmediateExtensionGoalState) {
 	var goalStateKeys []goalStateKey
 	for _, s := range goalStates {
 		for _, setting := range s.Settings {
@@ -139,7 +139,7 @@ func removeProcessedGoalStates(ctx *log.Context, goalStates []hostgacommunicator
 }
 
 // Get the goal states that have not been processed yet
-func getGoalStatesToProcess(goalStates []hostgacommunicator.ExtensionGoalStates, maxTasksToFetch int) ([]settings.SettingsCommon, []settings.SettingsCommon, error) {
+func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGoalState, maxTasksToFetch int) ([]settings.SettingsCommon, []settings.SettingsCommon, error) {
 	var newGoalStates []settings.SettingsCommon
 	var skippedGoalStates []settings.SettingsCommon
 	for _, el := range goalStates {

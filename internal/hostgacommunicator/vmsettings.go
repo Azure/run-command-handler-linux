@@ -23,31 +23,13 @@ const (
 	vmSettingsRequestTimeout = 30 * time.Second
 )
 
-type ExtensionGoalStates struct {
-	Name                string                    `json:"name"`
-	Version             string                    `json:"version"`
-	Location            string                    `json:"location"`
-	Failoverlocation    string                    `json:"failoverlocation"`
-	AdditionalLocations []string                  `json:"additionalLocations"`
-	State               string                    `json:"state"`
-	AutoUpgrade         bool                      `json:"autoUpgrade"`
-	RunAsStartupTask    bool                      `json:"runAsStartupTask"`
-	IsJson              bool                      `json:"isJson"`
-	UpgradeGuid         string                    `json:"upgradeGuid"`
-	UseExactVersion     bool                      `json:"useExactVersion"`
-	SettingsSeqNo       int                       `json:"settingsSeqNo"`
-	ExtensionName       string                    `json:"extensionName"`
-	IsMultiConfig       bool                      `json:"isMultiConfig"`
-	Settings            []settings.SettingsCommon `json:"settings"`
+type VMImmediateExtensionsGoalState struct {
+	ImmediateExtensionGoalStates []ImmediateExtensionGoalState `json:"immediateExtensionsGoalStates"`
 }
 
-type VMSettings struct {
-	HostGAPluginVersion       string                `json:"hostGAPluginVersion"`
-	VmSettingsSchemaVersion   string                `json:"vmSettingsSchemaVersion"`
-	ActivityId                string                `json:"activityId"`
-	CorrelationId             string                `json:"correlationId"`
-	ExtensionGoalStatesSource string                `json:"extensionGoalStatesSource"`
-	ExtensionGoalStates       []ExtensionGoalStates `json:"extensionGoalStates"`
+type ImmediateExtensionGoalState struct {
+	Name     string                    `json:"name"`
+	Settings []settings.SettingsCommon `json:"settings"`
 }
 
 // Struct used to wrap the url to use when making requests
@@ -92,7 +74,7 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 	return request, err
 }
 
-func (goalState *ExtensionGoalStates) ValidateSignature() (bool, error) {
+func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) {
 	he, err := handlersettings.GetHandlerEnv()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to parse handlerenv")
