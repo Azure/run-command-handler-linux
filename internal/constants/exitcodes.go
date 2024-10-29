@@ -31,6 +31,7 @@ const (
 	ExitCode_UninstallInstalledServiceFailed              = -218
 	ExitCode_DisableInstalledServiceFailed                = -219
 	ExitCode_CopyStateForUpdateFailed                     = -220
+	ExitCode_SkippedImmediateGoalState                    = -221
 
 	// Unknown errors (-300s):
 )

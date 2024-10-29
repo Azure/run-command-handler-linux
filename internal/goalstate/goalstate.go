@@ -1,16 +1,16 @@
 package goalstate
 
 import (
-	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
 	commands "github.com/Azure/run-command-handler-linux/internal/cmds"
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/internal/observer"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/status"
+	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -20,10 +20,10 @@ const (
 	maxExecutionTimeInMinutes int32  = 90
 )
 
-func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon) error {
+func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier) error {
 	done := make(chan bool)
 	err := make(chan error)
-	go startAsync(ctx, setting, done, err)
+	go startAsync(ctx, setting, notifier, done, err)
 	select {
 	case <-err:
 		return errors.Wrapf(<-err, "error when trying to execute goal state")
@@ -35,15 +35,36 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon)
 	}
 }
 
-func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan bool, err chan error) {
+func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
 	cmd, ok := commands.Cmds[enableCommand]
 	if !ok {
 		err <- errors.New("missing enable command")
 		return
 	}
 
-	// Overwrite function to report status to blob instead of a local file and the cleanup phase to delete everything after reaching a goal state
-	cmd.Functions.ReportStatus = status.ReportStatusToBlob
+	// Overwrite function to report status to HGAP. This function prepares the status to be sent to the HGAP and then calls the notifier to send it.
+	cmd.Functions.ReportStatus = func(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
+		if !c.ShouldReportStatus {
+			ctx.Log("status", "not reported for operation (by design)")
+			return nil
+		}
+
+		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg, false)
+		if err != nil {
+			return errors.Wrap(err, "failed to get status item")
+		}
+
+		ctx.Log("message", "reporting status by notifying the observer to then send to HGAP")
+		return notifier.Notify(types.StatusEventArgs{
+			StatusKey: types.GoalStateKey{
+				ExtensionName: metadata.ExtName,
+				SeqNumber:     metadata.SeqNum,
+			},
+			TopLevelStatus: statusItem,
+		})
+	}
+
+	// Overwrite function to cleanup the command. This function is called after the command has been executed.
 	cmd.Functions.Cleanup = cleanup.ImmediateRunCommandCleanup
 
 	var hs handlersettings.HandlerSettingsFile
@@ -51,14 +72,5 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan boo
 	hs.RuntimeSettings = append(runtimeSettings, handlersettings.RunTimeSettingsFile{HandlerSettings: setting})
 	ctx.Log("message", "executing immediate goal state")
 	commandProcessor.ProcessImmediateHandlerCommand(cmd, hs, *setting.ExtensionName, *setting.SeqNo)
-
-	// TODO: Remove (only for simulating long duration processes)
-	rand.Seed(time.Now().UnixNano())
-	randomInt := rand.Intn(5) + 2
-	ctx.Log("report", fmt.Sprintf("sleeping for %v minutes", randomInt))
-	time.Sleep(time.Minute * time.Duration(randomInt))
-	ctx.Log("message", "done sleeping")
-	// TODO: Remove
-
 	done <- true
 }

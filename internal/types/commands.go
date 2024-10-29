@@ -19,7 +19,7 @@ type Cmd struct {
 type CmdFunctions struct {
 	Invoke       cmdFunc          // associated function
 	Pre          preFunc          // executed before any status is reported
-	ReportStatus reportStatusFunc // function to report status. Useful to write in .status file for RC and upload to blob for ImmediateRC
+	ReportStatus reportStatusFunc // function to report status. Useful to write in .status file for RC and report to HGAP for Immediate Run Command.
 	Cleanup      cleanupFunc      // function called after the extension has reached a terminal state to perform cleanup steps
 }
 

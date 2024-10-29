@@ -3,14 +3,14 @@ package immediateruncommand
 import (
 	"fmt"
 	"math"
-	"slices"
-	"sync"
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
+	"github.com/Azure/run-command-handler-linux/internal/observer"
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
+	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/counterutil"
 	"github.com/go-kit/kit/log"
@@ -23,14 +23,7 @@ const (
 
 var executingTasks counterutil.AtomicCount
 
-type goalStateKey struct {
-	ExtensionName string
-	SeqNumber     int
-}
-
-// goalStateEventMap is a map that stores the goal state key and the status item
-// sync.Map is preferred over map because it is safe for concurrent use
-var goalStateEventMap sync.Map
+var goalStateEventNotifier = status.StatusObserver{}
 
 type VMSettingsRequestManager struct{}
 
@@ -43,6 +36,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 	var vmRequestManager = new(VMSettingsRequestManager)
 	var lastProcessedETag string = ""
 	communicator := hostgacommunicator.NewHostGACommunicator(vmRequestManager)
+	goalStateEventNotifier.Initialize(ctx)
 
 	for {
 		ctx.Log("message", "processing new immediate run command goal states. Last processed ETag: "+lastProcessedETag)
@@ -74,7 +68,13 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		return newEtag, errors.Wrapf(err, "could not retrieve goal states for immediate run command")
 	}
 
-	removeProcessedGoalStates(ctx, goalStates)
+	var goalStateKeys []types.GoalStateKey
+	for _, s := range goalStates {
+		for _, setting := range s.Settings {
+			goalStateKeys = append(goalStateKeys, types.GoalStateKey{ExtensionName: *setting.ExtensionName, SeqNumber: *setting.SeqNo})
+		}
+	}
+	goalStateEventNotifier.RemoveProcessedGoalStates(goalStateKeys)
 	newGoalStates, skippedGoalStates, err := getGoalStatesToProcess(goalStates, maxTasksToFetch)
 	if err != nil {
 		return newEtag, errors.Wrap(err, "could not get goal states to process")
@@ -89,13 +89,14 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				executingTasks.Increment()
 
 				ctx.Log("message", "adding goal state to the event map")
-				key := goalStateKey{*state.ExtensionName, *state.SeqNo}
-				goalStateEventMap.Store(key, types.StatusItem{})
+				statusKey := types.GoalStateKey{ExtensionName: *state.ExtensionName, SeqNumber: *state.SeqNo}
+				defaultTopStatus := types.StatusItem{}
+				status := types.StatusEventArgs{TopLevelStatus: defaultTopStatus, StatusKey: statusKey}
 
-				err := goalstate.HandleImmediateGoalState(ctx, state)
-
-				ctx.Log("message", "removing goal state from the event map")
-				goalStateEventMap.Delete(key)
+				notifier := &observer.Notifier{}
+				notifier.Register(&goalStateEventNotifier)
+				notifier.Notify(status)
+				err := goalstate.HandleImmediateGoalState(ctx, state, notifier)
 
 				ctx.Log("message", "goal state has exited. Decrementing executing tasks counter")
 				executingTasks.Decrement()
@@ -113,29 +114,15 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 	if len(skippedGoalStates) > 0 {
 		ctx.Log("message", fmt.Sprintf("skipped %v goal states due to reaching the maximum concurrent tasks", len(skippedGoalStates)))
 		// TODO: Report skipped goal states status
+		// for _, skippedGoalState := range skippedGoalStates {
+		// 	//metadata := types.NewRCMetadata(*skippedGoalState.ExtensionName, *skippedGoalState.SeqNo, constants.ImmediateDownloadFolder, constants.DataDir)
+		// 	//instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusSkipped, nil, &instView)
+		// }
 	} else {
 		ctx.Log("message", "no goal states were skipped")
 	}
 
 	return newEtag, nil
-}
-
-// Remove the goal states that have already been processed from the event map
-func removeProcessedGoalStates(ctx *log.Context, goalStates []hostgacommunicator.ImmediateExtensionGoalState) {
-	var goalStateKeys []goalStateKey
-	for _, s := range goalStates {
-		for _, setting := range s.Settings {
-			goalStateKeys = append(goalStateKeys, goalStateKey{*setting.ExtensionName, *setting.SeqNo})
-		}
-	}
-
-	goalStateEventMap.Range(func(key, value interface{}) bool {
-		if !slices.Contains(goalStateKeys, key.(goalStateKey)) {
-			ctx.Log("message", "removing goal state from the event map", "key", key)
-			goalStateEventMap.Delete(key)
-		}
-		return true // continue iterating
-	})
 }
 
 // Get the goal states that have not been processed yet
@@ -150,7 +137,8 @@ func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGo
 
 		if validSignature {
 			for _, s := range el.Settings {
-				_, goalStateAlreadyProcessed := goalStateEventMap.Load(goalStateKey{*s.ExtensionName, *s.SeqNo})
+				statusKey := types.GoalStateKey{ExtensionName: *s.ExtensionName, SeqNumber: *s.SeqNo}
+				_, goalStateAlreadyProcessed := goalStateEventNotifier.GetStatusForKey(statusKey)
 				if !goalStateAlreadyProcessed {
 					if len(newGoalStates) < maxTasksToFetch {
 						newGoalStates = append(newGoalStates, s)
