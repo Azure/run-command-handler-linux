@@ -41,14 +41,14 @@ type StatusObserver struct {
 	// ctx is the logger context
 	ctx *log.Context
 
-	// reporter is the status reporter
-	reporter statusreporter.IGuestInformationServiceClient
+	// Reporter is the status Reporter
+	Reporter statusreporter.IGuestInformationServiceClient
 }
 
 func (o *StatusObserver) Initialize(ctx *log.Context) {
 	o.goalStateEventMap = sync.Map{}
 	o.ctx = ctx
-	o.reporter = statusreporter.NewGuestInformationServiceClient(hostgacommunicator.WireServerFallbackAddress)
+	o.Reporter = statusreporter.NewGuestInformationServiceClient(hostgacommunicator.WireServerFallbackAddress)
 }
 
 func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
@@ -92,8 +92,8 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 		return fmt.Errorf("status: failed to marshal immediate status into json: %v", err)
 	}
 
-	o.ctx.Log("message", "create request to upload status to: "+o.reporter.GetPutStatusUri())
-	response, err := o.reporter.ReportStatus(string(rootStatusJson))
+	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
+	response, err := o.Reporter.ReportStatus(string(rootStatusJson))
 	if err != nil {
 		return errors.Wrap(err, "failed to report status to HGAP")
 	}

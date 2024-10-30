@@ -1,14 +1,12 @@
 package status
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
 	"testing"
 
-	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
 	"github.com/ahmetb/go-httpbin"
@@ -16,30 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type TestGuestInformationClient struct {
-	endpoint string
-}
-
-func (c TestGuestInformationClient) GetEndpoint() string {
-	return c.endpoint
-}
-
-func (c TestGuestInformationClient) GetPutStatusUri() string {
-	return fmt.Sprintf(constants.PutImmediateStatusFormatString, c.GetEndpoint())
-}
-
-func (c TestGuestInformationClient) ReportStatus(statusToUpload string) (*http.Response, error) {
-	w := httptest.NewRecorder()
-	resp := w.Result()
-	resp.Request = httptest.NewRequest(http.MethodPut, c.endpoint, nil)
-	return resp, nil
-}
-
 func Test_onNotify_success(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
-	observer.reporter = TestGuestInformationClient{endpoint: "localhost:3000/upload"}
+	observer.Reporter = statusreporter.TestGuestInformationClient{Endpoint: "localhost:3000/upload"}
 
 	emptyStatusItem := types.StatusItem{}
 	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, emptyStatusItem)
@@ -74,7 +53,7 @@ func Test_onNotify_fails(t *testing.T) {
 
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
-	observer.reporter = statusreporter.NewGuestInformationServiceClient(srv.URL + "/uploadnotexistent")
+	observer.Reporter = statusreporter.NewGuestInformationServiceClient(srv.URL + "/uploadnotexistent")
 
 	emptyStatusItem := types.StatusItem{}
 	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, emptyStatusItem)
@@ -230,7 +209,7 @@ func Test_reportStatusToEndpointOk(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
-	observer.reporter = TestGuestInformationClient{endpoint: "localhost:3000/upload"}
+	observer.Reporter = statusreporter.TestGuestInformationClient{Endpoint: "localhost:3000/upload"}
 
 	immediateStatus := ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
@@ -258,7 +237,7 @@ func Test_reportStatusToEndpointNotFound(t *testing.T) {
 
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
-	observer.reporter = statusreporter.NewGuestInformationServiceClient(srv.URL + "/uploadnotexistent")
+	observer.Reporter = statusreporter.NewGuestInformationServiceClient(srv.URL + "/uploadnotexistent")
 	immediateStatus := ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
 			{
