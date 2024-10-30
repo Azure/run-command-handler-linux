@@ -126,7 +126,7 @@ func Test_getImmediateTopLevelStatusToReport_filterNone(t *testing.T) {
 	}
 }
 
-func Test_getImmediateTopLevelStatusToReport_filterAll(t *testing.T) {
+func Test_getImmediateTopLevelStatusToReport_filterAllWithEmptyStatus(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
@@ -152,7 +152,7 @@ func Test_getImmediateTopLevelStatusToReport_filterAll(t *testing.T) {
 	}
 }
 
-func Test_getImmediateTopLevelStatusToReport_filterOne(t *testing.T) {
+func Test_getImmediateTopLevelStatusToReport_filterSomeWithEmptyStatus(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)

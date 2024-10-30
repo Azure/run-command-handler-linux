@@ -113,11 +113,14 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 
 	if len(skippedGoalStates) > 0 {
 		ctx.Log("message", fmt.Sprintf("skipped %v goal states due to reaching the maximum concurrent tasks", len(skippedGoalStates)))
-		// TODO: Report skipped goal states status
-		// for _, skippedGoalState := range skippedGoalStates {
-		// 	//metadata := types.NewRCMetadata(*skippedGoalState.ExtensionName, *skippedGoalState.SeqNo, constants.ImmediateDownloadFolder, constants.DataDir)
-		// 	//instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusSkipped, nil, &instView)
-		// }
+		for _, skippedGoalState := range skippedGoalStates {
+			statusKey := types.GoalStateKey{ExtensionName: *skippedGoalState.ExtensionName, SeqNumber: *skippedGoalState.SeqNo}
+			notifier := &observer.Notifier{}
+			notifier.Register(&goalStateEventObserver)
+
+			msg := fmt.Sprintf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *skippedGoalState.ExtensionName, *skippedGoalState.SeqNo)
+			goalstate.HandleSkippedImmediateGoalState(ctx, notifier, statusKey, msg)
+		}
 	} else {
 		ctx.Log("message", "no goal states were skipped")
 	}

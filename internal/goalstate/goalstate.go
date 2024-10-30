@@ -35,6 +35,29 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 	}
 }
 
+func HandleSkippedImmediateGoalState(ctx *log.Context, notifier *observer.Notifier, goalStateKey types.GoalStateKey, msg string) error {
+	cmd, ok := commands.Cmds[enableCommand]
+	if !ok {
+		return errors.New("missing enable command")
+	}
+
+	if !cmd.ShouldReportStatus {
+		ctx.Log("status", "not reported for operation (by design)")
+		return nil
+	}
+
+	statusItem, err := status.GetSingleStatusItem(ctx, types.StatusSkipped, cmd, msg)
+	if err != nil {
+		return errors.Wrap(err, "failed to get status item")
+	}
+
+	ctx.Log("message", "reporting status of skipped goal state by notifying the observer to then send to HGAP")
+	return notifier.Notify(types.StatusEventArgs{
+		StatusKey:      goalStateKey,
+		TopLevelStatus: statusItem,
+	})
+}
+
 func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
 	cmd, ok := commands.Cmds[enableCommand]
 	if !ok {
