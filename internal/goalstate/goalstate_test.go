@@ -1,9 +1,12 @@
 package goalstate
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/observer"
 	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
@@ -28,8 +31,19 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 		ExtensionName: "test",
 		SeqNumber:     1,
 	}
-	msg := "test message"
-	err := HandleSkippedImmediateGoalState(ctx, notifier, goalStateKey, msg)
+
+	errorMsg := "Test error message"
+	instView := types.RunCommandInstanceView{
+		ExecutionState:   types.Failed,
+		ExecutionMessage: "Execution failed",
+		ExitCode:         constants.ExitCode_SkippedImmediateGoalState,
+		Output:           "",
+		Error:            errorMsg,
+		StartTime:        time.Now().UTC().Format(time.RFC3339),
+		EndTime:          time.Now().UTC().Format(time.RFC3339),
+	}
+
+	err := ReportFinalStatusForImmediateGoalState(ctx, notifier, goalStateKey, types.StatusSkipped, &instView)
 	require.Nil(t, err, "HandleSkippedImmediateGoalState should not return an error")
 
 	ctx.Log("msg", "Unregistering observer")
@@ -40,5 +54,8 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 	require.True(t, ok, "Status item should be found")
 	require.Equal(t, "Enable", latestStatus.Status.Operation, "Operation should be equal")
 	require.Equal(t, types.StatusSkipped, latestStatus.Status.Status, "Status should be equal")
-	require.Equal(t, msg, latestStatus.Status.FormattedMessage.Message, "Message should be equal")
+
+	json, err := json.Marshal(instView)
+	require.Nil(t, err, "Marshal should not return an error")
+	require.Equal(t, string(json), latestStatus.Status.FormattedMessage.Message, "Message should be equal")
 }

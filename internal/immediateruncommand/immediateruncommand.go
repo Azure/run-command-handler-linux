@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/observer"
@@ -96,12 +97,27 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				notifier := &observer.Notifier{}
 				notifier.Register(&goalStateEventObserver)
 				notifier.Notify(status)
-				err := goalstate.HandleImmediateGoalState(ctx, state, notifier)
+				startTime := time.Now().UTC().Format(time.RFC3339)
+				exitCode, err := goalstate.HandleImmediateGoalState(ctx, state, notifier)
 
 				ctx.Log("message", "goal state has exited. Decrementing executing tasks counter")
 				executingTasks.Decrement()
+
+				// If there was an error executing the goal state, report the final status to the HGAP
+				// For successful goal states, the status is reported by the usual workflow
 				if err != nil {
 					ctx.Log("error", "failed to execute goal state", "message", err)
+					instView := types.RunCommandInstanceView{
+						ExecutionState:   types.Failed,
+						ExecutionMessage: "Execution failed",
+						ExitCode:         exitCode,
+						Output:           "",
+						Error:            err.Error(),
+						StartTime:        startTime,
+						EndTime:          time.Now().UTC().Format(time.RFC3339),
+					}
+					goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusSkipped, &instView)
+
 				}
 			}(newGoalStates[idx])
 		}
@@ -118,8 +134,17 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 			notifier := &observer.Notifier{}
 			notifier.Register(&goalStateEventObserver)
 
-			msg := fmt.Sprintf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *skippedGoalState.ExtensionName, *skippedGoalState.SeqNo)
-			goalstate.HandleSkippedImmediateGoalState(ctx, notifier, statusKey, msg)
+			errorMsg := fmt.Sprintf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *skippedGoalState.ExtensionName, *skippedGoalState.SeqNo)
+			instView := types.RunCommandInstanceView{
+				ExecutionState:   types.Failed,
+				ExecutionMessage: "Execution was skipped due to reaching the maximum concurrent tasks",
+				ExitCode:         constants.ExitCode_SkippedImmediateGoalState,
+				Output:           "",
+				Error:            errorMsg,
+				StartTime:        time.Now().UTC().Format(time.RFC3339),
+				EndTime:          time.Now().UTC().Format(time.RFC3339),
+			}
+			goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusSkipped, &instView)
 		}
 	} else {
 		ctx.Log("message", "no goal states were skipped")

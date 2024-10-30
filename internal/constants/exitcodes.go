@@ -32,6 +32,8 @@ const (
 	ExitCode_DisableInstalledServiceFailed                = -219
 	ExitCode_CopyStateForUpdateFailed                     = -220
 	ExitCode_SkippedImmediateGoalState                    = -221
+	ExitCode_ImmediateTaskTimeout                         = -222
+	ExitCode_ImmediateTaskFailed                          = -223
 
 	// Unknown errors (-300s):
 )
