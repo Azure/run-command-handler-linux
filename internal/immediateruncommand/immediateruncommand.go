@@ -23,7 +23,7 @@ const (
 
 var executingTasks counterutil.AtomicCount
 
-var goalStateEventNotifier = status.StatusObserver{}
+var goalStateEventObserver = status.StatusObserver{}
 
 type VMSettingsRequestManager struct{}
 
@@ -36,7 +36,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 	var vmRequestManager = new(VMSettingsRequestManager)
 	var lastProcessedETag string = ""
 	communicator := hostgacommunicator.NewHostGACommunicator(vmRequestManager)
-	goalStateEventNotifier.Initialize(ctx)
+	goalStateEventObserver.Initialize(ctx)
 
 	for {
 		ctx.Log("message", "processing new immediate run command goal states. Last processed ETag: "+lastProcessedETag)
@@ -74,7 +74,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 			goalStateKeys = append(goalStateKeys, types.GoalStateKey{ExtensionName: *setting.ExtensionName, SeqNumber: *setting.SeqNo})
 		}
 	}
-	goalStateEventNotifier.RemoveProcessedGoalStates(goalStateKeys)
+	goalStateEventObserver.RemoveProcessedGoalStates(goalStateKeys)
 	newGoalStates, skippedGoalStates, err := getGoalStatesToProcess(goalStates, maxTasksToFetch)
 	if err != nil {
 		return newEtag, errors.Wrap(err, "could not get goal states to process")
@@ -94,7 +94,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				status := types.StatusEventArgs{TopLevelStatus: defaultTopStatus, StatusKey: statusKey}
 
 				notifier := &observer.Notifier{}
-				notifier.Register(&goalStateEventNotifier)
+				notifier.Register(&goalStateEventObserver)
 				notifier.Notify(status)
 				err := goalstate.HandleImmediateGoalState(ctx, state, notifier)
 
@@ -138,7 +138,7 @@ func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGo
 		if validSignature {
 			for _, s := range el.Settings {
 				statusKey := types.GoalStateKey{ExtensionName: *s.ExtensionName, SeqNumber: *s.SeqNo}
-				_, goalStateAlreadyProcessed := goalStateEventNotifier.GetStatusForKey(statusKey)
+				_, goalStateAlreadyProcessed := goalStateEventObserver.GetStatusForKey(statusKey)
 				if !goalStateAlreadyProcessed {
 					if len(newGoalStates) < maxTasksToFetch {
 						newGoalStates = append(newGoalStates, s)

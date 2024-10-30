@@ -82,7 +82,7 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 
 // getSingleStatusItem returns a single status item for the given status type, command, and message.
 // This is useful when only a single status item is needed for an immediate status report.
-func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool) (types.StatusItem, error) {
+func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string) (types.StatusItem, error) {
 	ctx.Log("message", "creating json to report status")
 	statusReport := types.NewStatusReport(statusType, c.Name, msg)
 	if len(statusReport) != 1 {

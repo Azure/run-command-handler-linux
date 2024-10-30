@@ -53,9 +53,12 @@ func (o *StatusObserver) Initialize(ctx *log.Context) {
 
 func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
-	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus.Status)
+	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
+	return o.reportImmediateStatus(o.getImmediateTopLevelStatusToReport())
+}
 
-	o.ctx.Log("message", "Getting all goal states from the event map")
+func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
+	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
 	latestStatusToReport := []ImmediateStatus{}
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
@@ -72,16 +75,14 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	})
 
 	o.ctx.Log("message", "Creating immediate status to report")
-	immediateStatus := ImmediateTopLevelStatus{
+	return ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
-			ImmediateHandlerStatus{
+			{
 				HandlerName:              "RunCommandHandler",
 				AggregateImmediateStatus: latestStatusToReport,
 			},
 		},
 	}
-
-	return o.reportImmediateStatus(immediateStatus)
 }
 
 func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevelStatus) error {
@@ -106,6 +107,8 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 }
 
 // Remove the goal states that have already been processed from the event map
+// If the goal state that was added before is not in the new list of goal states, it should be removed
+// This is to ensure that the event map only contains the goal states that are currently being processed
 func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalStateKey) {
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		if !slices.Contains(goalStateKeys, key.(types.GoalStateKey)) {
@@ -116,10 +119,20 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 	})
 }
 
-func (o *StatusObserver) GetStatusForKey(key types.GoalStateKey) (string, bool) {
+func (o *StatusObserver) GetStatusForKey(key types.GoalStateKey) (types.StatusItem, bool) {
 	data, ok := o.goalStateEventMap.Load(key)
 	if ok {
-		return data.(string), true
+		return data.(types.StatusItem), true
 	}
-	return "", false
+
+	return types.StatusItem{}, false
+}
+
+func (o *StatusObserver) getStatusForAllKeys() []types.StatusItem {
+	statusItems := []types.StatusItem{}
+	o.goalStateEventMap.Range(func(key, value interface{}) bool {
+		statusItems = append(statusItems, value.(types.StatusItem))
+		return true
+	})
+	return statusItems
 }

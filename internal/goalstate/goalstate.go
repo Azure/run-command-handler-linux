@@ -49,7 +49,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 			return nil
 		}
 
-		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg, false)
+		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg)
 		if err != nil {
 			return errors.Wrap(err, "failed to get status item")
 		}

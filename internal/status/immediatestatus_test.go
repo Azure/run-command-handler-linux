@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -16,61 +15,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
-
-func Test_reportStatus_fails(t *testing.T) {
-	fakeEnv := types.HandlerEnvironment{}
-	fakeEnv.HandlerEnvironment.StatusFolder = "/non-existing/dir/"
-
-	metadata := types.NewRCMetadata("", 1, constants.DownloadFolder, constants.DataDir)
-	err := ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "")
-	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "failed to save handler status")
-}
-
-func Test_reportStatus_fileExists(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "")
-	require.Nil(t, err)
-	defer os.RemoveAll(tmpDir)
-
-	extName := "first"
-	fakeEnv := types.HandlerEnvironment{}
-	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
-
-	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder, constants.DataDir)
-	require.Nil(t, ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusError, types.CmdEnableTemplate, "FOO ERROR"))
-
-	path := filepath.Join(tmpDir, "first.1.status")
-	b, err := os.ReadFile(path)
-	require.Nil(t, err, ".status file exists")
-	require.NotEqual(t, 0, len(b), ".status file not empty")
-}
-
-func Test_reportStatus_checksIfShouldBeReported(t *testing.T) {
-	for _, c := range types.CmdTemplates {
-		tmpDir, err := os.MkdirTemp("", "status-"+c.Name)
-		require.Nil(t, err)
-		defer os.RemoveAll(tmpDir)
-
-		extName := "first"
-		fakeEnv := types.HandlerEnvironment{}
-		fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
-		metadata := types.NewRCMetadata(extName, 2, constants.DownloadFolder, constants.DataDir)
-		require.Nil(t, ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, c, ""))
-
-		fp := filepath.Join(tmpDir, "first.2.status")
-		_, err = os.Stat(fp) // check if the .status file is there
-		if c.ShouldReportStatus && err != nil {
-			t.Fatalf("cmd=%q should have reported status file=%q err=%v", c.Name, fp, err)
-		}
-		if !c.ShouldReportStatus {
-			if err == nil {
-				t.Fatalf("cmd=%q should not have reported status file. file=%q", c.Name, fp)
-			} else if !os.IsNotExist(err) {
-				t.Fatalf("cmd=%q some other error occurred. file=%q err=%q", c.Name, fp, err)
-			}
-		}
-	}
-}
 
 type TestGuestInformationClient struct {
 	endpoint string
@@ -91,7 +35,198 @@ func (c TestGuestInformationClient) ReportStatus(statusToUpload string) (*http.R
 	return resp, nil
 }
 
-func Test_ReportStatusToEndpointOk(t *testing.T) {
+func Test_onNotify_success(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+	observer.reporter = TestGuestInformationClient{endpoint: "localhost:3000/upload"}
+
+	emptyStatusItem := types.StatusItem{}
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, emptyStatusItem)
+
+	nonEmptyStatusItem := types.StatusItem{
+		Version:      2,
+		TimestampUTC: "2021-09-01T12:00:00Z",
+		Status: types.Status{
+			Operation: "TestOperation",
+			Status:    "TestStatus",
+			FormattedMessage: types.FormattedMessage{
+				Message: "Test message",
+				Lang:    "en-US",
+			},
+		},
+	}
+	topStatus := types.StatusEventArgs{
+		StatusKey:      types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"},
+		TopLevelStatus: nonEmptyStatusItem,
+	}
+	err := observer.OnNotify(topStatus)
+	require.Nil(t, err, "OnNotify should not return an error")
+	status, ok := observer.GetStatusForKey(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"})
+	require.True(t, ok, "Status should be found")
+	require.Equal(t, nonEmptyStatusItem, status, "Status should be the same because it was updated")
+}
+
+func Test_onNotify_fails(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	srv := httptest.NewServer(httpbin.GetMux())
+	defer srv.Close()
+
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+	observer.reporter = statusreporter.NewGuestInformationServiceClient(srv.URL + "/uploadnotexistent")
+
+	emptyStatusItem := types.StatusItem{}
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, emptyStatusItem)
+
+	nonEmptyStatusItem := types.StatusItem{
+		Version:      2,
+		TimestampUTC: "2021-09-01T12:00:00Z",
+		Status: types.Status{
+			Operation: "TestOperation",
+			Status:    "TestStatus",
+			FormattedMessage: types.FormattedMessage{
+				Message: "Test message",
+				Lang:    "en-US",
+			},
+		},
+	}
+	topStatus := types.StatusEventArgs{
+		StatusKey:      types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"},
+		TopLevelStatus: nonEmptyStatusItem,
+	}
+	err := observer.OnNotify(topStatus)
+	require.NotNil(t, err, "OnNotify should return an error")
+	require.Contains(t, err.Error(), strconv.Itoa(http.StatusNotFound))
+
+	status, ok := observer.GetStatusForKey(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"})
+	require.True(t, ok, "Status should be found")
+	require.Equal(t, nonEmptyStatusItem, status, "Status should be the same because it was updated even though the report failed")
+}
+
+func Test_getImmediateTopLevelStatusToReport_filterNone(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+
+	ctx.Log("message", "Adding non-empty goal states to the event map")
+	nonEmptyStatus := types.StatusItem{
+		Version:      2,
+		TimestampUTC: "2021-09-01T12:00:00Z",
+		Status: types.Status{
+			Operation: "TestOperation",
+			Status:    "TestStatus",
+			FormattedMessage: types.FormattedMessage{
+				Message: "Test message",
+				Lang:    "en-US",
+			},
+		},
+	}
+
+	goalStateKeys := []types.GoalStateKey{
+		{SeqNumber: 1, ExtensionName: "testExtension"},
+		{SeqNumber: 2, ExtensionName: "testExtension"},
+		{SeqNumber: 3, ExtensionName: "testExtension"},
+	}
+	for _, goalStateKey := range goalStateKeys {
+		observer.goalStateEventMap.Store(goalStateKey, nonEmptyStatus)
+	}
+
+	ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
+	immediateTopLevelStatus := observer.getImmediateTopLevelStatusToReport()
+	require.Equal(t, 1, len(immediateTopLevelStatus.AggregateHandlerImmediateStatus), "Only one handler should be reported in the immediate status")
+
+	for _, handler := range immediateTopLevelStatus.AggregateHandlerImmediateStatus {
+		require.Equal(t, "RunCommandHandler", handler.HandlerName, "Handler name should be the same")
+		require.Equal(t, len(goalStateKeys), len(handler.AggregateImmediateStatus), "All goal states should be reported")
+		for _, immediateStatus := range handler.AggregateImmediateStatus {
+			require.Equal(t, nonEmptyStatus, immediateStatus.Status, "Status should be the same")
+			require.Equal(t, immediateStatus.TimestampUTC, immediateStatus.Status.TimestampUTC, "Timestamp should be the same")
+			require.Contains(t, goalStateKeys, types.GoalStateKey{SeqNumber: immediateStatus.SequenceNumber, ExtensionName: "testExtension"}, "Sequence number should be the same")
+		}
+	}
+}
+
+func Test_getImmediateTopLevelStatusToReport_filterAll(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+
+	ctx.Log("message", "Adding non-empty goal states to the event map")
+	emptyStatus := types.StatusItem{}
+	goalStateKeys := []types.GoalStateKey{
+		{SeqNumber: 1, ExtensionName: "testExtension"},
+		{SeqNumber: 2, ExtensionName: "testExtension"},
+		{SeqNumber: 3, ExtensionName: "testExtension"},
+	}
+	for _, goalStateKey := range goalStateKeys {
+		observer.goalStateEventMap.Store(goalStateKey, emptyStatus)
+	}
+
+	ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
+	immediateTopLevelStatus := observer.getImmediateTopLevelStatusToReport()
+	require.Equal(t, 1, len(immediateTopLevelStatus.AggregateHandlerImmediateStatus), "Only one handler should be reported in the immediate status")
+
+	for _, handler := range immediateTopLevelStatus.AggregateHandlerImmediateStatus {
+		require.Equal(t, "RunCommandHandler", handler.HandlerName, "Handler name should be the same")
+		require.Equal(t, 0, len(handler.AggregateImmediateStatus), "No goal states should be reported")
+	}
+}
+
+func Test_getImmediateTopLevelStatusToReport_filterOne(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+
+	ctx.Log("message", "Adding non-empty goal states to the event map")
+	nonEmptyStatus := types.StatusItem{
+		Version:      2,
+		TimestampUTC: "2021-09-01T12:00:00Z",
+		Status: types.Status{
+			Operation: "TestOperation",
+			Status:    "TestStatus",
+			FormattedMessage: types.FormattedMessage{
+				Message: "Test message",
+				Lang:    "en-US",
+			},
+		},
+	}
+	emptyStatus := types.StatusItem{}
+
+	nonEmptyGoalStateKeys := []types.GoalStateKey{
+		{SeqNumber: 1, ExtensionName: "testExtension"},
+		{SeqNumber: 2, ExtensionName: "testExtension"},
+		{SeqNumber: 3, ExtensionName: "testExtension"},
+	}
+	for _, goalStateKey := range nonEmptyGoalStateKeys {
+		observer.goalStateEventMap.Store(goalStateKey, nonEmptyStatus)
+	}
+
+	emptyGoalStateKeys := []types.GoalStateKey{
+		{SeqNumber: 4, ExtensionName: "testExtension"},
+		{SeqNumber: 5, ExtensionName: "testExtension"},
+		{SeqNumber: 6, ExtensionName: "testExtension"},
+	}
+	for _, goalStateKey := range emptyGoalStateKeys {
+		observer.goalStateEventMap.Store(goalStateKey, emptyStatus)
+	}
+
+	ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
+	immediateTopLevelStatus := observer.getImmediateTopLevelStatusToReport()
+	require.Equal(t, 1, len(immediateTopLevelStatus.AggregateHandlerImmediateStatus), "Only one handler should be reported in the immediate status")
+
+	for _, handler := range immediateTopLevelStatus.AggregateHandlerImmediateStatus {
+		require.Equal(t, "RunCommandHandler", handler.HandlerName, "Handler name should be the same")
+		require.Equal(t, len(nonEmptyGoalStateKeys), len(handler.AggregateImmediateStatus), "All goal states should be reported")
+		for _, immediateStatus := range handler.AggregateImmediateStatus {
+			require.Equal(t, nonEmptyStatus, immediateStatus.Status, "Status should be the same")
+			require.Equal(t, immediateStatus.TimestampUTC, immediateStatus.Status.TimestampUTC, "Timestamp should be the same")
+			require.Contains(t, nonEmptyGoalStateKeys, types.GoalStateKey{SeqNumber: immediateStatus.SequenceNumber, ExtensionName: "testExtension"}, "Sequence number should be the same")
+		}
+	}
+}
+
+func Test_reportStatusToEndpointOk(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
@@ -99,10 +234,10 @@ func Test_ReportStatusToEndpointOk(t *testing.T) {
 
 	immediateStatus := ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
-			ImmediateHandlerStatus{
+			{
 				HandlerName: "testExtension",
 				AggregateImmediateStatus: []ImmediateStatus{
-					ImmediateStatus{
+					{
 						SequenceNumber: 1,
 						TimestampUTC:   "2021-09-01T12:00:00Z",
 						Status:         types.StatusItem{},
@@ -116,7 +251,7 @@ func Test_ReportStatusToEndpointOk(t *testing.T) {
 	require.Nil(t, err)
 }
 
-func Test_ReportStatusToEndpointNotFound(t *testing.T) {
+func Test_reportStatusToEndpointNotFound(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
@@ -126,10 +261,10 @@ func Test_ReportStatusToEndpointNotFound(t *testing.T) {
 	observer.reporter = statusreporter.NewGuestInformationServiceClient(srv.URL + "/uploadnotexistent")
 	immediateStatus := ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
-			ImmediateHandlerStatus{
+			{
 				HandlerName: "testExtension",
 				AggregateImmediateStatus: []ImmediateStatus{
-					ImmediateStatus{
+					{
 						SequenceNumber: 1,
 						TimestampUTC:   "2021-09-01T12:00:00Z",
 						Status:         types.StatusItem{},
@@ -142,4 +277,101 @@ func Test_ReportStatusToEndpointNotFound(t *testing.T) {
 	err := observer.reportImmediateStatus(immediateStatus)
 	require.ErrorContains(t, err, strconv.Itoa(http.StatusNotFound))
 	require.ErrorContains(t, err, "Not Found")
+}
+
+func Test_getStatusForKey_statusFound(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+	goalStateKey := types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}
+	statusItem := types.StatusItem{
+		Version:      2,
+		TimestampUTC: "2021-09-01T12:00:00Z",
+		Status: types.Status{
+			Operation: "TestOperation",
+			Status:    "TestStatus",
+			FormattedMessage: types.FormattedMessage{
+				Message: "Test message",
+				Lang:    "en-US",
+			},
+		},
+	}
+	observer.goalStateEventMap.Store(goalStateKey, statusItem)
+	status, ok := observer.GetStatusForKey(goalStateKey)
+	require.True(t, ok)
+	require.Equal(t, statusItem, status)
+}
+
+func Test_getStatusForKey_statusNotFound(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+	goalStateKey := types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}
+	status, ok := observer.GetStatusForKey(goalStateKey)
+	require.False(t, ok)
+	require.Equal(t, types.StatusItem{}, status)
+}
+
+func Test_removeProcessedGoalStates_RemoveAll(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+
+	ctx.Log("message", "Adding goal states to the event map")
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, types.StatusItem{})
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 2, ExtensionName: "testExtension"}, types.StatusItem{})
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 3, ExtensionName: "testExtension"}, types.StatusItem{})
+
+	ctx.Log("message", "Defining currentGoalStateKeys")
+	currentGoalStateKeys := []types.GoalStateKey{}
+
+	ctx.Log("message", "Removing goal states not in currentGoalStateKeys")
+	observer.RemoveProcessedGoalStates(currentGoalStateKeys)
+
+	require.Equal(t, 0, len(observer.getStatusForAllKeys()), "All goal states should be removed")
+}
+
+func Test_removeProcessedGoalStates_RemoveNone(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+
+	ctx.Log("message", "Adding goal states to the event map")
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, types.StatusItem{})
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 2, ExtensionName: "testExtension"}, types.StatusItem{})
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 3, ExtensionName: "testExtension"}, types.StatusItem{})
+
+	ctx.Log("message", "Defining currentGoalStateKeys")
+	currentGoalStateKeys := []types.GoalStateKey{
+		{SeqNumber: 1, ExtensionName: "testExtension"},
+		{SeqNumber: 2, ExtensionName: "testExtension"},
+		{SeqNumber: 3, ExtensionName: "testExtension"},
+	}
+
+	ctx.Log("message", "Removing goal states not in currentGoalStateKeys")
+	observer.RemoveProcessedGoalStates(currentGoalStateKeys)
+
+	require.Equal(t, 3, len(observer.getStatusForAllKeys()), "No goal states should be removed")
+}
+
+func Test_removeProcessedGoalStates_RemoveOne(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	observer := StatusObserver{}
+	observer.Initialize(ctx)
+
+	ctx.Log("message", "Adding goal states to the event map")
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, types.StatusItem{})
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 2, ExtensionName: "testExtension"}, types.StatusItem{})
+	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 3, ExtensionName: "testExtension"}, types.StatusItem{})
+
+	ctx.Log("message", "Defining currentGoalStateKeys")
+	currentGoalStateKeys := []types.GoalStateKey{
+		{SeqNumber: 1, ExtensionName: "testExtension"},
+		{SeqNumber: 2, ExtensionName: "testExtension"},
+	}
+
+	ctx.Log("message", "Removing goal states not in currentGoalStateKeys")
+	observer.RemoveProcessedGoalStates(currentGoalStateKeys)
+
+	require.Equal(t, 2, len(observer.getStatusForAllKeys()), "One goal state should be removed")
 }
