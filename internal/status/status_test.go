@@ -77,54 +77,35 @@ func Test_getSingleStatusItem(t *testing.T) {
 	require.Equal(t, msgToReport, statusItem.Status.FormattedMessage.Message, "GetSingleStatusItem should return a status item with the correct message")
 }
 
-func Test_marshalStatusReportIntoJson_IndentEnabled(t *testing.T) {
-	statusItem := types.StatusItem{
-		Version:      2,
-		TimestampUTC: "2021-09-01T12:00:00Z",
-		Status: types.Status{
-			Operation: "TestOperation",
-			Status:    "TestStatus",
-			FormattedMessage: types.FormattedMessage{
-				Message: "Test message",
-				Lang:    "en-US",
-			},
-		},
-	}
-	statusReport := types.StatusReport{statusItem}
-	json, err := MarshalStatusReportIntoJson(statusReport, true)
-	require.Nil(t, err, "MarshalStatusReportIntoJson should not return an error")
-	require.NotNil(t, json, "MarshalStatusReportIntoJson should return a json string")
-	jsonStr := string(json)
-	require.Contains(t, jsonStr, "TestOperation", "MarshalStatusReportIntoJson should return a json string with the correct operation")
-	require.Contains(t, jsonStr, "TestStatus", "MarshalStatusReportIntoJson should return a json string with the correct status")
-	require.Contains(t, jsonStr, "Test message", "MarshalStatusReportIntoJson should return a json string with the correct message")
-	require.Contains(t, jsonStr, "en-US", "MarshalStatusReportIntoJson should return a json string with the correct language")
-	require.Contains(t, jsonStr, "2021-09-01T12:00:00Z", "MarshalStatusReportIntoJson should return a json string with the correct timestamp")
-	require.Contains(t, jsonStr, "2", "MarshalStatusReportIntoJson should return a json string with the correct version")
-}
+func Test_marshalStatusReportIntoJson(t *testing.T) {
+	indentEnabled := true
 
-func Test_marshalStatusReportIntoJson_IndentDisabled(t *testing.T) {
-	statusItem := types.StatusItem{
-		Version:      2,
-		TimestampUTC: "2021-09-01T12:00:00Z",
-		Status: types.Status{
-			Operation: "TestOperation",
-			Status:    "TestStatus",
-			FormattedMessage: types.FormattedMessage{
-				Message: "Test message",
-				Lang:    "en-US",
+	for i := 0; i < 2; i++ {
+		statusItem := types.StatusItem{
+			Version:      2,
+			TimestampUTC: "2021-09-01T12:00:00Z",
+			Status: types.Status{
+				Operation: "TestOperation",
+				Status:    "TestStatus",
+				FormattedMessage: types.FormattedMessage{
+					Message: "Test message",
+					Lang:    "en-US",
+				},
 			},
-		},
+		}
+		statusReport := types.StatusReport{statusItem}
+		json, err := MarshalStatusReportIntoJson(statusReport, indentEnabled)
+		require.Nil(t, err, "MarshalStatusReportIntoJson should not return an error")
+		require.NotNil(t, json, "MarshalStatusReportIntoJson should return a json string")
+		jsonStr := string(json)
+		require.Contains(t, jsonStr, "TestOperation", "MarshalStatusReportIntoJson should return a json string with the correct operation")
+		require.Contains(t, jsonStr, "TestStatus", "MarshalStatusReportIntoJson should return a json string with the correct status")
+		require.Contains(t, jsonStr, "Test message", "MarshalStatusReportIntoJson should return a json string with the correct message")
+		require.Contains(t, jsonStr, "en-US", "MarshalStatusReportIntoJson should return a json string with the correct language")
+		require.Contains(t, jsonStr, "2021-09-01T12:00:00Z", "MarshalStatusReportIntoJson should return a json string with the correct timestamp")
+		require.Contains(t, jsonStr, "2", "MarshalStatusReportIntoJson should return a json string with the correct version")
+
+		// Test with indent disabled for the second iteration
+		indentEnabled = false
 	}
-	statusReport := types.StatusReport{statusItem}
-	json, err := MarshalStatusReportIntoJson(statusReport, false)
-	require.Nil(t, err, "MarshalStatusReportIntoJson should not return an error")
-	require.NotNil(t, json, "MarshalStatusReportIntoJson should return a json string")
-	jsonStr := string(json)
-	require.Contains(t, jsonStr, "TestOperation", "MarshalStatusReportIntoJson should return a json string with the correct operation")
-	require.Contains(t, jsonStr, "TestStatus", "MarshalStatusReportIntoJson should return a json string with the correct status")
-	require.Contains(t, jsonStr, "Test message", "MarshalStatusReportIntoJson should return a json string with the correct message")
-	require.Contains(t, jsonStr, "en-US", "MarshalStatusReportIntoJson should return a json string with the correct language")
-	require.Contains(t, jsonStr, "2021-09-01T12:00:00Z", "MarshalStatusReportIntoJson should return a json string with the correct timestamp")
-	require.Contains(t, jsonStr, "2", "MarshalStatusReportIntoJson should return a json string with the correct version")
 }
