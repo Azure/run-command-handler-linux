@@ -10,9 +10,13 @@ import (
 )
 
 func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+	if communicator == nil {
+		return nil, lastProcessedETag, errors.New("communicator cannot be nil")
+	}
+
 	responseData, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)
 	if err != nil {
-		return nil, lastProcessedETag, errors.Wrapf(err, "failed to retrieve VMSettings")
+		return nil, lastProcessedETag, errors.Wrapf(err, "failed to retrieve immediate VMSettings")
 	}
 
 	if responseData != nil && responseData.Modified {

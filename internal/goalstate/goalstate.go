@@ -1,6 +1,7 @@
 package goalstate
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
@@ -21,6 +22,11 @@ const (
 	maxExecutionTimeInMinutes int32  = 90
 )
 
+// HandleImmediateGoalState handles the immediate goal state by executing the command and waiting for it to finish.
+// ctx: The logger context.
+// setting: The settings for the command.
+// notifier: The notifier to send the status to the HGAP. This is a notifier that must have been initialized and a status observer must have been added to it.
+// Returns the exit code and an error if there was an issue executing the goal state.
 func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier) (int, error) {
 	done := make(chan bool)
 	err := make(chan error)
@@ -37,23 +43,28 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 }
 
 // ReportFinalStatusForImmediateGoalState reports the final status of the immediate goal state to the HGAP.
+// Reporting the status to HGAP is done by notifying the observer previously added to the notifier.
 // This function is called when the goal state is skipped or when the goal state fails to execute.
 // It is important to get the instance view from the goal state and report it to the HGAP so that the user can see the final status of the goal state.
 // The instance view is normally added as a message to the status item.
 func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer.Notifier, goalStateKey types.GoalStateKey, statusType types.StatusType, instanceview *types.RunCommandInstanceView) error {
+	if notifier == nil {
+		return errors.New("notifier is nil. Cannot report status to HGAP")
+	}
+
 	cmd, ok := commands.Cmds[enableCommand]
 	if !ok {
 		return errors.New("missing enable command")
 	}
 
 	if !cmd.ShouldReportStatus {
-		ctx.Log("status", "not reported for operation (by design)")
+		ctx.Log("status", "status not reported for operation (by design)")
 		return nil
 	}
 
 	msg, err := instanceview.Marshal()
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed to marshal instance view")
 	}
 
 	statusItem, err := status.GetSingleStatusItem(ctx, statusType, cmd, string(msg))
@@ -68,7 +79,15 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 	})
 }
 
+// startAsync starts the command asynchronously. The command to execute is the enable command.
+// The function to report status is overwritten to report the status to the HGAP. The notifier is used to send the status to the HGAP.
+// The function to cleanup the command is overwritten to cleanup the command immediately after it has been executed.
 func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
+	if notifier == nil {
+		err <- errors.New("notifier is nil. Cannot report status to HGAP")
+		return
+	}
+
 	cmd, ok := commands.Cmds[enableCommand]
 	if !ok {
 		err <- errors.New("missing enable command")
@@ -87,7 +106,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 			return errors.Wrap(err, "failed to get status item")
 		}
 
-		ctx.Log("message", "reporting status by notifying the observer to then send to HGAP")
+		ctx.Log("message", fmt.Sprintf("reporting status by notifying the observer to then send to HGAP for extension name %v and seq number %v", metadata.ExtName, metadata.SeqNum))
 		return notifier.Notify(types.StatusEventArgs{
 			StatusKey: types.GoalStateKey{
 				ExtensionName: metadata.ExtName,

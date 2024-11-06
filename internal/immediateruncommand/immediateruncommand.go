@@ -24,6 +24,9 @@ const (
 
 var executingTasks counterutil.AtomicCount
 
+// goalStateEventObserver is an observer that listens for status changes in goal states.
+// Each goal state is identified by a unique key and has a notifier associated with it.
+// The notifiers are used to send status back to the observer and the observer reports the status to the HGAP.
 var goalStateEventObserver = status.StatusObserver{}
 
 type VMSettingsRequestManager struct{}

@@ -43,16 +43,14 @@ type IVMSettingsRequestManager interface {
 
 // GetVMSettings returns the VMSettings for the current machine
 func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*ResponseData, error) {
-	ctx.Log("message", "getting request manager")
 	requestManager, err := c.vmRequestManager.GetVMSettingsRequestManager(ctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not create the request manager")
+		return nil, errors.Wrapf(err, "could not create the request manager to get immediate VMsettings")
 	}
 
-	ctx.Log("message", "attempting to make request with retries to retrieve VMSettings")
 	resp, err := requesthelper.WithRetries(ctx, requestManager, requesthelper.ActualSleep, eTag)
 	if err != nil {
-		return nil, errors.Wrapf(err, "metadata request failed with retries.")
+		return nil, errors.Wrapf(err, "request to retrieve VMSettings failed with retries.")
 	}
 
 	if resp.StatusCode == http.StatusNotModified {
@@ -60,25 +58,20 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 		return &ResponseData{VMSettings: nil, ETag: eTag, Modified: false}, nil
 	}
 
-	ctx.Log("message", "request completed. Reading body content from response")
-
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}
 
-	ctx.Log("message", "attempting to parse VMSettings from json response")
 	var vmSettings VMImmediateExtensionsGoalState
 	if err := json.Unmarshal(body, &vmSettings); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse json")
+		return nil, errors.Wrapf(err, "failed to parse immediate VMSettings json")
 	}
-	ctx.Log("message", "VMSettings successfully parsed")
 
-	ctx.Log("Retrieving ETag from response header")
 	newETag := resp.Header.Get(constants.ETagHeaderName)
 	if newETag == "" {
-		return nil, errors.New("ETag not found in response header")
+		return nil, errors.New("ETag not found in response header when retrieving immediate VMSettings")
 	}
 
 	return &ResponseData{VMSettings: &vmSettings, ETag: newETag, Modified: eTag != newETag}, nil
@@ -88,7 +81,6 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 func getOperationUri(ctx *log.Context, operationName string) (string, error) {
 	// TODO: investigate why other extensions use the env var AZURE_GUEST_AGENT_WIRE_PROTOCOL_ADDRESS
 	// and decide if we want to add that wire protocol address as a potential endpoint to use when provided
-	ctx.Log("message", "creating uri to perform operation")
 	uri, err := url.Parse(WireServerFallbackAddress)
 	if err != nil {
 		return "", errors.Wrap(err, "could not parse address "+WireServerFallbackAddress)

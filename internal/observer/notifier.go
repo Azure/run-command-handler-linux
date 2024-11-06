@@ -3,33 +3,25 @@
 package observer
 
 import (
-	"sync"
-
 	"github.com/Azure/run-command-handler-linux/internal/types"
 )
 
 type Notifier struct {
 	observer Observer
-	mu       sync.Mutex
 }
 
 func (n *Notifier) Register(o Observer) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	n.observer = o
 }
 
 func (n *Notifier) Unregister() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
 	n.observer = nil
 }
 
 func (n *Notifier) Notify(status types.StatusEventArgs) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.observer != nil {
-		return n.observer.OnNotify(status)
+	tempObserver := n.observer
+	if tempObserver != nil {
+		return tempObserver.OnNotify(status)
 	}
 
 	return nil

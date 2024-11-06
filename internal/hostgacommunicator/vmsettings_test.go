@@ -44,7 +44,7 @@ func Test_GetImmediateVMSettingsFailedToParseJson(t *testing.T) {
 
 	_, err := communicator.GetImmediateVMSettings(ctx, "")
 	require.NotNil(t, err)
-	require.ErrorContains(t, err, "failed to parse json")
+	require.ErrorContains(t, err, "failed to parse immediate VMSettings json")
 }
 
 func Test_GetImmediateVMSettingsHandleNotFound(t *testing.T) {
@@ -58,7 +58,7 @@ func Test_GetImmediateVMSettingsHandleNotFound(t *testing.T) {
 
 	_, err := communicator.GetImmediateVMSettings(ctx, "")
 	require.NotNil(t, err)
-	require.ErrorContains(t, err, "metadata request failed with retries")
+	require.ErrorContains(t, err, "request to retrieve VMSettings failed with retries")
 	require.ErrorContains(t, err, "404")
 }
 
