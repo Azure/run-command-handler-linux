@@ -54,7 +54,6 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 	}
 
 	if resp.StatusCode == http.StatusNotModified {
-		ctx.Log("message", "ETag has not changed. No need to parse response body")
 		return &ResponseData{VMSettings: nil, ETag: eTag, Modified: false}, nil
 	}
 
