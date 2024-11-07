@@ -2,15 +2,17 @@ package goalstate
 
 import (
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
 	commands "github.com/Azure/run-command-handler-linux/internal/cmds"
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/internal/observer"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/status"
+	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -20,30 +22,101 @@ const (
 	maxExecutionTimeInMinutes int32  = 90
 )
 
-func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon) error {
+// HandleImmediateGoalState handles the immediate goal state by executing the command and waiting for it to finish.
+// ctx: The logger context.
+// setting: The settings for the command.
+// notifier: The notifier to send the status to the HGAP. This is a notifier that must have been initialized and a status observer must have been added to it.
+// Returns the exit code and an error if there was an issue executing the goal state.
+func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier) (int, error) {
 	done := make(chan bool)
 	err := make(chan error)
-	go startAsync(ctx, setting, done, err)
+	go startAsync(ctx, setting, notifier, done, err)
 	select {
 	case <-err:
-		return errors.Wrapf(<-err, "error when trying to execute goal state")
+		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(<-err, "error when trying to execute goal state")
 	case <-done:
 		ctx.Log("message", "goal state successfully finished")
-		return nil
+		return constants.ExitCode_Okay, nil
 	case <-time.After(time.Minute * time.Duration(maxExecutionTimeInMinutes)):
-		return errors.New("timeout when trying to execute goal state")
+		return constants.ExitCode_ImmediateTaskTimeout, errors.New("timeout when trying to execute goal state")
 	}
 }
 
-func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan bool, err chan error) {
+// ReportFinalStatusForImmediateGoalState reports the final status of the immediate goal state to the HGAP.
+// Reporting the status to HGAP is done by notifying the observer previously added to the notifier.
+// This function is called when the goal state is skipped or when the goal state fails to execute.
+// It is important to get the instance view from the goal state and report it to the HGAP so that the user can see the final status of the goal state.
+// The instance view is normally added as a message to the status item.
+func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer.Notifier, goalStateKey types.GoalStateKey, statusType types.StatusType, instanceview *types.RunCommandInstanceView) error {
+	if notifier == nil {
+		return errors.New("notifier is nil. Cannot report status to HGAP")
+	}
+
+	cmd, ok := commands.Cmds[enableCommand]
+	if !ok {
+		return errors.New("missing enable command")
+	}
+
+	if !cmd.ShouldReportStatus {
+		ctx.Log("status", "status not reported for operation (by design)")
+		return nil
+	}
+
+	msg, err := instanceview.Marshal()
+	if err != nil {
+		return errors.Wrapf(err, "failed to marshal instance view")
+	}
+
+	statusItem, err := status.GetSingleStatusItem(ctx, statusType, cmd, string(msg))
+	if err != nil {
+		return errors.Wrap(err, "failed to get status item")
+	}
+
+	ctx.Log("message", "reporting status of skipped goal state by notifying the observer to then send to HGAP")
+	return notifier.Notify(types.StatusEventArgs{
+		StatusKey:      goalStateKey,
+		TopLevelStatus: statusItem,
+	})
+}
+
+// startAsync starts the command asynchronously. The command to execute is the enable command.
+// The function to report status is overwritten to report the status to the HGAP. The notifier is used to send the status to the HGAP.
+// The function to cleanup the command is overwritten to cleanup the command immediately after it has been executed.
+func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
+	if notifier == nil {
+		err <- errors.New("notifier is nil. Cannot report status to HGAP")
+		return
+	}
+
 	cmd, ok := commands.Cmds[enableCommand]
 	if !ok {
 		err <- errors.New("missing enable command")
 		return
 	}
 
-	// Overwrite function to report status to blob instead of a local file and the cleanup phase to delete everything after reaching a goal state
-	cmd.Functions.ReportStatus = status.ReportStatusToBlob
+	// Overwrite function to report status to HGAP. This function prepares the status to be sent to the HGAP and then calls the notifier to send it.
+	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
+		if !c.ShouldReportStatus {
+			ctx.Log("status", "not reported for operation (by design)")
+			return nil
+		}
+
+		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg)
+		if err != nil {
+			return errors.Wrap(err, "failed to get status item")
+		}
+
+		ctx.Log("message", fmt.Sprintf("reporting status by notifying the observer to then send to HGAP for extension name %v and seq number %v", metadata.ExtName, metadata.SeqNum))
+		return notifier.Notify(types.StatusEventArgs{
+			StatusKey: types.GoalStateKey{
+				ExtensionName: metadata.ExtName,
+				SeqNumber:     metadata.SeqNum,
+			},
+			TopLevelStatus: statusItem,
+		})
+	}
+
+	// Overwrite function to cleanup the command. This function is called after the command has been executed.
 	cmd.Functions.Cleanup = cleanup.ImmediateRunCommandCleanup
 
 	var hs handlersettings.HandlerSettingsFile
@@ -51,14 +124,5 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, done chan boo
 	hs.RuntimeSettings = append(runtimeSettings, handlersettings.RunTimeSettingsFile{HandlerSettings: setting})
 	ctx.Log("message", "executing immediate goal state")
 	commandProcessor.ProcessImmediateHandlerCommand(cmd, hs, *setting.ExtensionName, *setting.SeqNo)
-
-	// TODO: Remove (only for simulating long duration processes)
-	rand.Seed(time.Now().UnixNano())
-	randomInt := rand.Intn(5) + 2
-	ctx.Log("report", fmt.Sprintf("sleeping for %v minutes", randomInt))
-	time.Sleep(time.Minute * time.Duration(randomInt))
-	ctx.Log("message", "done sleeping")
-	// TODO: Remove
-
 	done <- true
 }

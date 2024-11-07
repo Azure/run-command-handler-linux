@@ -1,17 +1,12 @@
 package status
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
-	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
-	"github.com/ahmetb/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -71,39 +66,46 @@ func Test_reportStatus_checksIfShouldBeReported(t *testing.T) {
 	}
 }
 
-type TestGuestInformationClient struct {
-	endpoint string
-}
-
-func (c TestGuestInformationClient) GetEndpoint() string {
-	return c.endpoint
-}
-
-func (c TestGuestInformationClient) ReportStatus(statusToUpload string) (*http.Response, error) {
-	w := httptest.NewRecorder()
-	resp := w.Result()
-	resp.Request = httptest.NewRequest(http.MethodPut, c.endpoint, nil)
-	return resp, nil
-}
-
-func Test_ReportStatusToEndpointOk(t *testing.T) {
+func Test_getSingleStatusItem(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
-
-	fakeEnv := types.HandlerEnvironment{}
-	metadata := types.NewRCMetadata("testExtension", 2, constants.DownloadFolder, constants.DataDir)
-	reporter := TestGuestInformationClient{"localhost:3000/upload"}
-	err := reportStatusToEndpoint(ctx, fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "customMessage", reporter)
-	require.Nil(t, err)
+	msgToReport := "Final message to report"
+	statusItem, err := GetSingleStatusItem(ctx, types.StatusSuccess, types.CmdEnableTemplate, msgToReport)
+	require.Nil(t, err, "GetSingleStatusItem should not return an error")
+	require.NotNil(t, statusItem, "GetSingleStatusItem should return a status item")
+	require.Equal(t, types.StatusSuccess, statusItem.Status.Status, "GetSingleStatusItem should return a status item with the correct status")
+	require.Equal(t, types.CmdEnableTemplate.Name, statusItem.Status.Operation, "GetSingleStatusItem should return a status item with the correct operation")
+	require.Equal(t, msgToReport, statusItem.Status.FormattedMessage.Message, "GetSingleStatusItem should return a status item with the correct message")
 }
 
-func Test_ReportStatusToEndpointNotFound(t *testing.T) {
-	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
-	srv := httptest.NewServer(httpbin.GetMux())
-	defer srv.Close()
-	fakeEnv := types.HandlerEnvironment{}
-	metadata := types.NewRCMetadata("testExtension", 2, constants.DownloadFolder, constants.DataDir)
-	reporter := statusreporter.NewGuestInformationServiceClient(srv.URL + "/uploadnotexistent")
-	err := reportStatusToEndpoint(ctx, fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "customMessage", reporter)
-	require.ErrorContains(t, err, strconv.Itoa(http.StatusNotFound))
-	require.ErrorContains(t, err, "Not Found")
+func Test_marshalStatusReportIntoJson(t *testing.T) {
+	indentEnabled := true
+
+	for i := 0; i < 2; i++ {
+		statusItem := types.StatusItem{
+			Version:      2,
+			TimestampUTC: "2021-09-01T12:00:00Z",
+			Status: types.Status{
+				Operation: "TestOperation",
+				Status:    "TestStatus",
+				FormattedMessage: types.FormattedMessage{
+					Message: "Test message",
+					Lang:    "en-US",
+				},
+			},
+		}
+		statusReport := types.StatusReport{statusItem}
+		json, err := MarshalStatusReportIntoJson(statusReport, indentEnabled)
+		require.Nil(t, err, "MarshalStatusReportIntoJson should not return an error")
+		require.NotNil(t, json, "MarshalStatusReportIntoJson should return a json string")
+		jsonStr := string(json)
+		require.Contains(t, jsonStr, "TestOperation", "MarshalStatusReportIntoJson should return a json string with the correct operation")
+		require.Contains(t, jsonStr, "TestStatus", "MarshalStatusReportIntoJson should return a json string with the correct status")
+		require.Contains(t, jsonStr, "Test message", "MarshalStatusReportIntoJson should return a json string with the correct message")
+		require.Contains(t, jsonStr, "en-US", "MarshalStatusReportIntoJson should return a json string with the correct language")
+		require.Contains(t, jsonStr, "2021-09-01T12:00:00Z", "MarshalStatusReportIntoJson should return a json string with the correct timestamp")
+		require.Contains(t, jsonStr, "2", "MarshalStatusReportIntoJson should return a json string with the correct version")
+
+		// Test with indent disabled for the second iteration
+		indentEnabled = false
+	}
 }

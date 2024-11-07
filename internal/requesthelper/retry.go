@@ -30,11 +30,13 @@ const (
 // closed on failures). If the retries do not succeed, the last error is returned.
 //
 // It sleeps in exponentially increasing durations between retries.
-func WithRetries(ctx *log.Context, rm *RequestManager, sf SleepFunc) (*http.Response, error) {
+func WithRetries(ctx *log.Context, rm *RequestManager, sf SleepFunc, eTag string) (*http.Response, error) {
 	var lastErr error
 
 	for n := 0; n < expRetryN; n++ {
-		resp, err := rm.MakeRequest(ctx)
+		resp, err := rm.MakeRequest(ctx, eTag)
+
+		// If there was no error, return the response
 		if err == nil {
 			return resp, nil
 		}
@@ -76,6 +78,8 @@ func WithRetries(ctx *log.Context, rm *RequestManager, sf SleepFunc) (*http.Resp
 		} else if !isTransientHTTPStatusCode(status) {
 			ctx.Log("message", fmt.Sprintf("RequestManager returned %v, skipping retries", status))
 			break
+		} else if responseNotModified(status) {
+			return resp, nil
 		}
 
 		if n < expRetryN-1 {
@@ -101,4 +105,8 @@ func isTransientHTTPStatusCode(statusCode int) bool {
 	default:
 		return false
 	}
+}
+
+func responseNotModified(statusCode int) bool {
+	return statusCode == http.StatusNotModified
 }

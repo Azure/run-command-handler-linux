@@ -6,23 +6,18 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/types"
-	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
-
-func ReportStatusToBlob(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
-	reporter := statusreporter.NewGuestInformationServiceClient(hostgacommunicator.WireServerFallbackAddress)
-	return reportStatusToEndpoint(ctx, hEnv, metadata, statusType, c, msg, reporter)
-}
 
 // ReportStatusToLocalFile saves operation status to the status file for the extension
 // handler with the optional given message, if the given cmd requires reporting
 // status.
 //
 // If an error occurs reporting the status, it will be logged and returned.
+//
+// This function is used by default for reporting status to the local file system unless a different method is specified.
 func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
 	if !c.ShouldReportStatus {
 		ctx.Log("status", "not reported for operation (by design)")
@@ -85,6 +80,17 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 	return b, nil
 }
 
+// getSingleStatusItem returns a single status item for the given status type, command, and message.
+// This is useful when only a single status item is needed for an immediate status report.
+func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string) (types.StatusItem, error) {
+	ctx.Log("message", "creating json to report status")
+	statusReport := types.NewStatusReport(statusType, c.Name, msg)
+	if len(statusReport) != 1 {
+		return types.StatusItem{}, errors.New("expected a single status item")
+	}
+	return statusReport[0], nil
+}
+
 func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) ([]byte, error) {
 	var b []byte
 	var err error
@@ -95,30 +101,4 @@ func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) (
 	}
 
 	return b, err
-}
-
-func reportStatusToEndpoint(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, reporter statusreporter.IGuestInformationServiceClient) error {
-	if !c.ShouldReportStatus {
-		ctx.Log("status", "not reported for operation (by design)")
-		return nil
-	}
-
-	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, false)
-	if err != nil {
-		return errors.Wrap(err, "failed to get json for status report")
-	}
-
-	ctx.Log("message", "create request to upload status to: "+reporter.GetEndpoint())
-	response, err := reporter.ReportStatus(string(rootStatusJson))
-	if err != nil {
-		return errors.Wrap(err, "failed to report status to HGAP")
-	}
-
-	if response.StatusCode != 200 {
-		return errors.New("failed to report status with error code " + response.Status)
-	}
-
-	ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
-	ctx.Log("message", "Successfully uploaded status")
-	return nil
 }
