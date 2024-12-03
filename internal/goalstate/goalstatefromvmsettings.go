@@ -9,21 +9,30 @@ import (
 	"github.com/pkg/errors"
 )
 
-func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator) ([]hostgacommunicator.ExtensionGoalStates, error) {
-	vmSettings, err := communicator.GetImmediateVMSettings(ctx)
+func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+	if communicator == nil {
+		return nil, lastProcessedETag, errors.New("communicator cannot be nil")
+	}
+
+	responseData, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to retrieve VMSettings")
+		return nil, lastProcessedETag, errors.Wrapf(err, "failed to retrieve immediate VMSettings")
 	}
 
-	if vmSettings != nil {
-		return filterImmediateRunCommandGoalStates(vmSettings.ExtensionGoalStates), nil
+	if responseData != nil && responseData.Modified {
+		ctx.Log("message", "a new response was received with ETag: "+responseData.ETag)
+		if responseData.VMSettings != nil {
+			return filterImmediateRunCommandGoalStates(responseData.VMSettings.ImmediateExtensionGoalStates), responseData.ETag, nil
+		} else {
+			return []hostgacommunicator.ImmediateExtensionGoalState{}, responseData.ETag, nil
+		}
 	}
 
-	return []hostgacommunicator.ExtensionGoalStates{}, nil
+	return []hostgacommunicator.ImmediateExtensionGoalState{}, lastProcessedETag, nil
 }
 
-func filterImmediateRunCommandGoalStates(extensionGoalStates []hostgacommunicator.ExtensionGoalStates) []hostgacommunicator.ExtensionGoalStates {
-	var result []hostgacommunicator.ExtensionGoalStates
+func filterImmediateRunCommandGoalStates(extensionGoalStates []hostgacommunicator.ImmediateExtensionGoalState) []hostgacommunicator.ImmediateExtensionGoalState {
+	var result []hostgacommunicator.ImmediateExtensionGoalState
 	for _, element := range extensionGoalStates {
 		if isRunCommandGoalState(element) {
 			result = append(result, element)
@@ -32,6 +41,6 @@ func filterImmediateRunCommandGoalStates(extensionGoalStates []hostgacommunicato
 	return result
 }
 
-func isRunCommandGoalState(goalState hostgacommunicator.ExtensionGoalStates) bool {
+func isRunCommandGoalState(goalState hostgacommunicator.ImmediateExtensionGoalState) bool {
 	return strings.EqualFold(goalState.Name, constants.RunCommandExtensionName)
 }

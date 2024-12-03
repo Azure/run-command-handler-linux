@@ -14,6 +14,7 @@ import (
 type IGuestInformationServiceClient interface {
 	ReportStatus(statusToUpload string) (*http.Response, error)
 	GetEndpoint() string
+	GetPutStatusUri() string
 }
 
 type GuestInformationServiceClient struct {
@@ -28,11 +29,14 @@ func (c GuestInformationServiceClient) GetEndpoint() string {
 	return c.Endpoint
 }
 
+func (c GuestInformationServiceClient) GetPutStatusUri() string {
+	return fmt.Sprintf(constants.PutImmediateStatusFormatString, c.GetEndpoint())
+}
+
 func (c GuestInformationServiceClient) ReportStatus(statusToUpload string) (*http.Response, error) {
 	if statusToUpload == "" {
 		return nil, errors.New("provided status to upload is empty")
 	}
 
-	putStatusUri := fmt.Sprintf(constants.PutStatusFormatString, c.GetEndpoint())
-	return ReportStatus(putStatusUri, statusToUpload)
+	return ReportStatus(c.GetPutStatusUri(), statusToUpload)
 }

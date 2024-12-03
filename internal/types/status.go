@@ -40,6 +40,9 @@ const (
 
 	// StatusSuccess indicates the operation succeeded
 	StatusSuccess StatusType = "success"
+
+	// StatusSkipped indicates the operation was skipped due to a precondition
+	StatusSkipped StatusType = "skipped"
 )
 
 // Status is used for serializing status in a manner the server understands

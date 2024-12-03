@@ -12,7 +12,7 @@ import (
 // RequestFactory describes a method to create HTTP requests.
 type RequestFactory interface {
 	// GetRequest returns a new GET request for the resource.
-	GetRequest(ctx *log.Context) (*http.Request, error)
+	GetRequest(ctx *log.Context, eTag string) (*http.Request, error)
 }
 
 // RequestManager provides an abstraction for http requests
@@ -32,8 +32,8 @@ func GetRequestManager(rf RequestFactory, timeout time.Duration) *RequestManager
 // MakeRequest retrieves a response body and checks the response status code to see
 // if it is 200 OK and then returns the response body. It issues a new request
 // every time called. It is caller's responsibility to close the response body.
-func (rm *RequestManager) MakeRequest(ctx *log.Context) (*http.Response, error) {
-	req, err := rm.requestFactory.GetRequest(ctx)
+func (rm *RequestManager) MakeRequest(ctx *log.Context, eTag string) (*http.Response, error) {
+	req, err := rm.requestFactory.GetRequest(ctx, eTag)
 	if err != nil {
 		return nil, err
 	}

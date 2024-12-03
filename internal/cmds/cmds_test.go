@@ -95,6 +95,10 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	for _, file := range files {
 		require.True(t, strings.HasSuffix(file.Name(), ".status"))
 	}
+
+	// Clean up
+	os.RemoveAll(currentExtensionVersionDirectory)
+	os.RemoveAll(previousExtensionVersionDirectory)
 }
 
 func createMrseqFile(mrseqFilePath string, mrseqNum string, t *testing.T) {

@@ -42,7 +42,7 @@ func TestWithRetries_noRetries(t *testing.T) {
 	rm := requesthelper.GetRequestManager(d, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.Nil(t, err, "should not fail")
 	defer resp.Body.Close()
 	require.NotNil(t, resp.Body, "response body exists")
@@ -58,7 +58,7 @@ func TestWithRetries_noRecovery(t *testing.T) {
 	rm := requesthelper.GetRequestManager(d, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.NotNil(t, err, "should have failed")
 	require.Nil(t, resp, "response exists")
 	require.Equal(t, []time.Duration(nil), []time.Duration(*sr), "sleep should not be called")
@@ -77,7 +77,7 @@ func TestWithRetries_noResponse(t *testing.T) {
 	rm := requesthelper.GetRequestManager(d, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.NotNil(t, err, "should have failed")
 	require.Nil(t, resp, "response exists")
 	require.Equal(t, []time.Duration(nil), []time.Duration(*sr), "sleep should not be called")
@@ -92,7 +92,7 @@ func TestWithRetries_failing_validateNumberOfCalls(t *testing.T) {
 	rm := requesthelper.GetRequestManager(d, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, "unexpected status code: actual=429 expected=200")
 	require.EqualValues(t, 7, d.calls, "calls exactly expRetryN times")
 }
@@ -103,7 +103,7 @@ func TestWithRetries_failedCreateRequest(t *testing.T) {
 	rm := requesthelper.GetRequestManager(bd, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, badRequestorErrorMsg)
 	require.EqualValues(t, 1, bd.calls, "called exactly one time")
 }
@@ -114,7 +114,7 @@ func TestWithRetries_requestFailedTimeout(t *testing.T) {
 	rm := requesthelper.GetRequestManager(er, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, requestErrorMsg)
 	require.EqualValues(t, 7, er.calls, "calls exactly expRetryN times")
 }
@@ -125,7 +125,7 @@ func TestWithRetries_requestFailedTemporary(t *testing.T) {
 	rm := requesthelper.GetRequestManager(er, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, requestErrorMsg)
 	require.EqualValues(t, 7, er.calls, "calls exactly expRetryN times")
 }
@@ -136,7 +136,7 @@ func TestWithRetries_requestFailedOther(t *testing.T) {
 	rm := requesthelper.GetRequestManager(er, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, requestErrorMsg)
 	require.EqualValues(t, 1, er.calls, "called exactly one time")
 }
@@ -150,7 +150,7 @@ func TestWithRetries_failingBadStatusCode_validateSleeps(t *testing.T) {
 	rm := requesthelper.GetRequestManager(d, testRequestTimeout)
 
 	sr := new(sleepRecorder)
-	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, "unexpected status code: actual=429 expected=200")
 	require.Equal(t, sleepSchedule, []time.Duration(*sr))
 }
@@ -163,7 +163,7 @@ func TestWithRetries_healingServer(t *testing.T) {
 	d := NewTestURLRequest(srv.URL)
 	rm := requesthelper.GetRequestManager(d, testRequestTimeout)
 	sr := new(sleepRecorder)
-	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep)
+	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.Nil(t, err, "should eventually succeed")
 	defer resp.Body.Close()
 	require.NotNil(t, resp.Body, "response body exists")
