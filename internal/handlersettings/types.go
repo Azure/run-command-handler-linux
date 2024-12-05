@@ -1,8 +1,6 @@
 package handlersettings
 
 import (
-	"strings"
-
 	"github.com/pkg/errors"
 )
 
@@ -14,7 +12,7 @@ type HandlerSettings struct {
 
 // Gets the InstallAsService field from the RunCommand's properties
 func (s HandlerSettings) InstallAsService() bool {
-	return s.PublicSettings.Source.InstallAsService || strings.Contains(s.Script(), "installAsService=true")
+	return s.PublicSettings.InstallAsService
 }
 
 func (s HandlerSettings) Script() string {
@@ -90,6 +88,9 @@ type PublicSettings struct {
 
 	// List of artifacts to download before running the script
 	Artifacts []PublicArtifactSource `json:"artifacts"`
+
+	// When the RunCommand extension sees the installAsService == true, it will apply the operations on the service as well.
+	InstallAsService bool `json:"installAsService,bool"`
 }
 
 // ProtectedSettings is the type decoded and deserialized from protected
@@ -148,9 +149,6 @@ type RunCommandManagedIdentity struct {
 type ScriptSource struct {
 	Script    string `json:"script"`
 	ScriptURI string `json:"scriptUri"`
-	// When the RunCommand extension sees the installAsService == true, it will apply the operations on the service as well.
-	// This service will continuously poll HGAP for any new goal state.
-	InstallAsService bool `json:"installAsService,bool"`
 }
 
 type ParameterDefinition struct {
