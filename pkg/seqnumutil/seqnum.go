@@ -2,7 +2,6 @@ package seqnumutil
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -47,7 +46,7 @@ func FindSequenceNumberFromConfig(path, fileExtension string, extensionName stri
 // path if it does not exist.
 func SaveSeqNum(path string, num int) error {
 	b := []byte(fmt.Sprintf("%v", num))
-	return errors.Wrap(ioutil.WriteFile(path, b, chmod), "seqnum: failed to write")
+	return errors.Wrap(os.WriteFile(path, b, chmod), "seqnum: failed to write")
 }
 
 // IsSmallerThan returns true if the sequence number stored at path is smaller

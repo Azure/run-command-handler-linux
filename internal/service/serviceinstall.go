@@ -63,6 +63,14 @@ func Register(ctx *log.Context) error {
 	}
 
 	ctx.Log("message", "Registering service using version: "+targetVersion)
+
+	ctx.Log("message", "Making immediate-run-command-handler executable")
+	execDirectory := os.Getenv(constants.ExtensionPathEnvName) + "/bin/immediate-run-command-handler"
+	err = os.Chmod(execDirectory, 0744)
+	if err != nil {
+		return errors.Wrap(err, "error while marking the immediate run command binary as executable")
+	}
+
 	err = serviceHandler.Register(ctx, systemdUnitContent)
 	if err != nil {
 		return err

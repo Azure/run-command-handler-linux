@@ -23,6 +23,7 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 	ctx := initializeLogger(cmd)
 	ctx = ctx.With("extensionName", extensionName)
 	ctx.Log("event", "start")
+	ctx.Log("message", "processing immediate command")
 
 	hEnv, err := getHandlerEnv(ctx)
 	if err != nil {
@@ -46,6 +47,7 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 func ProcessHandlerCommand(cmd types.Cmd) error {
 	ctx := initializeLogger(cmd)
 	ctx.Log("event", "start")
+	ctx.Log("message", "processing command")
 
 	hEnv, extensionName, seqNum, err := getRequiredInitialVariables(ctx)
 	if err != nil {
