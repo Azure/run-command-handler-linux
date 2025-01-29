@@ -25,7 +25,7 @@ const (
 
 	unitConfigurationBasePath_preferred   = "/etc/systemd/system"           // system units created by the administrator path
 	unitConfigurationBasePath_alternative = "/usr/local/lib/systemd/system" // system units installed by the administrator path
-	unitConfigurationFilePermission       = 0644
+	unitConfigurationFilePermission       = 0644                            // rw-r--r--
 )
 
 type Manager struct {
