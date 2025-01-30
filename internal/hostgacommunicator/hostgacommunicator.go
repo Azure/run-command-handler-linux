@@ -69,6 +69,10 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 		return nil, errors.Wrapf(err, "failed to parse immediate VMSettings json")
 	}
 
+	ctx.Log("message", "successfully retrieved immediate VMSettings, printing response")
+	ctx.Log("response", string(body))
+	ctx.Log("Headers", resp.Header)
+
 	newETag := resp.Header.Get(constants.ETagHeaderName)
 	if newETag == "" {
 		return nil, errors.New("ETag not found in response header when retrieving immediate VMSettings")
