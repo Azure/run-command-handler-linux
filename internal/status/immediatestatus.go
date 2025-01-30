@@ -64,18 +64,14 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 		// Only report the latest active status for each goal state
 		if value.(types.StatusItem) != (types.StatusItem{}) {
 			statusItem := value.(types.StatusItem)
-			o.ctx.Log("message", "Processing goal state from the event map", "key", key.(types.GoalStateKey), "value", statusItem)
 			immediateStatus := ImmediateStatus{
 				SequenceNumber: key.(types.GoalStateKey).SeqNumber,
 				TimestampUTC:   statusItem.TimestampUTC,
 				Status:         statusItem,
 			}
 			latestStatusToReport = append(latestStatusToReport, immediateStatus)
-		} else {
-			jsonValue, _ := json.Marshal(value.(types.StatusItem))
-			jsonKey, _ := json.Marshal(key.(types.GoalStateKey))
-			o.ctx.Log("message", "Skipping goal state from the event map with empty status", "key", string(jsonKey), "value", string(jsonValue))
 		}
+
 		return true
 	})
 
@@ -98,8 +94,6 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
-	o.ctx.Log("message", fmt.Sprintf("Status to report: %v", string(rootStatusJson)))
-
 	response, err := o.Reporter.ReportStatus(string(rootStatusJson))
 
 	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
