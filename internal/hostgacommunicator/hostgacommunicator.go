@@ -71,7 +71,11 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 
 	ctx.Log("message", "successfully retrieved immediate VMSettings, printing response")
 	ctx.Log("response", string(body))
-	ctx.Log("Headers", resp.Header)
+	headerString := ""
+	for k, v := range resp.Header {
+		headerString += k + ": " + v[0] + "\n"
+	}
+	ctx.Log("Headers", headerString)
 
 	newETag := resp.Header.Get(constants.ETagHeaderName)
 	if newETag == "" {
