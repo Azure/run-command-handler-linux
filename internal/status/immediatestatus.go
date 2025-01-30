@@ -72,7 +72,9 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 			}
 			latestStatusToReport = append(latestStatusToReport, immediateStatus)
 		} else {
-			o.ctx.Log("message", "Skipping goal state with empty status", "key", key.(types.GoalStateKey), "value", value.(types.StatusItem))
+			jsonValue, _ := json.Marshal(value.(types.StatusItem))
+			jsonKey, _ := json.Marshal(key.(types.GoalStateKey))
+			o.ctx.Log("message", "Skipping goal state from the event map with empty status", "key", string(jsonKey), "value", string(jsonValue))
 		}
 		return true
 	})
