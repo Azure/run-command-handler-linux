@@ -75,13 +75,13 @@ func WithRetries(ctx *log.Context, rm *RequestManager, sf SleepFunc, eTag string
 				ctx.Log("message", "no response returned and unexpected error, skipping retries.")
 				break
 			}
-		} else if !isTransientHTTPStatusCode(status) {
-			ctx.Log("message", fmt.Sprintf("RequestManager returned %v, skipping retries", status))
-			break
 		} else if responseNotModified(status) {
 			return resp, nil
 		} else if noImmediateGoalStatesToProcess(status) {
 			return resp, nil
+		} else if !isTransientHTTPStatusCode(status) {
+			ctx.Log("message", fmt.Sprintf("RequestManager returned %v, skipping retries", status))
+			break
 		}
 
 		if n < expRetryN-1 {
