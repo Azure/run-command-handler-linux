@@ -80,6 +80,8 @@ func WithRetries(ctx *log.Context, rm *RequestManager, sf SleepFunc, eTag string
 			break
 		} else if responseNotModified(status) {
 			return resp, nil
+		} else if noImmediateGoalStatesToProcess(status) {
+			return resp, nil
 		}
 
 		if n < expRetryN-1 {
@@ -109,4 +111,10 @@ func isTransientHTTPStatusCode(statusCode int) bool {
 
 func responseNotModified(statusCode int) bool {
 	return statusCode == http.StatusNotModified
+}
+
+// Ignore the perfectly valid case of Resource Not Found.
+// There simply is no immediate goal state to process and the most likely reason is that one was never sent to the VM.
+func noImmediateGoalStatesToProcess(statusCode int) bool {
+	return statusCode == http.StatusNotFound
 }
