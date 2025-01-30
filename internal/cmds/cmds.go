@@ -151,7 +151,9 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}
 
 	exitCode, err := immediatecmds.Enable(ctx, h, metadata.ExtName, metadata.SeqNum, cfg)
-	if err != nil {
+
+	// If there is an error or the customer requested to install the script as a service, return the error and exit code immediately.
+	if err != nil || cfg.InstallAsService() {
 		return "", "", err, exitCode
 	}
 

@@ -53,7 +53,8 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 		return nil, errors.Wrapf(err, "request to retrieve VMSettings failed with retries.")
 	}
 
-	if resp.StatusCode == http.StatusNotModified {
+	// If the response is 304 Not Modified or 404 Not Found, return nil VMSettings as there are not new goal states to process
+	if resp.StatusCode == http.StatusNotModified || resp.StatusCode == http.StatusNotFound {
 		return &ResponseData{VMSettings: nil, ETag: eTag, Modified: false}, nil
 	}
 

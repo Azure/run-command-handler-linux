@@ -57,9 +57,7 @@ func Test_GetImmediateVMSettingsHandleNotFound(t *testing.T) {
 	communicator := NewHostGACommunicator(testRequest)
 
 	_, err := communicator.GetImmediateVMSettings(ctx, "")
-	require.NotNil(t, err)
-	require.ErrorContains(t, err, "request to retrieve VMSettings failed with retries")
-	require.ErrorContains(t, err, "404")
+	require.Nil(t, err, "should not return error as this means no new goal states to process")
 }
 
 func Test_GetVMSettingsRequestManager(t *testing.T) {
