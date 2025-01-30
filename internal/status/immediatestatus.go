@@ -58,7 +58,12 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 }
 
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
-	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
+	mapSize := 0
+	o.goalStateEventMap.Range(func(key, value interface{}) bool {
+		mapSize++
+		return true
+	})
+	o.ctx.Log("message", fmt.Sprintf("Getting all goal states from the event map with the latest status that are not empty. Current map size: %d", mapSize))
 	latestStatusToReport := []ImmediateStatus{}
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
@@ -93,10 +98,9 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
-	o.ctx.Log("message", fmt.Sprintf("Status to report: %v", string(rootStatusJson)))
+
 	response, err := o.Reporter.ReportStatus(string(rootStatusJson))
 	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
-	o.ctx.Log("bodyresponse", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Body))
 	if err != nil {
 		return errors.Wrap(err, "failed to report status to HGAP")
 	}
