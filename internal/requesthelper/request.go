@@ -43,7 +43,11 @@ func (rm *RequestManager) MakeRequest(ctx *log.Context, eTag string) (*http.Resp
 		return resp, err
 	}
 
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
+	// These are the only status codes that are expected
+	if resp.StatusCode == http.StatusOK ||
+		resp.StatusCode == http.StatusPartialContent ||
+		resp.StatusCode == http.StatusNotModified ||
+		resp.StatusCode == http.StatusNotFound {
 		return resp, nil
 	}
 
