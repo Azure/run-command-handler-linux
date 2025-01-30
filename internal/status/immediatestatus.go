@@ -93,7 +93,10 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
+	o.ctx.Log("message", fmt.Sprintf("Status to report: %v", string(rootStatusJson)))
 	response, err := o.Reporter.ReportStatus(string(rootStatusJson))
+	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
+	o.ctx.Log("bodyresponse", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Body))
 	if err != nil {
 		return errors.Wrap(err, "failed to report status to HGAP")
 	}
