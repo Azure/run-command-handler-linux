@@ -61,16 +61,18 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
 	latestStatusToReport := []ImmediateStatus{}
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
-		o.ctx.Log("message", "Processing goal state from the event map", "key", key, "value", value)
 		// Only report the latest active status for each goal state
 		if value.(types.StatusItem) != (types.StatusItem{}) {
 			statusItem := value.(types.StatusItem)
+			o.ctx.Log("message", "Processing goal state from the event map", "key", key.(types.GoalStateKey), "value", statusItem)
 			immediateStatus := ImmediateStatus{
 				SequenceNumber: key.(types.GoalStateKey).SeqNumber,
 				TimestampUTC:   statusItem.TimestampUTC,
 				Status:         statusItem,
 			}
 			latestStatusToReport = append(latestStatusToReport, immediateStatus)
+		} else {
+			o.ctx.Log("message", "Skipping goal state with empty status", "key", key.(types.GoalStateKey), "value", value.(types.StatusItem))
 		}
 		return true
 	})
