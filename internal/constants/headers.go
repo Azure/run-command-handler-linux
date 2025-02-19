@@ -1,3 +1,4 @@
 package constants
 
-const ETagHeaderName = "if-none-match"
+const IfNoneMatchHeaderName = "if-none-match"
+const ETagHeaderName = "ETag"

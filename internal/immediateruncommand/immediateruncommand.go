@@ -47,15 +47,12 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 		newProcessedETag, err := processImmediateRunCommandGoalStates(ctx, communicator, lastProcessedETag)
 
 		if err != nil {
-			ctx.Log("error", errors.Wrapf(err, "could not process new immediate run command states"))
+			ctx.Log("error", errors.Wrapf(err, "could not process new immediate run command states because of an unexpected error"))
 			ctx.Log("message", "sleep for 5 seconds before retrying")
 			time.Sleep(time.Second * time.Duration(5))
 		} else {
 			lastProcessedETag = newProcessedETag
 		}
-
-		// Sleep for 1 second before the next iteration
-		time.Sleep(time.Second)
 	}
 }
 

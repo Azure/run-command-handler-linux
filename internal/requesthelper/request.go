@@ -48,7 +48,6 @@ func (rm *RequestManager) MakeRequest(ctx *log.Context, eTag string) (*http.Resp
 	}
 
 	err = fmt.Errorf("unexpected status code: actual=%d expected=%d", resp.StatusCode, http.StatusOK)
-
 	return resp, err
 }
 

@@ -67,10 +67,9 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 	}
 
 	if eTag != "" {
-		ctx.Log("message", "setting request headers to include ETag"+eTag)
-		request.Header.Set(constants.ETagHeaderName, eTag)
+		ctx.Log("message", "setting request headers to include ETag "+eTag)
+		request.Header.Set(constants.IfNoneMatchHeaderName, eTag)
 	}
-
 	return request, err
 }
 

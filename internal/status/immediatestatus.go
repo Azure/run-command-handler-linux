@@ -71,6 +71,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 			}
 			latestStatusToReport = append(latestStatusToReport, immediateStatus)
 		}
+
 		return true
 	})
 
@@ -94,6 +95,8 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
 	response, err := o.Reporter.ReportStatus(string(rootStatusJson))
+
+	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 	if err != nil {
 		return errors.Wrap(err, "failed to report status to HGAP")
 	}
@@ -102,7 +105,6 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 		return errors.New("failed to report status with error code " + response.Status)
 	}
 
-	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 	return nil
 }
 
