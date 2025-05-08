@@ -101,6 +101,7 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
+	o.ctx.Log("message", fmt.Sprintf("Payload for immediate status to report: %v", string(rootStatusJson)))
 	if err != nil {
 		return fmt.Errorf("status: failed to marshal immediate status into json: %v", err)
 	}
