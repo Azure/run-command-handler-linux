@@ -26,9 +26,9 @@ type ImmediateHandlerStatus struct {
 
 // Status of an immediate extension processed by a given handler
 type ImmediateStatus struct {
-	SequenceNumber int              `json:"sequenceNumber" validate:"required"`
-	TimestampUTC   string           `json:"timestampUTC" validate:"required"`
-	Status         types.StatusItem `json:"status" validate:"required"`
+	SequenceNumber int          `json:"sequenceNumber" validate:"required"`
+	TimestampUTC   string       `json:"timestampUTC" validate:"required"`
+	Status         types.Status `json:"status" validate:"required"`
 }
 
 // Observer defines a type that can receive notifications from a Notifier.
@@ -70,7 +70,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 				immediateStatus := ImmediateStatus{
 					SequenceNumber: goalStateKey.SeqNumber,
 					TimestampUTC:   statusItem.TimestampUTC,
-					Status:         statusItem,
+					Status:         statusItem.Status,
 				}
 				latestStatusToReport = append(latestStatusToReport, immediateStatus)
 			} else {
