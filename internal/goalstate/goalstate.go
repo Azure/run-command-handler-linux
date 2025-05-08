@@ -123,8 +123,9 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 		ctx.Log("message", fmt.Sprintf("reporting status by notifying the observer to then send to HGAP for extension name %v and seq number %v", metadata.ExtName, metadata.SeqNum))
 		return notifier.Notify(types.StatusEventArgs{
 			StatusKey: types.GoalStateKey{
-				ExtensionName: metadata.ExtName,
-				SeqNumber:     metadata.SeqNum,
+				ExtensionName:        metadata.ExtName,
+				SeqNumber:            metadata.SeqNum,
+				RuntimeSettingsState: extensionState,
 			},
 			TopLevelStatus: statusItem,
 		})

@@ -133,7 +133,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 	if len(skippedGoalStates) > 0 {
 		ctx.Log("message", fmt.Sprintf("skipped %v goal states due to reaching the maximum concurrent tasks", len(skippedGoalStates)))
 		for _, skippedGoalState := range skippedGoalStates {
-			statusKey := types.GoalStateKey{ExtensionName: *skippedGoalState.ExtensionName, SeqNumber: *skippedGoalState.SeqNo}
+			statusKey := types.GoalStateKey{ExtensionName: *skippedGoalState.ExtensionName, SeqNumber: *skippedGoalState.SeqNo, RuntimeSettingsState: *skippedGoalState.ExtensionState}
 			notifier := &observer.Notifier{}
 			notifier.Register(&goalStateEventObserver)
 
