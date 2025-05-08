@@ -87,7 +87,9 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 		err <- errors.New("notifier is nil. Cannot report status to HGAP")
 		return
 	}
+
 	extensionState := *setting.ExtensionState
+	ctx.Log("message", fmt.Sprintf("starting command for extension state %v", extensionState))
 	cmd, ok := commands.Cmds[extensionState]
 	if !ok {
 		err <- errors.New(fmt.Sprintf("missing command %v", extensionState))
