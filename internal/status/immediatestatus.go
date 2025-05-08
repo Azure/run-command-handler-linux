@@ -86,7 +86,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	return ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
 			{
-				HandlerName:              "RunCommandHandler",
+				HandlerName:              "Microsoft.CPlat.Core.RunCommandHandlerLinux",
 				AggregateImmediateStatus: latestStatusToReport,
 			},
 		},
