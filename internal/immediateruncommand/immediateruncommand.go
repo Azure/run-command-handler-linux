@@ -36,6 +36,7 @@ func (*VMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (
 }
 
 func StartImmediateRunCommand(ctx *log.Context) error {
+	ctx.Log("message", "DEBUG1")
 	ctx.Log("message", "starting immediate run command service")
 	var vmRequestManager = new(VMSettingsRequestManager)
 	var lastProcessedETag string = ""

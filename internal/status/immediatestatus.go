@@ -63,19 +63,26 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
 		if value.(types.StatusItem) != (types.StatusItem{}) {
-			statusItem := value.(types.StatusItem)
-			immediateStatus := ImmediateStatus{
-				SequenceNumber: key.(types.GoalStateKey).SeqNumber,
-				TimestampUTC:   statusItem.TimestampUTC,
-				Status:         statusItem,
+			goalStateKey := key.(types.GoalStateKey)
+
+			if goalStateKey.RuntimeSettingsState != "disabled" {
+				statusItem := value.(types.StatusItem)
+				immediateStatus := ImmediateStatus{
+					SequenceNumber: goalStateKey.SeqNumber,
+					TimestampUTC:   statusItem.TimestampUTC,
+					Status:         statusItem,
+				}
+				latestStatusToReport = append(latestStatusToReport, immediateStatus)
+			} else {
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
 			}
-			latestStatusToReport = append(latestStatusToReport, immediateStatus)
 		}
 
 		return true
 	})
 
 	o.ctx.Log("message", "Creating immediate status to report")
+	o.ctx.Log("message", fmt.Sprintf("Payload for immediate status to report: %v", latestStatusToReport))
 	return ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
 			{
