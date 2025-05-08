@@ -94,7 +94,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 }
 
 func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevelStatus) error {
-	if len(immediateStatus.AggregateHandlerImmediateStatus) == 0 {
+	if len(immediateStatus.AggregateHandlerImmediateStatus[0].AggregateImmediateStatus) == 0 {
 		o.ctx.Log("message", "No immediate status to report")
 		return nil
 	}
