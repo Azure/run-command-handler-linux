@@ -87,17 +87,17 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 		err <- errors.New("notifier is nil. Cannot report status to HGAP")
 		return
 	}
-
-	cmd, ok := commands.Cmds[enableCommand]
+	extensionState := *setting.ExtensionState
+	cmd, ok := commands.Cmds[extensionState]
 	if !ok {
-		err <- errors.New("missing enable command")
+		err <- errors.New(fmt.Sprintf("missing command %v", extensionState))
 		return
 	}
 
 	// Overwrite function to report status to HGAP. This function prepares the status to be sent to the HGAP and then calls the notifier to send it.
 	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
 		if !c.ShouldReportStatus {
-			ctx.Log("status", "not reported for operation (by design)")
+			ctx.Log("status", fmt.Sprintf("status not reported for operation %v (by design)", c.Name))
 			return nil
 		}
 

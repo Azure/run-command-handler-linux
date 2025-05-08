@@ -20,6 +20,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
+	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/files"
@@ -86,9 +87,16 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 }
 
 func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
-	exitCode, err := immediatecmds.Disable(ctx, h, metadata.ExtName, metadata.SeqNum)
-	if err != nil {
-		return "", "", err, exitCode
+	extensionHandlerName := commandProcessor.GetExtensionName(ctx)
+	ctx.Log("event", "disable", "extensionHandlerName", extensionHandlerName)
+	ctx.Log("message", fmt.Sprintf("disable called for extension %s", extensionHandlerName))
+	return "", "", nil, constants.ExitCode_Okay
+
+	if extensionHandlerName == "" {
+		exitCode, err := immediatecmds.Disable(ctx, h, metadata.ExtName, metadata.SeqNum)
+		if err != nil {
+			return "", "", err, exitCode
+		}
 	}
 
 	ctx.Log("event", "disable")

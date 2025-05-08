@@ -108,15 +108,14 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	return nil
 }
 
-// Remove the goal states that have already been processed from the event map
+// Remove the goal states that have already been processed from the event map or are disabled
 // If the goal state that was added before is not in the new list of goal states, it should be removed
 // This is to ensure that the event map only contains the goal states that are currently being processed
 func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalStateKey) {
 	// TODO: Eventually we'll need to report also already processed goal states to the HGAP even if they are not in the new list.
-	// TODO: When a command is sent down with toBeDeleted = true, then we should remove it and no longer report on it.
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		if !slices.Contains(goalStateKeys, key.(types.GoalStateKey)) {
-			o.ctx.Log("message", "removing goal state from the event map", "key", key)
+			o.ctx.Log("message", "removing goal state from the event map", "key", key.(types.GoalStateKey))
 			o.goalStateEventMap.Delete(key)
 		}
 		return true // continue iterating

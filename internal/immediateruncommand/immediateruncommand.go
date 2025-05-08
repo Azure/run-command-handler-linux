@@ -72,7 +72,9 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 	var goalStateKeys []types.GoalStateKey
 	for _, s := range goalStates {
 		for _, setting := range s.Settings {
-			goalStateKeys = append(goalStateKeys, types.GoalStateKey{ExtensionName: *setting.ExtensionName, SeqNumber: *setting.SeqNo})
+			if setting.ExtensionState != nil {
+				goalStateKeys = append(goalStateKeys, types.GoalStateKey{ExtensionName: *setting.ExtensionName, SeqNumber: *setting.SeqNo, RuntimeSettingsState: *setting.ExtensionState})
+			}
 		}
 	}
 	goalStateEventObserver.RemoveProcessedGoalStates(goalStateKeys)
@@ -90,7 +92,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				executingTasks.Increment()
 
 				ctx.Log("message", "adding goal state to the event map")
-				statusKey := types.GoalStateKey{ExtensionName: *state.ExtensionName, SeqNumber: *state.SeqNo}
+				statusKey := types.GoalStateKey{ExtensionName: *state.ExtensionName, SeqNumber: *state.SeqNo, RuntimeSettingsState: *state.ExtensionState}
 				defaultTopStatus := types.StatusItem{}
 				status := types.StatusEventArgs{TopLevelStatus: defaultTopStatus, StatusKey: statusKey}
 
@@ -165,7 +167,7 @@ func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGo
 
 		if validSignature {
 			for _, s := range el.Settings {
-				statusKey := types.GoalStateKey{ExtensionName: *s.ExtensionName, SeqNumber: *s.SeqNo}
+				statusKey := types.GoalStateKey{ExtensionName: *s.ExtensionName, SeqNumber: *s.SeqNo, RuntimeSettingsState: *s.ExtensionState}
 				_, goalStateAlreadyProcessed := goalStateEventObserver.GetStatusForKey(statusKey)
 				if !goalStateAlreadyProcessed {
 					if len(newGoalStates) < maxTasksToFetch {
