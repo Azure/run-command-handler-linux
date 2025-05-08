@@ -38,9 +38,9 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 	err := make(chan error)
 	go startAsync(ctx, setting, notifier, done, err)
 	select {
-	case <-err:
-		ctx.Log("error", "Found error")
-		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(<-err, "error when trying to execute goal state")
+	case e := <-err:
+		ctx.Log("error", fmt.Sprintf("error when trying to execute goal state: %v", e))
+		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(e, "error when trying to execute goal state")
 	case <-done:
 		ctx.Log("message", "goal state successfully finished")
 		return constants.ExitCode_Okay, nil
