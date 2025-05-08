@@ -45,6 +45,7 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 		ctx.Log("message", "goal state successfully finished")
 		return constants.ExitCode_Okay, nil
 	case <-time.After(time.Minute * time.Duration(maxExecutionTimeInMinutes)):
+		ctx.Log("message", "timeout when trying to execute goal state")
 		return constants.ExitCode_ImmediateTaskTimeout, errors.New("timeout when trying to execute goal state")
 	}
 }
@@ -59,9 +60,11 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 		return errors.New("notifier is nil. Cannot report status to HGAP")
 	}
 
-	cmd, ok := commands.Cmds[enableCommand]
+	extensionState := goalStateKey.RuntimeSettingsState
+	cmdToReport := statusToCommandMap[extensionState]
+	cmd, ok := commands.Cmds[cmdToReport]
 	if !ok {
-		return errors.New("missing enable command")
+		return errors.New(fmt.Sprintf("missing command %v", extensionState))
 	}
 
 	if !cmd.ShouldReportStatus {
@@ -98,7 +101,8 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 	extensionState := *setting.ExtensionState
 	ctx.Log("message", fmt.Sprintf("starting command for extension state %v", extensionState))
 
-	cmd, ok := commands.Cmds[extensionState]
+	cmdToReport := statusToCommandMap[extensionState]
+	cmd, ok := commands.Cmds[cmdToReport]
 	if !ok {
 		err <- errors.New(fmt.Sprintf("missing command %v", extensionState))
 		return

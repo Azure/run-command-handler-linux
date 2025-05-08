@@ -119,7 +119,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 						StartTime:        startTime,
 						EndTime:          time.Now().UTC().Format(time.RFC3339),
 					}
-					goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusSkipped, &instView)
+					goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView)
 
 				}
 			}(newGoalStates[idx])
