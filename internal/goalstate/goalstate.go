@@ -90,7 +90,10 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 
 	extensionState := *setting.ExtensionState
 	ctx.Log("message", fmt.Sprintf("starting command for extension state %v", extensionState))
+
 	cmd, ok := commands.Cmds[extensionState]
+	ctx.Log("message", fmt.Sprintf("command to execute %v", cmd))
+	ctx.Log("message", fmt.Sprintf("ok %v", ok))
 	if !ok {
 		err <- errors.New(fmt.Sprintf("missing command %v", extensionState))
 		return
