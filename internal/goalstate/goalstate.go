@@ -19,8 +19,14 @@ import (
 
 const (
 	enableCommand             string = "enable"
+	disableCommand            string = "disable"
 	maxExecutionTimeInMinutes int32  = 90
 )
+
+var statusToCommandMap = map[string]string{
+	"enabled":  enableCommand,
+	"disabled": disableCommand,
+}
 
 // HandleImmediateGoalState handles the immediate goal state by executing the command and waiting for it to finish.
 // ctx: The logger context.
@@ -33,6 +39,7 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 	go startAsync(ctx, setting, notifier, done, err)
 	select {
 	case <-err:
+		ctx.Log("error", "Found error")
 		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(<-err, "error when trying to execute goal state")
 	case <-done:
 		ctx.Log("message", "goal state successfully finished")
@@ -92,8 +99,6 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 	ctx.Log("message", fmt.Sprintf("starting command for extension state %v", extensionState))
 
 	cmd, ok := commands.Cmds[extensionState]
-	ctx.Log("message", fmt.Sprintf("command to execute %v", cmd))
-	ctx.Log("message", fmt.Sprintf("ok %v", ok))
 	if !ok {
 		err <- errors.New(fmt.Sprintf("missing command %v", extensionState))
 		return
