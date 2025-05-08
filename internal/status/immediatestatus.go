@@ -94,6 +94,11 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 }
 
 func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevelStatus) error {
+	if len(immediateStatus.AggregateHandlerImmediateStatus) == 0 {
+		o.ctx.Log("message", "No immediate status to report")
+		return nil
+	}
+
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
 	if err != nil {
