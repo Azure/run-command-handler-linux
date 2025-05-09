@@ -314,8 +314,10 @@ func Test_removeProcessedGoalStates_RemoveAll(t *testing.T) {
 
 func Test_removeProcessedGoalStates_RemoveNone(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	ctx.Log("msg", "Creating status observer")
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
+	observer.Reporter = statusreporter.TestGuestInformationClient{Endpoint: "localhost:3000/upload"}
 
 	ctx.Log("message", "Adding goal states to the event map")
 	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, types.StatusItem{})
@@ -337,8 +339,10 @@ func Test_removeProcessedGoalStates_RemoveNone(t *testing.T) {
 
 func Test_removeProcessedGoalStates_RemoveOne(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	ctx.Log("msg", "Creating status observer")
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
+	observer.Reporter = statusreporter.TestGuestInformationClient{Endpoint: "localhost:3000/upload"}
 
 	ctx.Log("message", "Adding goal states to the event map")
 	observer.goalStateEventMap.Store(types.GoalStateKey{SeqNumber: 1, ExtensionName: "testExtension"}, types.StatusItem{})
