@@ -51,10 +51,14 @@ func (o *StatusObserver) Initialize(ctx *log.Context) {
 	o.Reporter = statusreporter.NewGuestInformationServiceClient(hostgacommunicator.WireServerFallbackAddress)
 }
 
+func (o *StatusObserver) OnDemandNotify() error {
+	return o.reportImmediateStatus(o.getImmediateTopLevelStatusToReport())
+}
+
 func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
 	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
-	return o.reportImmediateStatus(o.getImmediateTopLevelStatusToReport())
+	return o.OnDemandNotify()
 }
 
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
@@ -93,11 +97,6 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 }
 
 func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevelStatus) error {
-	if len(immediateStatus.AggregateHandlerImmediateStatus[0].AggregateImmediateStatus) == 0 {
-		o.ctx.Log("message", "No immediate status to report")
-		return nil
-	}
-
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
 	if err != nil {
@@ -129,6 +128,8 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 			parsedKey := key.(types.GoalStateKey)
 			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in the new list of goal states. Removing it from the event map.", parsedKey))
 			o.goalStateEventMap.Delete(key)
+			o.OnDemandNotify()
+
 		}
 		return true // continue iterating
 	})
