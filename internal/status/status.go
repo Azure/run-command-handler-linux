@@ -24,7 +24,7 @@ func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, me
 		return nil
 	}
 
-	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, true)
+	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, true, metadata.ExtName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get json for status report")
 	}
@@ -68,9 +68,9 @@ func SaveStatusReport(statusFolder string, extName string, seqNo int, rootStatus
 	return nil
 }
 
-func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool) ([]byte, error) {
+func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string) ([]byte, error) {
 	ctx.Log("message", "creating json to report status")
-	statusReport := types.NewStatusReport(statusType, c.Name, msg)
+	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName)
 
 	b, err := MarshalStatusReportIntoJson(statusReport, indent)
 	if err != nil {
@@ -82,9 +82,9 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 
 // getSingleStatusItem returns a single status item for the given status type, command, and message.
 // This is useful when only a single status item is needed for an immediate status report.
-func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string) (types.StatusItem, error) {
+func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, extName string) (types.StatusItem, error) {
 	ctx.Log("message", "creating json to report status")
-	statusReport := types.NewStatusReport(statusType, c.Name, msg)
+	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName)
 	if len(statusReport) != 1 {
 		return types.StatusItem{}, errors.New("expected a single status item")
 	}

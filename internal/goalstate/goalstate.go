@@ -77,7 +77,7 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 		return errors.Wrapf(err, "failed to marshal instance view")
 	}
 
-	statusItem, err := status.GetSingleStatusItem(ctx, statusType, cmd, string(msg))
+	statusItem, err := status.GetSingleStatusItem(ctx, statusType, cmd, string(msg), goalStateKey.ExtensionName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get status item")
 	}
@@ -115,7 +115,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 			return nil
 		}
 
-		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg)
+		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg, metadata.ExtName)
 		if err != nil {
 			return errors.Wrap(err, "failed to get status item")
 		}

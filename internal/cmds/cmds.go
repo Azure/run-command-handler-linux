@@ -544,7 +544,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 				continue
 			}
 
-			statusReport := types.NewStatusReport(types.StatusSuccess, "Enable", instanceViewMessage)
+			statusReport := types.NewStatusReport(types.StatusSuccess, "Enable", instanceViewMessage, extensionName)
 			rootStatusJson, err = status.MarshalStatusReportIntoJson(statusReport, true)
 			if err != nil {
 				errorMessage = fmt.Sprintf("failed to marshal status report into json for status file '%s' with error '%s'", statusFilePath, err.Error())
