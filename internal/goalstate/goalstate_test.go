@@ -28,8 +28,9 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 	notifier.Register(obs)
 
 	goalStateKey := types.GoalStateKey{
-		ExtensionName: "test",
-		SeqNumber:     1,
+		ExtensionName:        "test",
+		SeqNumber:            1,
+		RuntimeSettingsState: "enabled",
 	}
 
 	errorMsg := "Test error message"

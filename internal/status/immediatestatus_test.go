@@ -116,11 +116,11 @@ func Test_getImmediateTopLevelStatusToReport_filterNone(t *testing.T) {
 	require.Equal(t, 1, len(immediateTopLevelStatus.AggregateHandlerImmediateStatus), "Only one handler should be reported in the immediate status")
 
 	for _, handler := range immediateTopLevelStatus.AggregateHandlerImmediateStatus {
-		require.Equal(t, "RunCommandHandler", handler.HandlerName, "Handler name should be the same")
+		require.Equal(t, "Microsoft.CPlat.Core.RunCommandHandlerLinux", handler.HandlerName, "Handler name should be the same")
 		require.Equal(t, len(goalStateKeys), len(handler.AggregateImmediateStatus), "All goal states should be reported")
 		for _, immediateStatus := range handler.AggregateImmediateStatus {
-			require.Equal(t, nonEmptyStatus, immediateStatus.Status, "Status should be the same")
-			require.Equal(t, immediateStatus.TimestampUTC, immediateStatus.Status.TimestampUTC, "Timestamp should be the same")
+			require.Equal(t, nonEmptyStatus.Status, immediateStatus.Status, "Status should be the same")
+			require.Equal(t, immediateStatus.TimestampUTC, immediateStatus.TimestampUTC, "Timestamp should be the same")
 			require.Contains(t, goalStateKeys, types.GoalStateKey{SeqNumber: immediateStatus.SequenceNumber, ExtensionName: "testExtension"}, "Sequence number should be the same")
 		}
 	}
@@ -147,7 +147,7 @@ func Test_getImmediateTopLevelStatusToReport_filterAllWithEmptyStatus(t *testing
 	require.Equal(t, 1, len(immediateTopLevelStatus.AggregateHandlerImmediateStatus), "Only one handler should be reported in the immediate status")
 
 	for _, handler := range immediateTopLevelStatus.AggregateHandlerImmediateStatus {
-		require.Equal(t, "RunCommandHandler", handler.HandlerName, "Handler name should be the same")
+		require.Equal(t, "Microsoft.CPlat.Core.RunCommandHandlerLinux", handler.HandlerName, "Handler name should be the same")
 		require.Equal(t, 0, len(handler.AggregateImmediateStatus), "No goal states should be reported")
 	}
 }
@@ -195,11 +195,11 @@ func Test_getImmediateTopLevelStatusToReport_filterSomeWithEmptyStatus(t *testin
 	require.Equal(t, 1, len(immediateTopLevelStatus.AggregateHandlerImmediateStatus), "Only one handler should be reported in the immediate status")
 
 	for _, handler := range immediateTopLevelStatus.AggregateHandlerImmediateStatus {
-		require.Equal(t, "RunCommandHandler", handler.HandlerName, "Handler name should be the same")
+		require.Equal(t, "Microsoft.CPlat.Core.RunCommandHandlerLinux", handler.HandlerName, "Handler name should be the same")
 		require.Equal(t, len(nonEmptyGoalStateKeys), len(handler.AggregateImmediateStatus), "All goal states should be reported")
 		for _, immediateStatus := range handler.AggregateImmediateStatus {
-			require.Equal(t, nonEmptyStatus, immediateStatus.Status, "Status should be the same")
-			require.Equal(t, immediateStatus.TimestampUTC, immediateStatus.Status.TimestampUTC, "Timestamp should be the same")
+			require.Equal(t, nonEmptyStatus.Status, immediateStatus.Status, "Status should be the same")
+			require.Equal(t, immediateStatus.TimestampUTC, immediateStatus.TimestampUTC, "Timestamp should be the same")
 			require.Contains(t, nonEmptyGoalStateKeys, types.GoalStateKey{SeqNumber: immediateStatus.SequenceNumber, ExtensionName: "testExtension"}, "Sequence number should be the same")
 		}
 	}
@@ -219,7 +219,7 @@ func Test_reportStatusToEndpointOk(t *testing.T) {
 					{
 						SequenceNumber: 1,
 						TimestampUTC:   "2021-09-01T12:00:00Z",
-						Status:         types.StatusItem{},
+						Status:         types.Status{},
 					},
 				},
 			},
@@ -246,7 +246,7 @@ func Test_reportStatusToEndpointNotFound(t *testing.T) {
 					{
 						SequenceNumber: 1,
 						TimestampUTC:   "2021-09-01T12:00:00Z",
-						Status:         types.StatusItem{},
+						Status:         types.Status{},
 					},
 				},
 			},

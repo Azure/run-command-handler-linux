@@ -69,7 +69,7 @@ func Test_reportStatus_checksIfShouldBeReported(t *testing.T) {
 func Test_getSingleStatusItem(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	msgToReport := "Final message to report"
-	statusItem, err := GetSingleStatusItem(ctx, types.StatusSuccess, types.CmdEnableTemplate, msgToReport)
+	statusItem, err := GetSingleStatusItem(ctx, types.StatusSuccess, types.CmdEnableTemplate, msgToReport, "test")
 	require.Nil(t, err, "GetSingleStatusItem should not return an error")
 	require.NotNil(t, statusItem, "GetSingleStatusItem should return a status item")
 	require.Equal(t, types.StatusSuccess, statusItem.Status.Status, "GetSingleStatusItem should return a status item with the correct status")
