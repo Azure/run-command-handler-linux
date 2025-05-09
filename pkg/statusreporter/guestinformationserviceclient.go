@@ -8,11 +8,12 @@ import (
 	"net/http"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
 type IGuestInformationServiceClient interface {
-	ReportStatus(statusToUpload string) (*http.Response, error)
+	ReportStatus(ctx *log.Context, statusToUpload string) (*http.Response, error)
 	GetEndpoint() string
 	GetPutStatusUri() string
 }
@@ -33,10 +34,10 @@ func (c GuestInformationServiceClient) GetPutStatusUri() string {
 	return fmt.Sprintf(constants.PutImmediateStatusFormatString, c.GetEndpoint())
 }
 
-func (c GuestInformationServiceClient) ReportStatus(statusToUpload string) (*http.Response, error) {
+func (c GuestInformationServiceClient) ReportStatus(ctx *log.Context, statusToUpload string) (*http.Response, error) {
 	if statusToUpload == "" {
 		return nil, errors.New("provided status to upload is empty")
 	}
 
-	return ReportStatus(c.GetPutStatusUri(), statusToUpload)
+	return ReportStatus(ctx, c.GetPutStatusUri(), statusToUpload)
 }

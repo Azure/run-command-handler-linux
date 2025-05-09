@@ -82,7 +82,6 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	})
 
 	o.ctx.Log("message", "Creating immediate status to report")
-	o.ctx.Log("message", fmt.Sprintf("Payload for immediate status to report: %v", latestStatusToReport))
 	return ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
 			{
@@ -101,13 +100,12 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
-	o.ctx.Log("message", fmt.Sprintf("Payload for immediate status to report: %v", string(rootStatusJson)))
 	if err != nil {
 		return fmt.Errorf("status: failed to marshal immediate status into json: %v", err)
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
-	response, err := o.Reporter.ReportStatus(string(rootStatusJson))
+	response, err := o.Reporter.ReportStatus(o.ctx, string(rootStatusJson))
 
 	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 	if err != nil {

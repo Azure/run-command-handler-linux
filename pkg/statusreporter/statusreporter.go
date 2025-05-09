@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
@@ -13,14 +14,16 @@ type PutStatusRequest struct {
 	Content string
 }
 
-func ReportStatus(putStatusEndpoint string, statusToUpload string) (*http.Response, error) {
+func ReportStatus(ctx *log.Context, putStatusEndpoint string, statusToUpload string) (*http.Response, error) {
 	// If the statusToUpload is empty, the above call to create the blob will clear out the
 	// contents of the blob and set it to empty. We can return now.
 	if statusToUpload == "" {
 		return nil, nil
 	}
 
+	ctx.Log("message", "status to upload", "status", statusToUpload)
 	requestContent := PutStatusRequest{Content: base64.StdEncoding.EncodeToString([]byte(statusToUpload))}
+	ctx.Log("message", "request content", "content", requestContent)
 	serializedRequestContent, err := json.Marshal(requestContent)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal PutStatusRequest")
