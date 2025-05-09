@@ -93,6 +93,8 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 // The function to report status is overwritten to report the status to the HGAP. The notifier is used to send the status to the HGAP.
 // The function to cleanup the command is overwritten to cleanup the command immediately after it has been executed.
 func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
+	err <- errors.New("Error on purpose for testing")
+	return
 	if notifier == nil {
 		err <- errors.New("notifier is nil. Cannot report status to HGAP")
 		return

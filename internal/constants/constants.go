@@ -51,4 +51,7 @@ const (
 	// The path of the extension in the VM with full name. This value is provided by the agent for all commands.
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
 	ExtensionPathEnvName = "AZURE_GUEST_AGENT_EXTENSION_PATH"
+
+	// The name of the immediate run command service
+	ImmediateRunCommandHandlerName = "runCommandService"
 )

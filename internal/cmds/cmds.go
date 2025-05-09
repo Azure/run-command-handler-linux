@@ -88,11 +88,7 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
 	extensionHandlerName := commandProcessor.GetExtensionName(ctx)
-	ctx.Log("event", "disable", "extensionHandlerName", extensionHandlerName)
-	ctx.Log("message", fmt.Sprintf("disable called for extension %s", extensionHandlerName))
-	return "", "", nil, constants.ExitCode_Okay
-
-	if extensionHandlerName == "" {
+	if extensionHandlerName == constants.ImmediateRunCommandHandlerName {
 		exitCode, err := immediatecmds.Disable(ctx, h, metadata.ExtName, metadata.SeqNum)
 		if err != nil {
 			return "", "", err, exitCode
