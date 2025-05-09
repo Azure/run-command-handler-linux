@@ -54,4 +54,7 @@ const (
 
 	// The name of the immediate run command service
 	ImmediateRunCommandHandlerName = "runCommandService"
+
+	// The time to wait between each poll of the goal states
+	PolingIntervalInSeconds = 1
 )

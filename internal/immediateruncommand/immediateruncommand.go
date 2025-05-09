@@ -42,6 +42,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 	communicator := hostgacommunicator.NewHostGACommunicator(vmRequestManager)
 	goalStateEventObserver.Initialize(ctx)
 
+	ctx.Log("message", fmt.Sprintf("Polling for goal state every %v seconds", constants.PolingIntervalInSeconds))
 	for {
 		ctx.Log("message", "processing new immediate run command goal states. Last processed ETag: "+lastProcessedETag)
 		newProcessedETag, err := processImmediateRunCommandGoalStates(ctx, communicator, lastProcessedETag)
@@ -52,6 +53,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 			time.Sleep(time.Second * time.Duration(5))
 		} else {
 			lastProcessedETag = newProcessedETag
+			time.Sleep(time.Second * time.Duration(constants.PolingIntervalInSeconds))
 		}
 	}
 }
@@ -67,6 +69,11 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 	goalStates, newEtag, err := goalstate.GetImmediateRunCommandGoalStates(ctx, &communicator, lastProcessedETag)
 	if err != nil {
 		return newEtag, errors.Wrapf(err, "could not retrieve goal states for immediate run command")
+	}
+
+	// VMSettings has not changed and we should not process any new goal states
+	if newEtag == lastProcessedETag {
+		return newEtag, nil
 	}
 
 	var goalStateKeys []types.GoalStateKey
