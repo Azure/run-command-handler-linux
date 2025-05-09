@@ -71,7 +71,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		return newEtag, errors.Wrapf(err, "could not retrieve goal states for immediate run command")
 	}
 
-	// VMSettings has not changed and we should not process any new goal states
+	// VM Settings have not changed and we should not process any new goal states
 	if newEtag == lastProcessedETag {
 		return newEtag, nil
 	}
