@@ -97,6 +97,7 @@ func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 
 	ctx.Log("event", "disable")
 	pid.KillPreviousExtension(ctx, metadata.PidFilePath)
+	resetSeqNum(ctx, metadata.MostRecentSequence)
 	return "", "", nil, constants.ExitCode_Okay
 }
 
@@ -339,10 +340,20 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 	return false, nil
 }
 
+// resetSeqNum deletes the seqNum file to reset the sequence number
+func resetSeqNum(ctx log.Logger, mrseqPath string) error {
+	ctx.Log("event", "resetting seqnum by deleting file", "path", mrseqPath)
+	err := os.Remove(mrseqPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to reset sequence number")
+	}
+	return err
+}
+
 // Copy state of the extension from old version to new version during update (.mrseq files, .status files)
 func CopyStateForUpdate(ctx log.Logger) error {
 	// Copy .mrseq files (Most Recently executed Sequence number) that helps determine whether a sequence number of Run Command has been previously executed or not.
-	mrseqFilesNameList, mrseqFileCopyErr := copyFiles(ctx, ".mrseq", "")
+	mrseqFilesNameList, mrseqFileCopyErr := copyFiles(ctx, constants.MrSeqFileExtension, "")
 	if mrseqFileCopyErr != nil {
 		return mrseqFileCopyErr
 	}
