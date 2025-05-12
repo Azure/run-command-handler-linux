@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -63,6 +64,55 @@ func SaveStatusReport(statusFolder string, extName string, seqNo int, rootStatus
 
 	if err := os.Rename(tmpFile.Name(), path); err != nil {
 		return fmt.Errorf("status: failed to move to path=%s error=%v", path, err)
+	}
+
+	return nil
+}
+
+func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState []ImmediateStatus) error {
+	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
+	immediateStatusFolder := filepath.Join(newExtensionDirectory, constants.ImmediateStatusFileDirectory)
+
+	ctx.Log("message", "saving goal states in terminal state to file")
+	statusFile := filepath.Join(immediateStatusFolder, constants.ImmediateGoalStatesInTerminalStatusFileName)
+	tempStatusFile := statusFile + ".tmp"
+	content := newStatusInTerminalState
+
+	if _, err := os.Stat(statusFile); err == nil {
+		ctx.Log("message", "status file already exists. Reading the content")
+		fileContent, err := os.ReadFile(statusFile)
+		if err != nil {
+			return fmt.Errorf("status: failed to read status file: %v", err)
+		}
+
+		ctx.Log("message", "unmarshalling the content of the status file")
+		if err := json.Unmarshal(fileContent, &content); err != nil {
+			return fmt.Errorf("status: failed to unmarshal status file: %v", err)
+		}
+
+		ctx.Log("message", "appending new status to the content")
+		content = append(content, newStatusInTerminalState...)
+	}
+
+	ctx.Log("message", "marshalling the content to json")
+	rootStatusJson, err := json.MarshalIndent(content, "", "\t")
+	if err != nil {
+		return fmt.Errorf("status: failed to marshal status report into json: %v", err)
+	}
+
+	ctx.Log("message", "writing the content to the temporary status file")
+	if err := os.WriteFile(tempStatusFile, rootStatusJson, 0644); err != nil {
+		return fmt.Errorf("status: failed to write status file: %v", err)
+	}
+
+	ctx.Log("message", "moving the temporary status file to the final status file")
+	if err := os.Rename(tempStatusFile, statusFile); err != nil {
+		return fmt.Errorf("status: failed to move status file: %v", err)
+	}
+
+	ctx.Log("message", "removing the temporary status file")
+	if err := os.Remove(tempStatusFile); err != nil {
+		return fmt.Errorf("status: failed to remove temporary status file: %v", err)
 	}
 
 	return nil

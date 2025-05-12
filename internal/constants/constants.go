@@ -25,6 +25,9 @@ const (
 
 	StatusFileDirectory = "status"
 
+	// The directory where the immediate run command status that have reached the terminal status are stored.
+	ImmediateStatusFileDirectory = "status"
+
 	// General failed exit code when extension provisioning fails due to service errors.
 	FailedExitCodeGeneral = -1
 
@@ -57,4 +60,7 @@ const (
 
 	// The time to wait between each poll of the goal states
 	PolingIntervalInSeconds = 1
+
+	// The name of the file that contains the immediate goal states that reached the terminal status
+	ImmediateGoalStatesInTerminalStatusFileName = "immediateGoalStatesInTerminalStatusFile.json"
 )

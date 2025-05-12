@@ -64,6 +64,7 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
 	latestStatusToReport := []ImmediateStatus{}
+
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
 		if value.(types.StatusItem) != (types.StatusItem{}) {
@@ -122,17 +123,41 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 // If the goal state that was added before is not in the new list of goal states, it should be removed
 // This is to ensure that the event map only contains the goal states that are currently being processed
 func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalStateKey) {
-	// TODO: Eventually we'll need to report also already processed goal states to the HGAP even if they are not in the new list.
+	statusInTerminalState := []ImmediateStatus{}
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		if !slices.Contains(goalStateKeys, key.(types.GoalStateKey)) {
-			parsedKey := key.(types.GoalStateKey)
-			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in the new list of goal states. Removing it from the event map.", parsedKey))
+			goalStateKey := key.(types.GoalStateKey)
+			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in the new list of goal states. Removing it from the event map.", goalStateKey))
 			o.goalStateEventMap.Delete(key)
-			o.OnDemandNotify()
 
+			if goalStateKey.RuntimeSettingsState != "disabled" {
+				statusItem := value.(types.StatusItem)
+				immediateStatus := ImmediateStatus{
+					SequenceNumber: goalStateKey.SeqNumber,
+					TimestampUTC:   statusItem.TimestampUTC,
+					Status:         statusItem.Status,
+				}
+				statusInTerminalState = append(statusInTerminalState, immediateStatus)
+			} else {
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
+			}
 		}
 		return true // continue iterating
 	})
+
+	o.ctx.Log("message", fmt.Sprintf("Found %v goal states in terminal state", len(statusInTerminalState)))
+	if len(statusInTerminalState) > 0 {
+		o.ctx.Log("message", "Storing the goal states in terminal state in a local file")
+		err := SaveGoalStatesInTerminalStatus(o.ctx, statusInTerminalState)
+		if err != nil {
+			o.ctx.Log("error", "failed to save status report for terminal state goal states. Proceeding to report it manually to HGAP", "message", err)
+		} else {
+			o.ctx.Log("message", "Successfully saved status report for terminal state goal states")
+		}
+
+		o.ctx.Log("message", "Reporting the goal states in terminal state to HGAP")
+		o.OnDemandNotify()
+	}
 }
 
 func (o *StatusObserver) GetStatusForKey(key types.GoalStateKey) (types.StatusItem, bool) {
