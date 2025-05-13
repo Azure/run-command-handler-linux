@@ -128,7 +128,6 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 		if !slices.Contains(goalStateKeys, key.(types.GoalStateKey)) {
 			goalStateKey := key.(types.GoalStateKey)
 			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in the new list of goal states. Removing it from the event map.", goalStateKey))
-			o.goalStateEventMap.Delete(key)
 
 			if goalStateKey.RuntimeSettingsState != "disabled" {
 				statusItem := value.(types.StatusItem)
@@ -138,6 +137,7 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 					Status:         statusItem.Status,
 				}
 				statusInTerminalState = append(statusInTerminalState, immediateStatus)
+				o.goalStateEventMap.Delete(key)
 			} else {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
 			}
