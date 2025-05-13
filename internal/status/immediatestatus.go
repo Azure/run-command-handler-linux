@@ -140,6 +140,7 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 				o.goalStateEventMap.Delete(key)
 			} else {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
+				o.goalStateEventMap.Delete(key)
 			}
 		}
 		return true // continue iterating
