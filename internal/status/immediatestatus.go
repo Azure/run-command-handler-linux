@@ -57,6 +57,7 @@ func (o *StatusObserver) OnDemandNotify() error {
 
 func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
+	o.ctx.Log("message", fmt.Sprintf("Full Top Level Status: %v", status.TopLevelStatus))
 	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
 	return o.OnDemandNotify()
 }
