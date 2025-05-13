@@ -86,16 +86,18 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 		}
 
 		ctx.Log("message", "unmarshalling the content of the status file")
-		if err := json.Unmarshal(fileContent, &content); err != nil {
+		var existingStatus []ImmediateStatus
+		if err := json.Unmarshal(fileContent, &existingStatus); err != nil {
 			return fmt.Errorf("status: failed to unmarshal status file: %v", err)
 		}
 
-		ctx.Log("message", "appending new status to the content")
-		content = append(content, newStatusInTerminalState...)
+		ctx.Log("message", "merging the new status with the existing content")
+		content = append(existingStatus, content...)
 	}
 
 	ctx.Log("message", "marshalling the content to json")
 	rootStatusJson, err := json.MarshalIndent(content, "", "\t")
+	ctx.Log("message", "rootStatusJson", string(rootStatusJson))
 	if err != nil {
 		return fmt.Errorf("status: failed to marshal status report into json: %v", err)
 	}
@@ -105,14 +107,9 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 		return fmt.Errorf("status: failed to write status file: %v", err)
 	}
 
-	ctx.Log("message", "moving the temporary status file to the final status file")
+	ctx.Log("message", "Renaming the temporary status file to the final status file")
 	if err := os.Rename(tempStatusFile, statusFile); err != nil {
 		return fmt.Errorf("status: failed to move status file: %v", err)
-	}
-
-	ctx.Log("message", "removing the temporary status file")
-	if err := os.Remove(tempStatusFile); err != nil {
-		return fmt.Errorf("status: failed to remove temporary status file: %v", err)
 	}
 
 	return nil
