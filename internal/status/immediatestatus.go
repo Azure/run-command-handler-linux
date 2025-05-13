@@ -3,9 +3,12 @@ package status
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
@@ -63,7 +66,10 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
-	latestStatusToReport := []ImmediateStatus{}
+	latestStatusToReport, err := getGoalStatesInTerminalStatus(o.ctx)
+	if err != nil {
+		o.ctx.Log("error", "failed to get goal states in terminal status from file. Proceeding to report the latest status from the event map", "message", err)
+	}
 
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
@@ -95,6 +101,39 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 			},
 		},
 	}
+}
+
+// getGoalStatesInTerminalStatus retrieves the goal states in terminal status from the file
+// The file is located in the extension directory under the immediate status folder
+func getGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) {
+	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
+	immediateStatusFolder := filepath.Join(newExtensionDirectory, constants.ImmediateStatusFileDirectory)
+
+	ctx.Log("message", "getting goal states in terminal status from file")
+	statusFile := filepath.Join(immediateStatusFolder, constants.ImmediateGoalStatesInTerminalStatusFileName)
+	result := []ImmediateStatus{}
+
+	if _, err := os.Stat(statusFile); err == nil {
+		ctx.Log("message", "status file already exists. Reading the content")
+		fileContent, err := os.ReadFile(statusFile)
+		if err != nil {
+			return result, fmt.Errorf("status: failed to read status file: %v", err)
+		}
+
+		ctx.Log("message", "unmarshalling the content of the status file")
+		var existingStatus []ImmediateStatus
+		if err := json.Unmarshal(fileContent, &existingStatus); err != nil {
+			return result, fmt.Errorf("status: failed to unmarshal status file: %v", err)
+		}
+
+		ctx.Log("message", "merging the new status with the existing content")
+		result = existingStatus
+		ctx.Log("message", fmt.Sprintf("Found %v goal states in terminal state", len(result)))
+	} else {
+		ctx.Log("message", "status file does not exist. No goal states in terminal status")
+	}
+
+	return result, nil
 }
 
 func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevelStatus) error {
