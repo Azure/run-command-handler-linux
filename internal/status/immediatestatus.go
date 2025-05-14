@@ -63,7 +63,7 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	latestStatusToReport := []ImmediateStatus{}
-	goalStateKeysToRemove := []types.GoalStateKey{}
+	goalStateKeysToCheckToRemove := []types.GoalStateKey{}
 
 	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty or disabled")
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
@@ -79,18 +79,19 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 					Status:         statusItem.Status,
 				}
 				latestStatusToReport = append(latestStatusToReport, immediateStatus)
+				goalStateKeysToCheckToRemove = append(goalStateKeysToCheckToRemove, goalStateKey)
 			} else {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is empty. Not reporting status.", goalStateKey))
 			}
 		} else {
 			o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
-			goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
+			goalStateKeysToCheckToRemove = append(goalStateKeysToCheckToRemove, goalStateKey)
 		}
 
 		return true
 	})
 
-	err := RemoveDisabledGoalStatesAndUpdateLocalStatusFile(o.ctx, goalStateKeysToRemove)
+	err := RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(o.ctx, goalStateKeysToCheckToRemove)
 	if err != nil {
 		o.ctx.Log("error", "failed to remove disabled goal states from the local status file", "message", err)
 	}
@@ -149,6 +150,7 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 			goalStateKey := key.(types.GoalStateKey)
 			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in the new list of goal states. Removing it from the event map.", goalStateKey))
 
+			goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
 			if goalStateKey.RuntimeSettingsState != "disabled" {
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
@@ -160,7 +162,6 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 				o.goalStateEventMap.Delete(key)
 			} else {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status to indicate HGAP that it is disabled.", goalStateKey))
-				goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
 				o.goalStateEventMap.Delete(key)
 			}
 		}
@@ -169,7 +170,7 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 
 	// This should not occur since the goal state keys are already removed from the event map but adding this for safety
 	// in case the previous attempt to remove the goal state keys from the local status file failed
-	err := RemoveDisabledGoalStatesAndUpdateLocalStatusFile(o.ctx, goalStateKeysToRemove)
+	err := RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(o.ctx, goalStateKeysToRemove)
 	if err != nil {
 		o.ctx.Log("error", "failed to remove disabled goal states from the local status file", "message", err)
 	}

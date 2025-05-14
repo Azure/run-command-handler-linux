@@ -129,21 +129,31 @@ func GetGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) 
 	return result, nil
 }
 
-// RemoveDisabledGoalStatesAndUpdateLocalStatusFile removes the disabled goal states from the statusInTerminalState list
-// and updates the local status file with the new list. This avoid reporting disabled goal states to the HGAP.
-func RemoveDisabledGoalStatesAndUpdateLocalStatusFile(ctx *log.Context, goalStateKeysToRemove []types.GoalStateKey) error {
+// GetGoalStatesInTerminalStatus retrieves the goal states in terminal status from the file
+// Then it removes the disabled goal states and updated goal states from the list
+// This avoid reporting disabled goal states to the HGAP and also avoid reporting blocking the communication channel when the goal state is updated
+func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalStateKeysToRemove []types.GoalStateKey) error {
 	if len(goalStateKeysToRemove) > 0 {
 		statusInTerminalState, err := GetGoalStatesInTerminalStatus(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to get goal states in terminal status from file")
 		}
 
-		ctx.Log("message", fmt.Sprintf("Removing %v disabled goal states from the statusInTerminalState list", len(goalStateKeysToRemove)))
+		ctx.Log("message", fmt.Sprintf("Checking %v goal states to remove from the statusInTerminalState list", len(goalStateKeysToRemove)))
 		for _, goalStateKey := range goalStateKeysToRemove {
 			if goalStateKey.RuntimeSettingsState == "disabled" {
 				for i, status := range statusInTerminalState {
 					if status.SequenceNumber == goalStateKey.SeqNumber && status.Status.Name == goalStateKey.ExtensionName {
 						ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Removing it from the statusInTerminalState list.", goalStateKey))
+						statusInTerminalState = append(statusInTerminalState[:i], statusInTerminalState[i+1:]...)
+						break
+					}
+				}
+			} else if goalStateKey.RuntimeSettingsState == "enabled" {
+				for i, status := range statusInTerminalState {
+					// If the sequence number is less than the goal state key sequence number, it means that the goal state got updated
+					if status.SequenceNumber < goalStateKey.SeqNumber && status.Status.Name == goalStateKey.ExtensionName {
+						ctx.Log("message", fmt.Sprintf("Goal state %v is updated. Removing it from the statusInTerminalState list.", goalStateKey))
 						statusInTerminalState = append(statusInTerminalState[:i], statusInTerminalState[i+1:]...)
 						break
 					}
