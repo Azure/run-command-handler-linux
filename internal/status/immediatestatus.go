@@ -71,6 +71,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 		if value.(types.StatusItem) != (types.StatusItem{}) {
 			goalStateKey := key.(types.GoalStateKey)
 
+			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
 			if goalStateKey.RuntimeSettingsState != "disabled" {
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
