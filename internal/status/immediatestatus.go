@@ -68,11 +68,10 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty or disabled")
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
-		if value.(types.StatusItem) != (types.StatusItem{}) {
-			goalStateKey := key.(types.GoalStateKey)
-
-			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
-			if goalStateKey.RuntimeSettingsState != "disabled" {
+		goalStateKey := key.(types.GoalStateKey)
+		if goalStateKey.RuntimeSettingsState != "disabled" {
+			if value.(types.StatusItem) != (types.StatusItem{}) {
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
 					SequenceNumber: goalStateKey.SeqNumber,
@@ -81,9 +80,11 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 				}
 				latestStatusToReport = append(latestStatusToReport, immediateStatus)
 			} else {
-				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
-				goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is empty. Not reporting status.", goalStateKey))
 			}
+		} else {
+			o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
+			goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
 		}
 
 		return true
