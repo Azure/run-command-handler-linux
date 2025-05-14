@@ -3,12 +3,9 @@ package status
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"sync"
 
-	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
@@ -65,12 +62,10 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 }
 
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
-	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
-	latestStatusToReport, err := getGoalStatesInTerminalStatus(o.ctx)
-	if err != nil {
-		o.ctx.Log("error", "failed to get goal states in terminal status from file. Proceeding to report the latest status from the event map", "message", err)
-	}
+	latestStatusToReport := []ImmediateStatus{}
+	goalStateKeysToRemove := []types.GoalStateKey{}
 
+	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty or disabled")
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
 		if value.(types.StatusItem) != (types.StatusItem{}) {
@@ -86,11 +81,27 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 				latestStatusToReport = append(latestStatusToReport, immediateStatus)
 			} else {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
+				goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
 			}
 		}
 
 		return true
 	})
+
+	err := RemoveDisabledGoalStatesAndUpdateLocalStatusFile(o.ctx, goalStateKeysToRemove)
+	if err != nil {
+		o.ctx.Log("error", "failed to remove disabled goal states from the local status file", "message", err)
+	}
+
+	statusInTerminalState, err := GetGoalStatesInTerminalStatus(o.ctx)
+	if err != nil {
+		o.ctx.Log("error", "failed to get goal states in terminal status from file. Proceeding to report the latest status from the event map", "message", err)
+	}
+
+	if len(statusInTerminalState) > 0 {
+		o.ctx.Log("message", fmt.Sprintf("Merging %v goal states in terminal state with the latest status to report", len(statusInTerminalState)))
+		latestStatusToReport = append(latestStatusToReport, statusInTerminalState...)
+	}
 
 	o.ctx.Log("message", "Creating immediate status to report")
 	return ImmediateTopLevelStatus{
@@ -101,39 +112,6 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 			},
 		},
 	}
-}
-
-// getGoalStatesInTerminalStatus retrieves the goal states in terminal status from the file
-// The file is located in the extension directory under the immediate status folder
-func getGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) {
-	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
-	immediateStatusFolder := filepath.Join(newExtensionDirectory, constants.ImmediateStatusFileDirectory)
-
-	ctx.Log("message", "getting goal states in terminal status from file")
-	statusFile := filepath.Join(immediateStatusFolder, constants.ImmediateGoalStatesInTerminalStatusFileName)
-	result := []ImmediateStatus{}
-
-	if _, err := os.Stat(statusFile); err == nil {
-		ctx.Log("message", "status file already exists. Reading the content")
-		fileContent, err := os.ReadFile(statusFile)
-		if err != nil {
-			return result, fmt.Errorf("status: failed to read status file: %v", err)
-		}
-
-		ctx.Log("message", "unmarshalling the content of the status file")
-		var existingStatus []ImmediateStatus
-		if err := json.Unmarshal(fileContent, &existingStatus); err != nil {
-			return result, fmt.Errorf("status: failed to unmarshal status file: %v", err)
-		}
-
-		ctx.Log("message", "merging the new status with the existing content")
-		result = existingStatus
-		ctx.Log("message", fmt.Sprintf("Found %v goal states in terminal state", len(result)))
-	} else {
-		ctx.Log("message", "status file does not exist. No goal states in terminal status")
-	}
-
-	return result, nil
 }
 
 func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevelStatus) error {
@@ -162,7 +140,8 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 // If the goal state that was added before is not in the new list of goal states, it should be removed
 // This is to ensure that the event map only contains the goal states that are currently being processed
 func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalStateKey) {
-	statusInTerminalState := []ImmediateStatus{}
+	newStatusInTerminalState := []ImmediateStatus{}
+	goalStateKeysToRemove := []types.GoalStateKey{}
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		if !slices.Contains(goalStateKeys, key.(types.GoalStateKey)) {
 			goalStateKey := key.(types.GoalStateKey)
@@ -175,29 +154,40 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 					TimestampUTC:   statusItem.TimestampUTC,
 					Status:         statusItem.Status,
 				}
-				statusInTerminalState = append(statusInTerminalState, immediateStatus)
+				newStatusInTerminalState = append(newStatusInTerminalState, immediateStatus)
 				o.goalStateEventMap.Delete(key)
 			} else {
-				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status to indicate HGAP that it is disabled.", goalStateKey))
+				goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
 				o.goalStateEventMap.Delete(key)
 			}
 		}
 		return true // continue iterating
 	})
 
-	o.ctx.Log("message", fmt.Sprintf("Found %v goal states in terminal state", len(statusInTerminalState)))
-	if len(statusInTerminalState) > 0 {
-		o.ctx.Log("message", "Storing the goal states in terminal state in a local file")
-		err := SaveGoalStatesInTerminalStatus(o.ctx, statusInTerminalState)
-		if err != nil {
-			o.ctx.Log("error", "failed to save status report for terminal state goal states. Proceeding to report it manually to HGAP", "message", err)
-		} else {
-			o.ctx.Log("message", "Successfully saved status report for terminal state goal states")
-		}
-
-		o.ctx.Log("message", "Reporting the goal states in terminal state to HGAP")
-		o.OnDemandNotify()
+	// This should not occur since the goal state keys are already removed from the event map but adding this for safety
+	// in case the previous attempt to remove the goal state keys from the local status file failed
+	err := RemoveDisabledGoalStatesAndUpdateLocalStatusFile(o.ctx, goalStateKeysToRemove)
+	if err != nil {
+		o.ctx.Log("error", "failed to remove disabled goal states from the local status file", "message", err)
 	}
+
+	statusInTerminalState, err := GetGoalStatesInTerminalStatus(o.ctx)
+	if err != nil {
+		o.ctx.Log("error", "failed to get goal states in terminal status from file.", "message", err)
+	}
+
+	if len(newStatusInTerminalState) > 0 {
+		o.ctx.Log("message", fmt.Sprintf("Merging %v goal states in terminal state with the new status to report", len(newStatusInTerminalState)))
+		statusInTerminalState = append(statusInTerminalState, newStatusInTerminalState...)
+	}
+	err = SaveGoalStatesInTerminalStatus(o.ctx, statusInTerminalState)
+	if err != nil {
+		o.ctx.Log("error", "failed to save goal states in terminal status", "message", err)
+	}
+
+	o.ctx.Log("message", "Notifying the observer to report the status to HGAP")
+	o.OnDemandNotify()
 }
 
 func (o *StatusObserver) GetStatusForKey(key types.GoalStateKey) (types.StatusItem, bool) {

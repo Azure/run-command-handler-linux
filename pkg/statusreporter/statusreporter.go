@@ -19,7 +19,6 @@ func ReportStatus(ctx *log.Context, putStatusEndpoint string, statusToUpload str
 		return nil, nil
 	}
 
-	ctx.Log("message", "status to upload", "status", statusToUpload)
 	return uploadData(putStatusEndpoint, []byte(statusToUpload))
 }
 
