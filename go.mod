@@ -6,9 +6,9 @@ require (
 	github.com/Azure/azure-extension-foundation v0.0.0-20230404211847-9858bdd5c187
 	github.com/Azure/azure-extension-platform v0.0.0-20240610175536-404c704f82f8
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.4.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.10.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.1
 	github.com/ahmetalpbalkan/go-httpbin v0.0.0-20200921172446-862fbad56b77
 	github.com/ahmetb/go-httpbin v0.0.0-20200921172446-862fbad56b77
 	github.com/go-kit/kit v0.13.0
@@ -19,7 +19,7 @@ require (
 )
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.0 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/Azure/go-autorest/autorest v0.11.29 // indirect
 	github.com/Azure/go-autorest/autorest/adal v0.9.24 // indirect
