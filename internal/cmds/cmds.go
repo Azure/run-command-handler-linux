@@ -40,7 +40,7 @@ import (
 
 const (
 	maxScriptSize         = 256 * 1024
-	updateStatusInSeconds = 30
+	updateStatusInSeconds = 15
 )
 
 const (
