@@ -73,6 +73,9 @@ func SaveStatusReport(statusFolder string, extName string, seqNo int, rootStatus
 }
 
 func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState []ImmediateStatus) error {
+	immediateGSInTerminalStatusLock.Lock()
+	defer immediateGSInTerminalStatusLock.Unlock()
+
 	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
 	immediateStatusFolder := filepath.Join(newExtensionDirectory, constants.ImmediateStatusFileDirectory)
 
@@ -87,18 +90,14 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 	}
 
 	ctx.Log("message", "writing the content to the temporary status file")
-	immediateGSInTerminalStatusLock.Lock()
 	err = os.WriteFile(tempStatusFile, rootStatusJson, 0644)
-	defer immediateGSInTerminalStatusLock.Unlock()
 
 	if err != nil {
 		return fmt.Errorf("status: failed to write status file: %v", err)
 	}
 
 	ctx.Log("message", "Renaming the temporary status file to the final status file")
-	immediateGSInTerminalStatusLock.Lock()
 	err = os.Rename(tempStatusFile, statusFile)
-	defer immediateGSInTerminalStatusLock.Unlock()
 
 	if err != nil {
 		return fmt.Errorf("status: failed to move status file: %v", err)
@@ -110,13 +109,14 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 // getGoalStatesInTerminalStatus retrieves the goal states in terminal status from the file
 // The file is located in the extension directory under the immediate status folder
 func GetGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) {
+	immediateGSInTerminalStatusLock.Lock()
+	defer immediateGSInTerminalStatusLock.Unlock()
+
 	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
 	immediateStatusFolder := filepath.Join(newExtensionDirectory, constants.ImmediateStatusFileDirectory)
 
 	ctx.Log("message", "getting goal states in terminal status from file")
-	immediateGSInTerminalStatusLock.Lock()
 	statusFile := filepath.Join(immediateStatusFolder, constants.ImmediateGoalStatesInTerminalStatusFileName)
-	defer immediateGSInTerminalStatusLock.Unlock()
 
 	result := []ImmediateStatus{}
 
