@@ -341,13 +341,9 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 }
 
 // resetSeqNum deletes the seqNum file to reset the sequence number
-func resetSeqNum(ctx log.Logger, mrseqPath string) error {
+func resetSeqNum(ctx log.Logger, mrseqPath string) {
 	ctx.Log("event", "resetting seqnum by deleting file", "path", mrseqPath)
-	err := os.Remove(mrseqPath)
-	if err != nil {
-		return errors.Wrap(err, "failed to reset sequence number")
-	}
-	return err
+	os.Remove(mrseqPath)
 }
 
 // Copy state of the extension from old version to new version during update (.mrseq files, .status files)
