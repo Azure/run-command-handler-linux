@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
+
+var immediateGSInTerminalStatusLock = sync.Mutex{}
 
 // ReportStatusToLocalFile saves operation status to the status file for the extension
 // handler with the optional given message, if the given cmd requires reporting
@@ -84,12 +87,20 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 	}
 
 	ctx.Log("message", "writing the content to the temporary status file")
-	if err := os.WriteFile(tempStatusFile, rootStatusJson, 0644); err != nil {
+	immediateGSInTerminalStatusLock.Lock()
+	err = os.WriteFile(tempStatusFile, rootStatusJson, 0644)
+	defer immediateGSInTerminalStatusLock.Unlock()
+
+	if err != nil {
 		return fmt.Errorf("status: failed to write status file: %v", err)
 	}
 
 	ctx.Log("message", "Renaming the temporary status file to the final status file")
-	if err := os.Rename(tempStatusFile, statusFile); err != nil {
+	immediateGSInTerminalStatusLock.Lock()
+	err = os.Rename(tempStatusFile, statusFile)
+	defer immediateGSInTerminalStatusLock.Unlock()
+
+	if err != nil {
 		return fmt.Errorf("status: failed to move status file: %v", err)
 	}
 
@@ -103,7 +114,10 @@ func GetGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) 
 	immediateStatusFolder := filepath.Join(newExtensionDirectory, constants.ImmediateStatusFileDirectory)
 
 	ctx.Log("message", "getting goal states in terminal status from file")
+	immediateGSInTerminalStatusLock.Lock()
 	statusFile := filepath.Join(immediateStatusFolder, constants.ImmediateGoalStatesInTerminalStatusFileName)
+	defer immediateGSInTerminalStatusLock.Unlock()
+
 	result := []ImmediateStatus{}
 
 	if _, err := os.Stat(statusFile); err == nil {
