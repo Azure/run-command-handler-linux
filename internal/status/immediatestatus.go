@@ -64,6 +64,7 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	latestStatusToReport := []ImmediateStatus{}
 	goalStateKeysToCheckToRemove := []types.GoalStateKey{}
+	newStatusInTerminalState := []ImmediateStatus{}
 
 	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty or disabled")
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
@@ -78,7 +79,16 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 					TimestampUTC:   statusItem.TimestampUTC,
 					Status:         statusItem.Status,
 				}
-				latestStatusToReport = append(latestStatusToReport, immediateStatus)
+
+				if types.IsImmediateGoalStateInTerminalState(statusItem.Status) {
+					o.ctx.Log("message", fmt.Sprintf("Goal state %v is in terminal state. Adding it to the new terminal state list.", goalStateKey))
+					newStatusInTerminalState = append(newStatusInTerminalState, immediateStatus)
+
+					// Remove the goal state from the event map since it is in terminal state. The state will be saved in the local status file.
+					o.goalStateEventMap.Delete(key)
+				} else {
+					latestStatusToReport = append(latestStatusToReport, immediateStatus)
+				}
 				goalStateKeysToCheckToRemove = append(goalStateKeysToCheckToRemove, goalStateKey)
 			} else {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is empty. Not reporting status.", goalStateKey))
@@ -99,6 +109,16 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	statusInTerminalState, err := GetGoalStatesInTerminalStatus(o.ctx)
 	if err != nil {
 		o.ctx.Log("error", "failed to get goal states in terminal status from file. Proceeding to report the latest status from the event map", "message", err)
+	}
+
+	if len(newStatusInTerminalState) > 0 {
+		o.ctx.Log("message", fmt.Sprintf("Merging %v goal states in terminal state with local file status", len(newStatusInTerminalState)))
+		statusInTerminalState = append(statusInTerminalState, newStatusInTerminalState...)
+
+		err = SaveGoalStatesInTerminalStatus(o.ctx, statusInTerminalState)
+		if err != nil {
+			o.ctx.Log("error", "failed to save goal states in terminal status", "message", err)
+		}
 	}
 
 	if len(statusInTerminalState) > 0 {
