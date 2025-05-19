@@ -125,6 +125,7 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
+	o.ctx.Log("message", "status json: "+string(rootStatusJson))
 	response, err := o.Reporter.ReportStatus(o.ctx, string(rootStatusJson))
 
 	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
