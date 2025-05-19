@@ -87,6 +87,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 					// Remove the goal state from the event map since it is in terminal state. The state will be saved in the local status file.
 					o.goalStateEventMap.Delete(key)
 				} else {
+					o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in terminal state. Adding it to the latest status to report.", goalStateKey))
 					latestStatusToReport = append(latestStatusToReport, immediateStatus)
 				}
 				goalStateKeysToCheckToRemove = append(goalStateKeysToCheckToRemove, goalStateKey)

@@ -44,8 +44,7 @@ func (instanceView RunCommandInstanceView) Marshal() ([]byte, error) {
 }
 
 func IsImmediateGoalStateInTerminalState(s Status) bool {
-	return s.Status == Failed ||
-		s.Status == Succeeded ||
-		s.Status == TimedOut ||
-		s.Status == Canceled
+	return s.Status == StatusSuccess ||
+		s.Status == StatusError ||
+		s.Status == StatusSkipped
 }
