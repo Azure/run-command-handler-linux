@@ -62,5 +62,5 @@ const (
 	PolingIntervalInSeconds = 1
 
 	// The name of the file that contains the immediate goal states that reached the terminal status
-	ImmediateGoalStatesInTerminalStatusFileName = "immediateGoalStatesInTerminalStatusFile.json"
+	ImmediateGoalStatesInTerminalStatusFileName = "immediateGoalStatesInTerminalStatusFile.status"
 )
