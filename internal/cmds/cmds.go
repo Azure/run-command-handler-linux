@@ -20,6 +20,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
+	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/files"
@@ -39,7 +40,7 @@ import (
 
 const (
 	maxScriptSize         = 256 * 1024
-	updateStatusInSeconds = 30
+	updateStatusInSeconds = 15
 )
 
 const (
@@ -86,13 +87,17 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 }
 
 func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
-	exitCode, err := immediatecmds.Disable(ctx, h, metadata.ExtName, metadata.SeqNum)
-	if err != nil {
-		return "", "", err, exitCode
+	extensionHandlerName := commandProcessor.GetExtensionName(ctx)
+	if extensionHandlerName == constants.ImmediateRunCommandHandlerName {
+		exitCode, err := immediatecmds.Disable(ctx, h, metadata.ExtName, metadata.SeqNum)
+		if err != nil {
+			return "", "", err, exitCode
+		}
 	}
 
 	ctx.Log("event", "disable")
 	pid.KillPreviousExtension(ctx, metadata.PidFilePath)
+	resetSeqNum(ctx, metadata.MostRecentSequence)
 	return "", "", nil, constants.ExitCode_Okay
 }
 
@@ -335,10 +340,16 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 	return false, nil
 }
 
+// resetSeqNum deletes the seqNum file to reset the sequence number
+func resetSeqNum(ctx log.Logger, mrseqPath string) {
+	ctx.Log("event", "resetting seqnum by deleting file", "path", mrseqPath)
+	os.Remove(mrseqPath)
+}
+
 // Copy state of the extension from old version to new version during update (.mrseq files, .status files)
 func CopyStateForUpdate(ctx log.Logger) error {
 	// Copy .mrseq files (Most Recently executed Sequence number) that helps determine whether a sequence number of Run Command has been previously executed or not.
-	mrseqFilesNameList, mrseqFileCopyErr := copyFiles(ctx, ".mrseq", "")
+	mrseqFilesNameList, mrseqFileCopyErr := copyFiles(ctx, constants.MrSeqFileExtension, "")
 	if mrseqFileCopyErr != nil {
 		return mrseqFileCopyErr
 	}
@@ -536,7 +547,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 				continue
 			}
 
-			statusReport := types.NewStatusReport(types.StatusSuccess, "Enable", instanceViewMessage)
+			statusReport := types.NewStatusReport(types.StatusSuccess, "Enable", instanceViewMessage, extensionName)
 			rootStatusJson, err = status.MarshalStatusReportIntoJson(statusReport, true)
 			if err != nil {
 				errorMessage = fmt.Sprintf("failed to marshal status report into json for status file '%s' with error '%s'", statusFilePath, err.Error())

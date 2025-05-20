@@ -121,7 +121,7 @@ func getRequiredInitialVariables(ctx *log.Context) (types.HandlerEnvironment, st
 		return hEnv, extensionName, seqNum, errors.Wrap(err, "failed to parse handlerEnv")
 	}
 
-	extensionName = getExtensionName(ctx)
+	extensionName = GetExtensionName(ctx)
 	seqNum, err = getSeqNum(&ctx, hEnv, extensionName)
 	if err != nil {
 		return hEnv, extensionName, seqNum, errors.Wrap(err, "failed to get seqNum")
@@ -162,7 +162,7 @@ func getHandlerEnv(ctx *log.Context) (types.HandlerEnvironment, error) {
 	return hEnv, nil
 }
 
-func getExtensionName(ctx *log.Context) string {
+func GetExtensionName(ctx *log.Context) string {
 	extensionName := os.Getenv(constants.ConfigExtensionNameEnvName)
 	ctx.Log("extensionName", extensionName)
 	return extensionName

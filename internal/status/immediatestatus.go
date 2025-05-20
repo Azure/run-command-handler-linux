@@ -26,9 +26,9 @@ type ImmediateHandlerStatus struct {
 
 // Status of an immediate extension processed by a given handler
 type ImmediateStatus struct {
-	SequenceNumber int              `json:"sequenceNumber" validate:"required"`
-	TimestampUTC   string           `json:"timestampUTC" validate:"required"`
-	Status         types.StatusItem `json:"status" validate:"required"`
+	SequenceNumber int          `json:"sequenceNumber" validate:"required"`
+	TimestampUTC   string       `json:"timestampUTC" validate:"required"`
+	Status         types.Status `json:"status" validate:"required"`
 }
 
 // Observer defines a type that can receive notifications from a Notifier.
@@ -51,35 +51,87 @@ func (o *StatusObserver) Initialize(ctx *log.Context) {
 	o.Reporter = statusreporter.NewGuestInformationServiceClient(hostgacommunicator.WireServerFallbackAddress)
 }
 
-func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
-	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
-	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
+func (o *StatusObserver) OnDemandNotify() error {
 	return o.reportImmediateStatus(o.getImmediateTopLevelStatusToReport())
 }
 
+func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
+	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
+	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
+	return o.OnDemandNotify()
+}
+
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
-	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty")
 	latestStatusToReport := []ImmediateStatus{}
+	goalStateKeysToCheckToRemove := []types.GoalStateKey{}
+	newStatusInTerminalState := []ImmediateStatus{}
+
+	o.ctx.Log("message", "Getting all goal states from the event map with the latest status that are not empty or disabled")
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
-		if value.(types.StatusItem) != (types.StatusItem{}) {
-			statusItem := value.(types.StatusItem)
-			immediateStatus := ImmediateStatus{
-				SequenceNumber: key.(types.GoalStateKey).SeqNumber,
-				TimestampUTC:   statusItem.TimestampUTC,
-				Status:         statusItem,
+		goalStateKey := key.(types.GoalStateKey)
+		if goalStateKey.RuntimeSettingsState != "disabled" {
+			if value.(types.StatusItem) != (types.StatusItem{}) {
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
+				statusItem := value.(types.StatusItem)
+				immediateStatus := ImmediateStatus{
+					SequenceNumber: goalStateKey.SeqNumber,
+					TimestampUTC:   statusItem.TimestampUTC,
+					Status:         statusItem.Status,
+				}
+
+				if types.IsImmediateGoalStateInTerminalState(statusItem.Status) {
+					o.ctx.Log("message", fmt.Sprintf("Goal state %v is in terminal state. Adding it to the new terminal state list.", goalStateKey))
+					newStatusInTerminalState = append(newStatusInTerminalState, immediateStatus)
+
+					// Remove the goal state from the event map since it is in terminal state. The state will be saved in the local status file.
+					o.goalStateEventMap.Delete(key)
+				} else {
+					o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in terminal state. Adding it to the latest status to report.", goalStateKey))
+					latestStatusToReport = append(latestStatusToReport, immediateStatus)
+				}
+				goalStateKeysToCheckToRemove = append(goalStateKeysToCheckToRemove, goalStateKey)
+			} else {
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is empty. Not reporting status.", goalStateKey))
 			}
-			latestStatusToReport = append(latestStatusToReport, immediateStatus)
+		} else {
+			o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status.", goalStateKey))
+			goalStateKeysToCheckToRemove = append(goalStateKeysToCheckToRemove, goalStateKey)
 		}
 
 		return true
 	})
 
+	err := RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(o.ctx, goalStateKeysToCheckToRemove)
+	if err != nil {
+		o.ctx.Log("error", "failed to remove disabled goal states from the local status file", "message", err)
+	}
+
+	statusInTerminalState, err := GetGoalStatesInTerminalStatus(o.ctx)
+	if err != nil {
+		o.ctx.Log("error", "failed to get goal states in terminal status from file. Proceeding to report the latest status from the event map", "message", err)
+	}
+
+	if len(newStatusInTerminalState) > 0 {
+		o.ctx.Log("message", fmt.Sprintf("Merging %v goal states in terminal state with local file status", len(newStatusInTerminalState)))
+		statusInTerminalState = append(statusInTerminalState, newStatusInTerminalState...)
+
+		err = SaveGoalStatesInTerminalStatus(o.ctx, statusInTerminalState)
+		if err != nil {
+			o.ctx.Log("error", "failed to save goal states in terminal status", "message", err)
+		}
+	}
+
+	if len(statusInTerminalState) > 0 {
+		o.ctx.Log("message", fmt.Sprintf("Merging %v goal states in terminal state with the latest status to report", len(statusInTerminalState)))
+		latestStatusToReport = append(latestStatusToReport, statusInTerminalState...)
+	}
+
 	o.ctx.Log("message", "Creating immediate status to report")
 	return ImmediateTopLevelStatus{
 		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
 			{
-				HandlerName:              "RunCommandHandler",
+				HandlerName:              "Microsoft.CPlat.Core.RunCommandHandlerLinux",
 				AggregateImmediateStatus: latestStatusToReport,
 			},
 		},
@@ -94,7 +146,7 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
-	response, err := o.Reporter.ReportStatus(string(rootStatusJson))
+	response, err := o.Reporter.ReportStatus(o.ctx, string(rootStatusJson))
 
 	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 	if err != nil {
@@ -108,19 +160,58 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	return nil
 }
 
-// Remove the goal states that have already been processed from the event map
+// Remove the goal states that have already been processed from the event map or are disabled
 // If the goal state that was added before is not in the new list of goal states, it should be removed
 // This is to ensure that the event map only contains the goal states that are currently being processed
 func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalStateKey) {
-	// TODO: Eventually we'll need to report also already processed goal states to the HGAP even if they are not in the new list.
-	// TODO: When a command is sent down with toBeDeleted = true, then we should remove it and no longer report on it.
+	newStatusInTerminalState := []ImmediateStatus{}
+	goalStateKeysToRemove := []types.GoalStateKey{}
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		if !slices.Contains(goalStateKeys, key.(types.GoalStateKey)) {
-			o.ctx.Log("message", "removing goal state from the event map", "key", key)
-			o.goalStateEventMap.Delete(key)
+			goalStateKey := key.(types.GoalStateKey)
+			o.ctx.Log("message", fmt.Sprintf("Goal state %v is not in the new list of goal states. Removing it from the event map.", goalStateKey))
+
+			goalStateKeysToRemove = append(goalStateKeysToRemove, goalStateKey)
+			if goalStateKey.RuntimeSettingsState != "disabled" {
+				statusItem := value.(types.StatusItem)
+				immediateStatus := ImmediateStatus{
+					SequenceNumber: goalStateKey.SeqNumber,
+					TimestampUTC:   statusItem.TimestampUTC,
+					Status:         statusItem.Status,
+				}
+				newStatusInTerminalState = append(newStatusInTerminalState, immediateStatus)
+				o.goalStateEventMap.Delete(key)
+			} else {
+				o.ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Not reporting status to indicate HGAP that it is disabled.", goalStateKey))
+				o.goalStateEventMap.Delete(key)
+			}
 		}
 		return true // continue iterating
 	})
+
+	// This should not occur since the goal state keys are already removed from the event map but adding this for safety
+	// in case the previous attempt to remove the goal state keys from the local status file failed
+	err := RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(o.ctx, goalStateKeysToRemove)
+	if err != nil {
+		o.ctx.Log("error", "failed to remove disabled goal states from the local status file", "message", err)
+	}
+
+	statusInTerminalState, err := GetGoalStatesInTerminalStatus(o.ctx)
+	if err != nil {
+		o.ctx.Log("error", "failed to get goal states in terminal status from file.", "message", err)
+	}
+
+	if len(newStatusInTerminalState) > 0 {
+		o.ctx.Log("message", fmt.Sprintf("Merging %v goal states in terminal state with the new status to report", len(newStatusInTerminalState)))
+		statusInTerminalState = append(statusInTerminalState, newStatusInTerminalState...)
+	}
+	err = SaveGoalStatesInTerminalStatus(o.ctx, statusInTerminalState)
+	if err != nil {
+		o.ctx.Log("error", "failed to save goal states in terminal status", "message", err)
+	}
+
+	o.ctx.Log("message", "Notifying the observer to report the status to HGAP")
+	o.OnDemandNotify()
 }
 
 func (o *StatusObserver) GetStatusForKey(key types.GoalStateKey) (types.StatusItem, bool) {

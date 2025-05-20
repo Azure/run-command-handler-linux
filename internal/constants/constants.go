@@ -25,6 +25,9 @@ const (
 
 	StatusFileDirectory = "status"
 
+	// The directory where the immediate run command status that have reached the terminal status are stored.
+	ImmediateStatusFileDirectory = "status"
+
 	// General failed exit code when extension provisioning fails due to service errors.
 	FailedExitCodeGeneral = -1
 
@@ -51,4 +54,13 @@ const (
 	// The path of the extension in the VM with full name. This value is provided by the agent for all commands.
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
 	ExtensionPathEnvName = "AZURE_GUEST_AGENT_EXTENSION_PATH"
+
+	// The name of the immediate run command service
+	ImmediateRunCommandHandlerName = "runCommandService"
+
+	// The time to wait between each poll of the goal states
+	PolingIntervalInSeconds = 1
+
+	// The name of the file that contains the immediate goal states that reached the terminal status
+	ImmediateGoalStatesInTerminalStatusFileName = "immediateGoalStatesInTerminalStatusFile.status"
 )

@@ -5,12 +5,13 @@ import "time"
 // StatusReport contains one or more status items and is the parent object
 type StatusReport []StatusItem
 
-func NewStatusReport(statusType StatusType, operation string, message string) StatusReport {
+func NewStatusReport(statusType StatusType, operation string, message string, extName string) StatusReport {
 	return []StatusItem{
 		{
 			Version:      1, // this is the protocol version do not change unless you are sure
 			TimestampUTC: time.Now().UTC().Format(time.RFC3339),
 			Status: Status{
+				Name:      extName,
 				Operation: operation,
 				Status:    statusType,
 				FormattedMessage: FormattedMessage{
@@ -47,6 +48,7 @@ const (
 
 // Status is used for serializing status in a manner the server understands
 type Status struct {
+	Name             string           `json:"name"`
 	Operation        string           `json:"operation"`
 	Status           StatusType       `json:"status"`
 	FormattedMessage FormattedMessage `json:"formattedMessage"`

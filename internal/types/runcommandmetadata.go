@@ -2,6 +2,8 @@ package types
 
 import (
 	"path/filepath"
+
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 )
 
 type RCMetadata struct {
@@ -34,7 +36,7 @@ func NewRCMetadata(extensionName string, seqNum int, downloadFolder string, data
 	result.SeqNum = seqNum
 	result.DownloadDir = filepath.Join(downloadFolder, extensionName)
 	result.DownloadPath = filepath.Join(dataDir, result.DownloadDir)
-	result.MostRecentSequence = extensionName + ".mrseq"
+	result.MostRecentSequence = extensionName + constants.MrSeqFileExtension
 	result.PidFilePath = extensionName + ".pidstart"
 	return result
 }
