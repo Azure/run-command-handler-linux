@@ -1,6 +1,7 @@
 module github.com/Azure/run-command-handler-linux
 
 go 1.22.1
+toolchain go1.24.1
 
 require (
 	github.com/Azure/azure-extension-foundation v0.0.0-20230404211847-9858bdd5c187
@@ -15,7 +16,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/text v0.21.0
+	golang.org/x/text v0.23.0
 )
 
 require (
@@ -41,9 +42,9 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
