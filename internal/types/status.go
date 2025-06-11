@@ -5,7 +5,15 @@ import "time"
 // StatusReport contains one or more status items and is the parent object
 type StatusReport []StatusItem
 
-func NewStatusReport(statusType StatusType, operation string, message string, extName string) StatusReport {
+func NewStatusReport(statusType StatusType, operation string, message string, extName string, optionalErrorCalrification ...string) StatusReport {
+	errorClarificationName := "default"
+	errorClarificationValue := "default"
+
+	if len(optionalErrorCalrification) > 0 {
+		errorClarificationName = optionalErrorCalrification[0]
+		errorClarificationValue = optionalErrorCalrification[1]
+	}
+
 	return []StatusItem{
 		{
 			Version:      1, // this is the protocol version do not change unless you are sure
@@ -18,15 +26,20 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 					Lang:    "en",
 					Message: message},
 			},
+			SubStatus: &substastus{
+				Name: errorClarificationName,
+				Code: errorClarificationValue,
+			},
 		},
 	}
 }
 
 // StatusItem is used to serialize an individual part of the status read by the server
 type StatusItem struct {
-	Version      int    `json:"version"`
-	TimestampUTC string `json:"timestampUTC"`
-	Status       Status `json:"status"`
+	Version      int         `json:"version"`
+	TimestampUTC string      `json:"timestampUTC"`
+	Status       Status      `json:"status"`
+	SubStatus    *substastus `json:"subStatus,omitempty"` // optional substatus, can be nil
 }
 
 // StatusType reports the execution status
@@ -58,4 +71,12 @@ type Status struct {
 type FormattedMessage struct {
 	Lang    string `json:"lang"`
 	Message string `json:"message"`
+}
+
+// substatus used for serialization
+type substastus struct {
+	// Name is the name of the substatus
+	Name string `json:"name"`
+	// Code is the code of the substatus
+	Code string `json:"code"`
 }
