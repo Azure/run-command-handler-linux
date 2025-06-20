@@ -25,10 +25,10 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 				FormattedMessage: FormattedMessage{
 					Lang:    "en",
 					Message: message},
-			},
-			SubStatus: &substastus{
-				Name: errorClarificationName,
-				Code: errorClarificationValue,
+				SubStatus: []substastus{{
+					Name: errorClarificationName,
+					Code: errorClarificationValue,
+				}},
 			},
 		},
 	}
@@ -36,10 +36,9 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 
 // StatusItem is used to serialize an individual part of the status read by the server
 type StatusItem struct {
-	Version      int         `json:"version"`
-	TimestampUTC string      `json:"timestampUTC"`
-	Status       Status      `json:"status"`
-	SubStatus    *substastus `json:"subStatus,omitempty"` // optional substatus, can be nil
+	Version      int    `json:"version"`
+	TimestampUTC string `json:"timestampUTC"`
+	Status       Status `json:"status"`
 }
 
 // StatusType reports the execution status
@@ -65,6 +64,8 @@ type Status struct {
 	Operation        string           `json:"operation"`
 	Status           StatusType       `json:"status"`
 	FormattedMessage FormattedMessage `json:"formattedMessage"`
+	SubStatus        []substastus     `json:"substatus"` // optional substatus, can be nil
+
 }
 
 // FormattedMessage is a struct used for serializing status
