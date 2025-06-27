@@ -25,6 +25,8 @@ const (
 
 	StatusFileDirectory = "status"
 
+	StatusFileExtension = ".status"
+
 	// The directory where the immediate run command status that have reached the terminal status are stored.
 	ImmediateStatusFileDirectory = "status"
 

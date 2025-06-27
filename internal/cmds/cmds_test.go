@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/ahmetb/go-httpbin"
 	"github.com/go-kit/kit/log"
@@ -172,9 +175,227 @@ func Test_checkAndSaveSeqNum(t *testing.T) {
 	require.True(t, shouldExit)
 }
 
+func Test_update_e2e_cmd(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8")
+	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.9")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := filepath.Join(oldVersionDirectory, constants.StatusFileDirectory)
+	err = os.Mkdir(oldStatusPath, 0755)
+	require.Nil(t, err, "Could not create old version status subdirectory")
+	newStatusPath := filepath.Join(newVersionDirectory, constants.StatusFileDirectory)
+	err = os.Mkdir(newStatusPath, 0755)
+	require.Nil(t, err, "Could not create new version status subdirectory")
+
+	fakeEnv := types.HandlerEnvironment{}
+	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
+	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
+
+	// Create two extensions
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true)
+
+	// Now, pretend that the extension was updated
+	// Step 1: WALA calls Disable on our two extensions
+	disable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
+
+	// Step 2: WALA will call update
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.9")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
+	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
+	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
+	update_handler(t, fakeEnv, tempDir)
+
+	// Now, WALA will uninstall the old extension
+	uninstall_handler(t, fakeEnv, tempDir)
+
+	// Then, WALA will install the new extension
+	install_handler(t, fakeEnv, tempDir)
+
+	// Now call enable and verify we did NOT re-execute the script
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false)
+}
+
+func Test_udpate_e2e_problematic_version(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.17")
+	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.18")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := filepath.Join(oldVersionDirectory, constants.StatusFileDirectory)
+	err = os.Mkdir(oldStatusPath, 0755)
+	require.Nil(t, err, "Could not create old version status subdirectory")
+	newStatusPath := filepath.Join(newVersionDirectory, constants.StatusFileDirectory)
+	err = os.Mkdir(newStatusPath, 0755)
+	require.Nil(t, err, "Could not create new version status subdirectory")
+
+	fakeEnv := types.HandlerEnvironment{}
+	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
+	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.17")
+
+	// Create three extensions
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk", true)
+
+	// Now, pretend that the extension was updated
+	// Step 1: WALA calls Disable on our two extensions
+	disable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk")
+
+	// To simulate the bug existing in 1.3.17, delete the mrseq files
+	// Don't disable the stubborn chipmunk to test a .mrseq file that for some reason wasn't deleted
+	err = os.Remove(filepath.Join(oldVersionDirectory, "happyChipmunk"+constants.MrSeqFileExtension))
+	require.Nil(t, err, "Could not delete happyChipmunk.mrseq")
+	err = os.Remove(filepath.Join(oldVersionDirectory, "crazyChipmunk"+constants.MrSeqFileExtension))
+	require.Nil(t, err, "Could not delete crazyChipmunk.mrseq")
+
+	// Add a malformatted .status file just to mess with the logic
+	os.WriteFile(filepath.Join(oldStatusPath, "this.is.a.bad.chipmunk.0.status"), []byte("0"), os.FileMode(0600))
+
+	// Step 2: WALA will call update
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.18")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.17")
+	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
+	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
+	update_handler(t, fakeEnv, tempDir)
+
+	// Now, WALA will uninstall the old extension
+	uninstall_handler(t, fakeEnv, tempDir)
+
+	// Then, WALA will install the new extension
+	install_handler(t, fakeEnv, tempDir)
+
+	// Now call enable and verify we did NOT re-execute the script
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", false)
+}
+
+func install_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
+	generic_handler_call(t, fakeEnv, tempDir, "install", types.CmdInstallTemplate, CmdInstall)
+}
+
+func uninstall_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
+	generic_handler_call(t, fakeEnv, tempDir, "uninstall", types.CmdUninstallTemplate, CmdUninstall)
+}
+
+func update_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
+	generic_handler_call(t, fakeEnv, tempDir, "update", types.CmdUpdateTemplate, CmdUpdate)
+}
+
+func generic_handler_call(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, cmdName string, cmdTemplate types.Cmd, cmd types.Cmd) {
+	fakeInstanceView := types.RunCommandInstanceView{}
+
+	metadata := types.NewRCMetadata("", 0, constants.DownloadFolder, tempDir)
+	_, _, err, exitCode := cmd.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, cmdTemplate)
+	require.Nil(t, err, cmdName+" command should run successfully")
+	require.Equal(t, constants.ExitCode_Okay, exitCode)
+}
+
+func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, extName string, shouldExecuteScript bool) {
+	fakeInstanceView := types.RunCommandInstanceView{}
+	wasCalled := false
+
+	settingsCommon := settings.SettingsCommon{
+		ExtensionName:           &extName,
+		ProtectedSettingsBase64: "",
+		SettingsCertThumbprint:  "SomeProtectedSettingsInBase64",
+		PublicSettings: map[string]interface{}{
+			"source": map[string]interface{}{
+				"script": "echo Hello World!",
+			},
+			"runAsUser": "",
+		},
+	}
+
+	handlerSettings := handlersettings.HandlerSettingsFile{
+		RuntimeSettings: []handlersettings.RunTimeSettingsFile{
+			{
+				HandlerSettings: settingsCommon,
+			},
+		},
+	}
+
+	settingsFilePath := filepath.Join(tempDir, extName+".0.settings")
+	file, err := os.Create(settingsFilePath)
+	require.Nil(t, err, "Could not create settings file")
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(handlerSettings)
+	require.Nil(t, err, "Could not serialze settings file")
+
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+		wasCalled = true
+		return nil, 0 // mock behavior
+	}
+
+	metadata := types.NewRCMetadata(extName, 0, constants.DownloadFolder, tempDir)
+	metadata.MostRecentSequence = filepath.Join(tempDir, extName+constants.MrSeqFileExtension)
+
+	// Call the EnablePre function (Enable is the only function that has one)
+	ctx := log.NewContext(log.NewNopLogger())
+	err = CmdEnable.Functions.Pre(ctx, fakeEnv, metadata, types.CmdEnableTemplate)
+
+	// If we're not expecting the script to run, then EnablePre will return an error
+	if shouldExecuteScript {
+		require.Nil(t, err, "EnablePre failed")
+
+		// Call the Enable function
+		_, _, err, exitCode := CmdEnable.Functions.Invoke(ctx, fakeEnv, &fakeInstanceView, metadata, types.CmdEnableTemplate)
+		require.Nil(t, err, "command should run successfully")
+		require.Equal(t, constants.ExitCode_Okay, exitCode)
+
+		// Verify whether we should have run the script
+		require.Equal(t, shouldExecuteScript, wasCalled)
+	} else {
+		require.Equal(t, ErrAlreadyProcessed, err)
+	}
+
+	// Report status to create a status file
+	err = CmdEnable.Functions.ReportStatus(ctx, fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "The chipmunk is satisfied")
+	require.Nil(t, err, "ReportStatus failed")
+
+	// Verify we have a .mrseq
+	if _, err := os.Stat(metadata.MostRecentSequence); errors.Is(err, os.ErrNotExist) {
+		require.Fail(t, extName+".mrseq should exist but does not")
+	}
+}
+
+func disable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, extName string) {
+	fakeInstanceView := types.RunCommandInstanceView{}
+
+	metadata := types.NewRCMetadata(extName, 0, constants.DownloadFolder, tempDir)
+	metadata.MostRecentSequence = filepath.Join(tempDir, extName+constants.MrSeqFileExtension)
+	_, _, err, _ := CmdDisable.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, types.CmdDisableTemplate)
+	require.Nil(t, err)
+
+	// The .mrseq should still be here
+	if _, err := os.Stat(metadata.MostRecentSequence); errors.Is(err, os.ErrNotExist) {
+		require.Fail(t, extName+".mrseq should exist but does not")
+	}
+}
+
 func Test_runCmd_success(t *testing.T) {
 	var script = "date"
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
