@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -199,8 +200,8 @@ func Test_update_e2e_cmd(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
 
 	// Create two extensions
-	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true)
-	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true, 0)
 
 	// Now, pretend that the extension was updated
 	// Step 1: WALA calls Disable on our two extensions
@@ -222,8 +223,8 @@ func Test_update_e2e_cmd(t *testing.T) {
 	install_handler(t, fakeEnv, tempDir)
 
 	// Now call enable and verify we did NOT re-execute the script
-	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false)
-	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false)
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 0)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
 }
 
 func Test_udpate_e2e_problematic_version(t *testing.T) {
@@ -250,9 +251,12 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionEnvName, "1.3.17")
 
 	// Create three extensions
-	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true)
-	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true)
-	enable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk", true)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk", true, 0)
+
+	// Run one of them again to obtain multiple status files
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 1)
 
 	// Now, pretend that the extension was updated
 	// Step 1: WALA calls Disable on our two extensions
@@ -285,9 +289,14 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	install_handler(t, fakeEnv, tempDir)
 
 	// Now call enable and verify we did NOT re-execute the script
-	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false)
-	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false)
-	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", false)
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", false, 0)
+
+	// Run them again with a higher seqNo to ensure they're now executed
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", true, 2)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", true, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", true, 1)
 }
 
 func install_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
@@ -311,7 +320,7 @@ func generic_handler_call(t *testing.T, fakeEnv types.HandlerEnvironment, tempDi
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
 }
 
-func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, extName string, shouldExecuteScript bool) {
+func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, extName string, shouldExecuteScript bool, seqNo int) {
 	fakeInstanceView := types.RunCommandInstanceView{}
 	wasCalled := false
 
@@ -335,7 +344,7 @@ func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir st
 		},
 	}
 
-	settingsFilePath := filepath.Join(tempDir, extName+".0.settings")
+	settingsFilePath := filepath.Join(tempDir, extName+"."+strconv.Itoa(seqNo)+".settings")
 	file, err := os.Create(settingsFilePath)
 	require.Nil(t, err, "Could not create settings file")
 	encoder := json.NewEncoder(file)
@@ -347,8 +356,9 @@ func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir st
 		return nil, 0 // mock behavior
 	}
 
-	metadata := types.NewRCMetadata(extName, 0, constants.DownloadFolder, tempDir)
+	metadata := types.NewRCMetadata(extName, seqNo, constants.DownloadFolder, tempDir)
 	metadata.MostRecentSequence = filepath.Join(tempDir, extName+constants.MrSeqFileExtension)
+	metadata.SeqNum = seqNo
 
 	// Call the EnablePre function (Enable is the only function that has one)
 	ctx := log.NewContext(log.NewNopLogger())

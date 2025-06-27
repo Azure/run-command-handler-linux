@@ -447,6 +447,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 			} else {
 				extensionName := parts[0]
 				seqNo := parts[1]
+				seqNoAsInt, _ := strconv.Atoi(seqNo)
 				mrSeqFileName := extensionName + constants.MrSeqFileExtension
 				mrSeqFilePath := filepath.Join(newExtensionDirectory, mrSeqFileName)
 
@@ -467,7 +468,24 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 						return errors.Wrap(err, errMessage)
 					}
 				} else {
-					ctx.Log("message", "File '%s' already exists. Not rehydrating it", mrSeqFilePath)
+					// Overwrite mrseq this seqNo is greater than the one it contains (simple solution for multiple status files)
+					contents, err := os.ReadFile(mrSeqFilePath)
+					if err != nil {
+						errMessage := fmt.Sprintf("Could not read file '%s'", mrSeqFilePath)
+						ctx.Log("message", errMessage)
+						return errors.Wrap(err, errMessage)
+					}
+
+					currentSeqNo, _ := strconv.Atoi(string(contents))
+					if seqNoAsInt > currentSeqNo {
+						err = os.WriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
+						if err != nil {
+							errMessage := fmt.Sprintf("Could not write file '%s'", mrSeqFilePath)
+							ctx.Log("message", errMessage)
+							return errors.Wrap(err, errMessage)
+						}
+						ctx.Log("message", "Updated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath)
+					}
 				}
 			}
 		}
