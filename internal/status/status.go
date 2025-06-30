@@ -44,6 +44,29 @@ func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, me
 	return nil
 }
 
+func ReportStatusToLocalFileWithErrorClarification(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, exitcode int) error {
+	if !c.ShouldReportStatus {
+		ctx.Log("status", "not reported for operation (by design)")
+		return nil
+	}
+
+	var errorcode = ExitCodeToErrorClarification(exitcode)
+	rootStatusJson, err := getRootStatusJsonWithErrorCalrification(ctx, statusType, c, msg, true, metadata.ExtName, errorcode)
+	if err != nil {
+		return errors.Wrap(err, "failed to get json for status report")
+	}
+
+	ctx.Log("message", "reporting status by writing status file locally")
+	err = SaveStatusReport(hEnv.HandlerEnvironment.StatusFolder, metadata.ExtName, metadata.SeqNum, rootStatusJson)
+	if err != nil {
+		ctx.Log("event", "failed to save handler status", "error", err)
+		return errors.Wrap(err, "failed to save handler status")
+	}
+
+	ctx.Log("message", "Run Command status was written to file successfully.")
+	return nil
+}
+
 // SaveStatusReport persists the status message to the specified status folder using the
 // sequence number. The operation consists of writing to a temporary file in the
 // same folder and moving it to the final destination for atomicity.
@@ -199,6 +222,17 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 
 	return b, nil
 }
+func getRootStatusJsonWithErrorCalrification(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string, errorcode int) ([]byte, error) {
+	ctx.Log("message", "creating json to report status")
+	statusReport := types.NewStatusReportWithErrorClarification(statusType, c.Name, msg, extName, errorcode)
+
+	b, err := MarshalStatusReportIntoJson(statusReport, indent)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal status report into json")
+	}
+
+	return b, nil
+}
 
 // getSingleStatusItem returns a single status item for the given status type, command, and message.
 // This is useful when only a single status item is needed for an immediate status report.
@@ -221,4 +255,9 @@ func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) (
 	}
 
 	return b, err
+}
+
+func ExitCodeToErrorClarification(exitcode int) int {
+	// Need to implement map to the translate
+	return exitcode
 }

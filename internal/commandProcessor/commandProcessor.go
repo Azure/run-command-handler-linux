@@ -66,13 +66,14 @@ func ProcessHandlerCommand(cmd types.Cmd) error {
 func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string) error {
 	ctx.Log("message", fmt.Sprintf("processing command for extensionName: %v and seqNum: %v", extensionName, seqNum))
 	instView := types.RunCommandInstanceView{
-		ExecutionState:   types.Running,
-		ExecutionMessage: "Execution in progress",
-		ExitCode:         0,
-		Output:           "",
-		Error:            "",
-		StartTime:        time.Now().UTC().Format(time.RFC3339),
-		EndTime:          "",
+		ExecutionState:          types.Running,
+		ExecutionMessage:        "Execution in progress",
+		ExitCode:                0,
+		Output:                  "",
+		Error:                   "",
+		StartTime:               time.Now().UTC().Format(time.RFC3339),
+		EndTime:                 "",
+		ErrorClarificationValue: 0,
 	}
 
 	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, constants.DataDir)

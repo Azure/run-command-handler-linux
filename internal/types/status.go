@@ -6,6 +6,7 @@ import "time"
 type StatusReport []StatusItem
 
 func NewStatusReport(statusType StatusType, operation string, message string, extName string) StatusReport {
+
 	return []StatusItem{
 		{
 			Version:      1, // this is the protocol version do not change unless you are sure
@@ -17,6 +18,30 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 				FormattedMessage: FormattedMessage{
 					Lang:    "en",
 					Message: message},
+			},
+		},
+	}
+}
+
+func NewStatusReportWithErrorClarification(statusType StatusType, operation string, message string, extName string, errorcode int) StatusReport {
+	errorClarificationName := "ErrroClarificationName"
+	errorClarificationValue := errorcode
+
+	return []StatusItem{
+		{
+			Version:      1, // this is the protocol version do not change unless you are sure
+			TimestampUTC: time.Now().UTC().Format(time.RFC3339),
+			Status: Status{
+				Name:      extName,
+				Operation: operation,
+				Status:    statusType,
+				FormattedMessage: FormattedMessage{
+					Lang:    "en",
+					Message: message},
+				SubStatus: []substastus{{
+					Name: errorClarificationName,
+					Code: errorClarificationValue,
+				}},
 			},
 		},
 	}
@@ -52,10 +77,20 @@ type Status struct {
 	Operation        string           `json:"operation"`
 	Status           StatusType       `json:"status"`
 	FormattedMessage FormattedMessage `json:"formattedMessage"`
+	SubStatus        []substastus     `json:"substatus"` // optional substatus, can be nil
+
 }
 
 // FormattedMessage is a struct used for serializing status
 type FormattedMessage struct {
 	Lang    string `json:"lang"`
 	Message string `json:"message"`
+}
+
+// substatus used for serialization
+type substastus struct {
+	// Name is the name of the substatus
+	Name string `json:"name"`
+	// Code is the code of the substatus
+	Code int `json:"code"`
 }
