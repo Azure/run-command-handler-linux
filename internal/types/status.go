@@ -5,14 +5,27 @@ import "time"
 // StatusReport contains one or more status items and is the parent object
 type StatusReport []StatusItem
 
-func NewStatusReport(statusType StatusType, operation string, message string, extName string, optionalErrorCalrification ...string) StatusReport {
-	errorClarificationName := "default"
-	errorClarificationValue := "default"
+func NewStatusReport(statusType StatusType, operation string, message string, extName string) StatusReport {
 
-	if len(optionalErrorCalrification) > 0 {
-		errorClarificationName = optionalErrorCalrification[0]
-		errorClarificationValue = optionalErrorCalrification[1]
+	return []StatusItem{
+		{
+			Version:      1, // this is the protocol version do not change unless you are sure
+			TimestampUTC: time.Now().UTC().Format(time.RFC3339),
+			Status: Status{
+				Name:      extName,
+				Operation: operation,
+				Status:    statusType,
+				FormattedMessage: FormattedMessage{
+					Lang:    "en",
+					Message: message},
+			},
+		},
 	}
+}
+
+func NewStatusReportWithErrorClarification(statusType StatusType, operation string, message string, extName string, errorcode int) StatusReport {
+	errorClarificationName := "ErrroClarificationName"
+	errorClarificationValue := errorcode
 
 	return []StatusItem{
 		{
@@ -79,5 +92,5 @@ type substastus struct {
 	// Name is the name of the substatus
 	Name string `json:"name"`
 	// Code is the code of the substatus
-	Code string `json:"code"`
+	Code int `json:"code"`
 }

@@ -1,10 +1,12 @@
 module github.com/Azure/run-command-handler-linux
 
-go 1.22.1
+go 1.23
+
+toolchain go1.23.10
 
 require (
 	github.com/Azure/azure-extension-foundation v0.0.0-20230404211847-9858bdd5c187
-	github.com/Azure/azure-extension-platform v0.0.0-20240610175536-404c704f82f8
+	github.com/Azure/azure-extension-platform v0.0.0-20250107200156-aa20f765d49f
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.0
