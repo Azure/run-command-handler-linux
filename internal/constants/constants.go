@@ -43,7 +43,13 @@ const (
 	ImmediateDownloadFolder = "immediateDownload/"
 
 	// Name of the run command extension
-	RunCommandExtensionName = "Microsoft.CPlat.Core.RunCommandHandlerLinux"
+	RunCommandExtensionName     = "Microsoft.CPlat.Core.RunCommandHandlerLinux"
+	RunCommandTestExtensionName = "Microsoft.Azure.Extensions.Edp.RunCommandHandlerLinuxTest"
+
+	// List of problematic RCV2 versions that delete the mrseq files
+	ProductionVersionThatDeletesMrSeqFiles = "1.3.17"
+	FirstTestVersionThatDeletesMrSeqFiles  = "1.8.0"
+	SecondTestVersionThatDeletesMrSeqFiles = "1.9.0"
 
 	// The current version of the extension. This value is provided by the agent for all commands.
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary

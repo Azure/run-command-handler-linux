@@ -81,8 +81,10 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	err = rehydrateMrSeqFilesForProblematicUpgrades(ctx, h)
 	if err != nil {
-		// This is a best effort, but make it clear that's so.
-		ctx.Log("event", "Unable to rehydrate mrseq files. Continuing.")
+		// If we fail on update, then there's a risk we could re-execute the customer's script. Don't take that chance.
+		// By failing Update, the extension goal state will fail. WALA will try us again on the next goal state.
+		ctx.Log("event", "Unable to rehydrate mrseq files")
+		return "", "", err, constants.ExitCode_CouldNotRehydrateMrSeq
 	}
 
 	// Copy any .mrseq or .status files -Most Recently executed Sequence number files and status files for Run Commands from old version to new version.
@@ -402,15 +404,15 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, h types.Handler
 	// Production: 1.3.17
 	// Test: 1.8.0, 1.9.0
 	isProblematicVersion := false
-	isTestExtension := strings.Contains(oldExtensionDirectory, "Microsoft.Azure.Extensions.Edp.RunCommandHandlerLinuxTest")
+	isTestExtension := strings.Contains(oldExtensionDirectory, constants.RunCommandTestExtensionName)
 	if isTestExtension {
-		isProblematicVersion = (oldExtensionVersion == "1.8.0" || oldExtensionVersion == "1.9.0")
+		isProblematicVersion = (oldExtensionVersion == constants.FirstTestVersionThatDeletesMrSeqFiles || oldExtensionVersion == constants.SecondTestVersionThatDeletesMrSeqFiles)
 	} else {
-		isProblematicVersion = (oldExtensionVersion == "1.3.17")
+		isProblematicVersion = (oldExtensionVersion == constants.ProductionVersionThatDeletesMrSeqFiles)
 	}
 
 	if isProblematicVersion {
-		ctx.Log("message", fmt.Sprintf("Rehydrating mrseq files from version '%s'", oldExtensionVersion))
+		ctx.Log("message", fmt.Sprintf("Rehydrating mrseq files deleted by from version '%s' using status files", oldExtensionVersion))
 		return doRehydrateMrSeqFilesForProblematicUpgrades(ctx, oldExtensionDirectory, newExtensionDirectory)
 	} else {
 		ctx.Log("message", fmt.Sprintf("Previous extension version '%s' does not require mrseq hydration", oldExtensionVersion))
