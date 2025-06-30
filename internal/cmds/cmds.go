@@ -82,7 +82,7 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	err = rehydrateMrSeqFilesForProblematicUpgrades(ctx, h)
 	if err != nil {
 		// This is a best effort, but make it clear that's so.
-		ctx.Log("event", "Unable to reydrate mrseq files. Continuing.")
+		ctx.Log("event", "Unable to rehydrate mrseq files. Continuing.")
 	}
 
 	// Copy any .mrseq or .status files -Most Recently executed Sequence number files and status files for Run Commands from old version to new version.
@@ -410,10 +410,10 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, h types.Handler
 	}
 
 	if isProblematicVersion {
-		ctx.Log("message", "Rehydrating mrseq files from version '%s'", oldExtensionVersion)
+		ctx.Log("message", fmt.Sprintf("Rehydrating mrseq files from version '%s'", oldExtensionVersion))
 		return doRehydrateMrSeqFilesForProblematicUpgrades(ctx, oldExtensionDirectory, newExtensionDirectory)
 	} else {
-		ctx.Log("message", "Previous extension version '%s' does not require mrseq hydration", oldExtensionVersion)
+		ctx.Log("message", fmt.Sprintf("Previous extension version '%s' does not require mrseq hydration", oldExtensionVersion))
 	}
 
 	return nil
@@ -426,6 +426,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("Failed to open status directory '%s'", oldExtensionStatusDirectory))
 	}
+	defer extensionStatusDirectoryFDRef.Close()
 
 	// Iterate through the status directory, looking for files of the format: {extension name}.{seqNo}.status
 	// For each of these, look for the corresponding file {extension name}.mrseq under the extension directory
@@ -443,7 +444,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 		if strings.HasSuffix(statusFileName, constants.StatusFileExtension) {
 			parts := strings.Split(statusFileName, ".")
 			if len(parts) != 3 {
-				ctx.Log("message", "Invalid status file '%s'", statusFileName)
+				ctx.Log("message", fmt.Sprintf("Invalid status file '%s'", statusFileName))
 			} else {
 				extensionName := parts[0]
 				seqNo := parts[1]
@@ -454,14 +455,14 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 				_, err = os.Stat(mrSeqFilePath)
 				if err != nil {
 					if errors.Is(err, os.ErrNotExist) {
-						ctx.Log("message", "Rehydrating mrseq file for '%s' because it was mistakenly deleted during disable", extensionName)
+						ctx.Log("message", fmt.Sprintf("Rehydrating mrseq file for '%s' because it was mistakenly deleted during disable", extensionName))
 						err = os.WriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
 						if err != nil {
 							errMessage := fmt.Sprintf("Could not write file '%s'", mrSeqFilePath)
 							ctx.Log("message", errMessage)
 							return errors.Wrap(err, errMessage)
 						}
-						ctx.Log("message", "Successfully rehydrated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath)
+						ctx.Log("message", fmt.Sprintf("Successfully rehydrated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath))
 					} else {
 						errMessage := fmt.Sprintf("Could not access file '%s' even though it exists", mrSeqFilePath)
 						ctx.Log("message", errMessage)
@@ -484,7 +485,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 							ctx.Log("message", errMessage)
 							return errors.Wrap(err, errMessage)
 						}
-						ctx.Log("message", "Updated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath)
+						ctx.Log("message", fmt.Sprintf("Updated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath))
 					}
 				}
 			}
