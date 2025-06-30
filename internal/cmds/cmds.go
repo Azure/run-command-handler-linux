@@ -67,12 +67,24 @@ var (
 		"update":    CmdUpdate,
 		"uninstall": CmdUninstall,
 	}
+
+	RunCmd = runCmd
+
+	ErrAlreadyProcessed = errors.New("the script configuration has already been processed, will not run again")
 )
 
 func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
 	exitCode, err := immediatecmds.Update(ctx, h, metadata.ExtName, metadata.SeqNum)
 	if err != nil {
 		return "", "", err, exitCode
+	}
+
+	err = rehydrateMrSeqFilesForProblematicUpgrades(ctx, h)
+	if err != nil {
+		// If we fail on update, then there's a risk we could re-execute the customer's script. Don't take that chance.
+		// By failing Update, the extension goal state will fail. WALA will try us again on the next goal state.
+		ctx.Log("event", "Unable to rehydrate mrseq files")
+		return "", "", err, constants.ExitCode_CouldNotRehydrateMrSeq
 	}
 
 	// Copy any .mrseq or .status files -Most Recently executed Sequence number files and status files for Run Commands from old version to new version.
@@ -91,13 +103,16 @@ func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 	if extensionHandlerName == constants.ImmediateRunCommandHandlerName {
 		exitCode, err := immediatecmds.Disable(ctx, h, metadata.ExtName, metadata.SeqNum)
 		if err != nil {
+			// Remove the mrseq file for the extension. For RunCommands that are called from the Guest Agent, it will delete these files for us
+			// if the extension is actually being deleted, and keep them for an update. However, in IRC we're not called by Guest Agent, so we
+			// need to delete them ourself.
+			resetSeqNum(ctx, metadata.MostRecentSequence)
 			return "", "", err, exitCode
 		}
 	}
 
 	ctx.Log("event", "disable")
 	pid.KillPreviousExtension(ctx, metadata.PidFilePath)
-	resetSeqNum(ctx, metadata.MostRecentSequence)
 	return "", "", nil, constants.ExitCode_Okay
 }
 
@@ -141,8 +156,12 @@ func enablePre(ctx *log.Context, h types.HandlerEnvironment, metadata types.RCMe
 		return errors.Wrap(err, "failed to process sequence number")
 	} else if shouldExit {
 		ctx.Log("event", "exit", "message", "the script configuration has already been processed, will not run again")
-		c.Functions.Cleanup(ctx, metadata, h, "")
-		return errors.New("the script configuration has already been processed, will not run again")
+
+		if c.Functions.Cleanup != nil {
+			c.Functions.Cleanup(ctx, metadata, h, "")
+		}
+
+		return ErrAlreadyProcessed
 	}
 
 	return nil
@@ -248,7 +267,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}()
 
 	// execute the command, save its error
-	runErr, exitCode := runCmd(ctx, dir, scriptFilePath, &cfg, metadata)
+	runErr, exitCode := RunCmd(ctx, dir, scriptFilePath, &cfg, metadata)
 
 	ticker.Stop()
 	done <- true
@@ -269,7 +288,10 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
-	c.Functions.Cleanup(ctx, metadata, h, cfg.PublicSettings.RunAsUser)
+	if c.Functions.Cleanup != nil {
+		c.Functions.Cleanup(ctx, metadata, h, cfg.PublicSettings.RunAsUser)
+	}
+
 	return stdoutTail, stderrTail, runErr, exitCode
 }
 
@@ -365,6 +387,111 @@ func CopyStateForUpdate(ctx log.Logger) error {
 		// This is best effort - Do not return error if any case of failures.
 		// Worst case that could happen is poll status timeouts for those few cases where creating dummy status file failed for some reason.
 		createDummyStatusFilesIfNeeded(ctx, mrseqFilesNameList)
+	}
+
+	return nil
+}
+
+func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, h types.HandlerEnvironment) error {
+	// First, determine whether we're upgrading from a 'problematic' version, defined as one
+	// where we mistakenly deleted the mrseq files in the Disable call
+	newExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	oldExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
+	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
+	oldExtensionDirectory := strings.ReplaceAll(newExtensionDirectory, newExtensionVersion, oldExtensionVersion)
+
+	// The following are problematic versions:
+	// Production: 1.3.17
+	// Test: 1.8.0, 1.9.0
+	isProblematicVersion := false
+	isTestExtension := strings.Contains(oldExtensionDirectory, constants.RunCommandTestExtensionName)
+	if isTestExtension {
+		isProblematicVersion = (oldExtensionVersion == constants.FirstTestVersionThatDeletesMrSeqFiles || oldExtensionVersion == constants.SecondTestVersionThatDeletesMrSeqFiles)
+	} else {
+		isProblematicVersion = (oldExtensionVersion == constants.ProductionVersionThatDeletesMrSeqFiles)
+	}
+
+	if isProblematicVersion {
+		ctx.Log("message", fmt.Sprintf("Rehydrating mrseq files deleted by from version '%s' using status files", oldExtensionVersion))
+		return doRehydrateMrSeqFilesForProblematicUpgrades(ctx, oldExtensionDirectory, newExtensionDirectory)
+	} else {
+		ctx.Log("message", fmt.Sprintf("Previous extension version '%s' does not require mrseq hydration", oldExtensionVersion))
+	}
+
+	return nil
+}
+
+func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionDirectory string, newExtensionDirectory string) error {
+	oldExtensionStatusDirectory := filepath.Join(oldExtensionDirectory, constants.StatusFileDirectory)
+
+	extensionStatusDirectoryFDRef, err := os.Open(oldExtensionStatusDirectory)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("Failed to open status directory '%s'", oldExtensionStatusDirectory))
+	}
+	defer extensionStatusDirectoryFDRef.Close()
+
+	// Iterate through the status directory, looking for files of the format: {extension name}.{seqNo}.status
+	// For each of these, look for the corresponding file {extension name}.mrseq under the extension directory
+	// If we find any status files missing their corresponding mrseq, then rehydrate it by taking the seqNo from the status file name
+	statusFiles, err := extensionStatusDirectoryFDRef.ReadDir(0)
+	if err != nil {
+		errMessage := fmt.Sprintf("could not read directory entries from status directory %s", oldExtensionDirectory)
+		ctx.Log("message", errMessage)
+		return errors.Wrap(err, errMessage)
+	}
+
+	for _, statusFile := range statusFiles {
+		statusFileName := statusFile.Name()
+
+		if strings.HasSuffix(statusFileName, constants.StatusFileExtension) {
+			parts := strings.Split(statusFileName, ".")
+			if len(parts) != 3 {
+				ctx.Log("message", fmt.Sprintf("Invalid status file '%s'", statusFileName))
+			} else {
+				extensionName := parts[0]
+				seqNo := parts[1]
+				seqNoAsInt, _ := strconv.Atoi(seqNo)
+				mrSeqFileName := extensionName + constants.MrSeqFileExtension
+				mrSeqFilePath := filepath.Join(newExtensionDirectory, mrSeqFileName)
+
+				_, err = os.Stat(mrSeqFilePath)
+				if err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						ctx.Log("message", fmt.Sprintf("Rehydrating mrseq file for '%s' because it was mistakenly deleted during disable", extensionName))
+						err = os.WriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
+						if err != nil {
+							errMessage := fmt.Sprintf("Could not write file '%s'", mrSeqFilePath)
+							ctx.Log("message", errMessage)
+							return errors.Wrap(err, errMessage)
+						}
+						ctx.Log("message", fmt.Sprintf("Successfully rehydrated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath))
+					} else {
+						errMessage := fmt.Sprintf("Could not access file '%s' even though it exists", mrSeqFilePath)
+						ctx.Log("message", errMessage)
+						return errors.Wrap(err, errMessage)
+					}
+				} else {
+					// Overwrite mrseq this seqNo is greater than the one it contains (simple solution for multiple status files)
+					contents, err := os.ReadFile(mrSeqFilePath)
+					if err != nil {
+						errMessage := fmt.Sprintf("Could not read file '%s'", mrSeqFilePath)
+						ctx.Log("message", errMessage)
+						return errors.Wrap(err, errMessage)
+					}
+
+					currentSeqNo, _ := strconv.Atoi(string(contents))
+					if seqNoAsInt > currentSeqNo {
+						err = os.WriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
+						if err != nil {
+							errMessage := fmt.Sprintf("Could not write file '%s'", mrSeqFilePath)
+							ctx.Log("message", errMessage)
+							return errors.Wrap(err, errMessage)
+						}
+						ctx.Log("message", fmt.Sprintf("Updated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath))
+					}
+				}
+			}
+		}
 	}
 
 	return nil
