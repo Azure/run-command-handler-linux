@@ -49,8 +49,8 @@ func ReportStatusToLocalFileWithErrorClarification(ctx *log.Context, hEnv types.
 		ctx.Log("status", "not reported for operation (by design)")
 		return nil
 	}
-	var errorcode = constants.TranslateExitCodeToErrorClarification(exitcode)
-	rootStatusJson, err := getRootStatusJsonWithErrorCalrification(ctx, statusType, c, msg, true, metadata.ExtName, errorcode)
+	// var errorcode = constants.TranslateExitCodeToErrorClarification(exitcode)
+	rootStatusJson, err := getRootStatusJsonWithErrorCalrification(ctx, statusType, c, msg, true, metadata.ExtName, 2)
 	if err != nil {
 		return errors.Wrap(err, "failed to get json for status report")
 	}
