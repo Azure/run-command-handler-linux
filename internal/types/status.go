@@ -6,7 +6,8 @@ import "time"
 type StatusReport []StatusItem
 
 func NewStatusReport(statusType StatusType, operation string, message string, extName string) StatusReport {
-
+	errorClarificationName := "ErrroClarificationName"
+	errorClarificationValue := 0
 	return []StatusItem{
 		{
 			Version:      1, // this is the protocol version do not change unless you are sure
@@ -18,6 +19,10 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 				FormattedMessage: FormattedMessage{
 					Lang:    "en",
 					Message: message},
+				SubStatus: []substastus{{
+					Name: errorClarificationName,
+					Code: errorClarificationValue,
+				}},
 			},
 		},
 	}
