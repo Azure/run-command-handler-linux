@@ -212,7 +212,12 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 
 func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string) ([]byte, error) {
 	ctx.Log("message", "creating json to report status")
-	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName)
+
+	var test = "test"
+	if c.Functions.ErrorReport != nil {
+		test = ""
+	}
+	statusReport := types.NewStatusReport(statusType, c.Name, msg+test, extName)
 
 	b, err := MarshalStatusReportIntoJson(statusReport, indent)
 	if err != nil {
