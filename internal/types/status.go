@@ -39,8 +39,9 @@ func NewStatusReportWithErrorClarification(statusType StatusType, operation stri
 					Lang:    "en",
 					Message: message},
 				SubStatus: []substastus{{
-					Name: errorClarificationName,
-					Code: errorClarificationValue,
+					Name:   errorClarificationName,
+					Code:   errorClarificationValue,
+					Status: statusType,
 				}},
 			},
 		},
@@ -93,4 +94,6 @@ type substastus struct {
 	Name string `json:"name"`
 	// Code is the code of the substatus
 	Code int `json:"code"`
+	// Status is the status of the substatus
+	Status StatusType `json:"status"`
 }
