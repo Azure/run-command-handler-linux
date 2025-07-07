@@ -214,7 +214,7 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 	ctx.Log("message", "creating json to report status")
 
 	var test = "test"
-	if c.Functions.ErrorReport != nil {
+	if c.Functions.ErrorReport == nil {
 		test = ""
 	}
 	statusReport := types.NewStatusReport(statusType, c.Name, msg+test, extName)
