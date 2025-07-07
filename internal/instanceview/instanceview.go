@@ -23,7 +23,7 @@ func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, metadat
 		return err
 	}
 
-	if c.Functions.ErrorReport != nil {
+	if c.Functions.ErrorReport == nil {
 		return c.Functions.ReportStatus(ctx, hEnv, metadata, t, c, msg)
 	}
 
