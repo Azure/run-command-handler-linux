@@ -1,7 +1,8 @@
 module github.com/Azure/run-command-handler-linux
 
-go 1.22.1
-toolchain go1.24.1
+go 1.23.0
+
+toolchain go1.24.5
 
 require (
 	github.com/Azure/azure-extension-foundation v0.0.0-20250620154556-caff9e3c3c5c
