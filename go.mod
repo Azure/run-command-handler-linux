@@ -4,7 +4,7 @@ go 1.22.1
 toolchain go1.24.1
 
 require (
-	github.com/Azure/azure-extension-foundation v0.0.0-20230404211847-9858bdd5c187
+	github.com/Azure/azure-extension-foundation v0.0.0-20250620154556-caff9e3c3c5c
 	github.com/Azure/azure-extension-platform v0.0.0-20240610175536-404c704f82f8
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0

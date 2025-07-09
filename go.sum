@@ -1,5 +1,7 @@
 github.com/Azure/azure-extension-foundation v0.0.0-20230404211847-9858bdd5c187 h1:C4S32XsUvctWzdWDEYlvhfcgH1iGvSD62II7Dd7F6B8=
 github.com/Azure/azure-extension-foundation v0.0.0-20230404211847-9858bdd5c187/go.mod h1:a0BFq9UoWBHvBS7iagvjFqBjYfxtBsmqvCLWIHRq9b0=
+github.com/Azure/azure-extension-foundation v0.0.0-20250620154556-caff9e3c3c5c h1:VJWgijxnboT//vE/2fvdERs0nn0Au5tWINvENmevp+8=
+github.com/Azure/azure-extension-foundation v0.0.0-20250620154556-caff9e3c3c5c/go.mod h1:sNC6lMTUkXwjrQ+nttr6GXhDfvSGT7t3UDq30BEYzu8=
 github.com/Azure/azure-extension-platform v0.0.0-20240610175536-404c704f82f8 h1:4AgLx0eXWAzh4nL7eBzwxoQaZEk5Hp2Ilq33YwYzEos=
 github.com/Azure/azure-extension-platform v0.0.0-20240610175536-404c704f82f8/go.mod h1:nEQQIC3RKmMnpdc+RakYHIdu556jdcHv67ML8PdsQeQ=
 github.com/Azure/azure-sdk-for-go v68.0.0+incompatible h1:fcYLmCpyNYRnvJbPerq7U0hS+6+I79yEDJBqVNcqUzU=
