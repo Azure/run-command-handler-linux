@@ -112,7 +112,7 @@ func Test_GetExtNameFromEnvVariable(t *testing.T) {
 	extName := "testExtension"
 	os.Setenv(constants.ConfigExtensionNameEnvName, extName)
 
-	actualExtName := getExtensionName(ctx)
+	actualExtName := GetExtensionName(ctx)
 	require.Equal(t, extName, actualExtName)
 }
 
