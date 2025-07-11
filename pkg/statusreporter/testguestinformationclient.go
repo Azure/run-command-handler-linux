@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/go-kit/kit/log"
 )
 
 type TestGuestInformationClient struct {
@@ -20,7 +21,7 @@ func (c TestGuestInformationClient) GetPutStatusUri() string {
 	return fmt.Sprintf(constants.PutImmediateStatusFormatString, c.GetEndpoint())
 }
 
-func (c TestGuestInformationClient) ReportStatus(statusToUpload string) (*http.Response, error) {
+func (c TestGuestInformationClient) ReportStatus(ctx *log.Context, statusToUpload string) (*http.Response, error) {
 	w := httptest.NewRecorder()
 	resp := w.Result()
 	resp.Request = httptest.NewRequest(http.MethodPut, c.Endpoint, nil)

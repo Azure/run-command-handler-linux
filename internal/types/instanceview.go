@@ -42,3 +42,9 @@ type RunCommandInstanceView struct {
 func (instanceView RunCommandInstanceView) Marshal() ([]byte, error) {
 	return json.Marshal(instanceView)
 }
+
+func IsImmediateGoalStateInTerminalState(s Status) bool {
+	return s.Status == StatusSuccess ||
+		s.Status == StatusError ||
+		s.Status == StatusSkipped
+}

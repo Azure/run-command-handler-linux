@@ -19,8 +19,14 @@ import (
 
 const (
 	enableCommand             string = "enable"
+	disableCommand            string = "disable"
 	maxExecutionTimeInMinutes int32  = 90
 )
+
+var statusToCommandMap = map[string]string{
+	"enabled":  enableCommand,
+	"disabled": disableCommand,
+}
 
 // HandleImmediateGoalState handles the immediate goal state by executing the command and waiting for it to finish.
 // ctx: The logger context.
@@ -32,12 +38,14 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 	err := make(chan error)
 	go startAsync(ctx, setting, notifier, done, err)
 	select {
-	case <-err:
-		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(<-err, "error when trying to execute goal state")
+	case e := <-err:
+		ctx.Log("error", fmt.Sprintf("error when trying to execute goal state: %v", e))
+		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(e, "error when trying to execute goal state")
 	case <-done:
 		ctx.Log("message", "goal state successfully finished")
 		return constants.ExitCode_Okay, nil
 	case <-time.After(time.Minute * time.Duration(maxExecutionTimeInMinutes)):
+		ctx.Log("message", "timeout when trying to execute goal state")
 		return constants.ExitCode_ImmediateTaskTimeout, errors.New("timeout when trying to execute goal state")
 	}
 }
@@ -52,9 +60,11 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 		return errors.New("notifier is nil. Cannot report status to HGAP")
 	}
 
-	cmd, ok := commands.Cmds[enableCommand]
+	extensionState := goalStateKey.RuntimeSettingsState
+	cmdToReport := statusToCommandMap[extensionState]
+	cmd, ok := commands.Cmds[cmdToReport]
 	if !ok {
-		return errors.New("missing enable command")
+		return errors.New(fmt.Sprintf("missing command %v", extensionState))
 	}
 
 	if !cmd.ShouldReportStatus {
@@ -67,7 +77,7 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 		return errors.Wrapf(err, "failed to marshal instance view")
 	}
 
-	statusItem, err := status.GetSingleStatusItem(ctx, statusType, cmd, string(msg))
+	statusItem, err := status.GetSingleStatusItem(ctx, statusType, cmd, string(msg), goalStateKey.ExtensionName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get status item")
 	}
@@ -88,20 +98,24 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 		return
 	}
 
-	cmd, ok := commands.Cmds[enableCommand]
+	extensionState := *setting.ExtensionState
+	ctx.Log("message", fmt.Sprintf("starting command for extension state %v", extensionState))
+
+	cmdToReport := statusToCommandMap[extensionState]
+	cmd, ok := commands.Cmds[cmdToReport]
 	if !ok {
-		err <- errors.New("missing enable command")
+		err <- errors.New(fmt.Sprintf("missing command %v", extensionState))
 		return
 	}
 
 	// Overwrite function to report status to HGAP. This function prepares the status to be sent to the HGAP and then calls the notifier to send it.
 	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
 		if !c.ShouldReportStatus {
-			ctx.Log("status", "not reported for operation (by design)")
+			ctx.Log("status", fmt.Sprintf("status not reported for operation %v (by design)", c.Name))
 			return nil
 		}
 
-		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg)
+		statusItem, err := status.GetSingleStatusItem(ctx, statusType, c, msg, metadata.ExtName)
 		if err != nil {
 			return errors.Wrap(err, "failed to get status item")
 		}
@@ -109,8 +123,9 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 		ctx.Log("message", fmt.Sprintf("reporting status by notifying the observer to then send to HGAP for extension name %v and seq number %v", metadata.ExtName, metadata.SeqNum))
 		return notifier.Notify(types.StatusEventArgs{
 			StatusKey: types.GoalStateKey{
-				ExtensionName: metadata.ExtName,
-				SeqNumber:     metadata.SeqNum,
+				ExtensionName:        metadata.ExtName,
+				SeqNumber:            metadata.SeqNum,
+				RuntimeSettingsState: extensionState,
 			},
 			TopLevelStatus: statusItem,
 		})
