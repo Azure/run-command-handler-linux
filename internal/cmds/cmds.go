@@ -68,7 +68,8 @@ var (
 		"uninstall": CmdUninstall,
 	}
 
-	RunCmd = runCmd
+	RunCmd  = runCmd
+	DataDir = constants.DataDir
 
 	ErrAlreadyProcessed = errors.New("the script configuration has already been processed, will not run again")
 )
@@ -122,11 +123,11 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 		return "", "", err, exitCode
 	}
 
-	if err := os.MkdirAll(constants.DataDir, 0755); err != nil {
+	if err := os.MkdirAll(DataDir, 0755); err != nil {
 		return "", "", errors.Wrap(err, "failed to create data dir"), constants.ExitCode_CreateDataDirectoryFailed
 	}
 
-	ctx.Log("event", "created data dir", "path", constants.DataDir)
+	ctx.Log("event", "created data dir", "path", DataDir)
 	ctx.Log("event", "installed")
 	return "", "", nil, constants.ExitCode_Okay
 }
@@ -138,9 +139,9 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 	}
 
 	{ // a new context scope with path
-		ctx = ctx.With("path", constants.DataDir)
-		ctx.Log("event", "removing data dir", "path", constants.DataDir)
-		if err := os.RemoveAll(constants.DataDir); err != nil {
+		ctx = ctx.With("path", DataDir)
+		ctx.Log("event", "removing data dir", "path", DataDir)
+		if err := os.RemoveAll(DataDir); err != nil {
 			return "", "", errors.Wrap(err, "failed to delete data directory"), constants.ExitCode_RemoveDataDirectoryFailed
 		}
 		ctx.Log("event", "removed data dir")
