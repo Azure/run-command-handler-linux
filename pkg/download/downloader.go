@@ -27,6 +27,8 @@ const (
 )
 
 var (
+	MakeHttpRequest = HttpClientDo
+
 	// httpClient is the default client to be used in downloading files from
 	// Internet. http.Get() uses a client without timeouts (http.DefaultClient)
 	// so it is dangerous to use it for downloading files from the Internet.
@@ -43,6 +45,10 @@ var (
 		}}
 )
 
+func HttpClientDo(request *http.Request) (*http.Response, error) {
+	return httpClient.Do(request)
+}
+
 // Download retrieves a response body and checks the response status code to see
 // if it is 200 OK and then returns the response body. It issues a new request
 // every time called. It is caller's responsibility to close the response body.
@@ -56,7 +62,7 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 		ctx.Log("info", fmt.Sprintf("starting download with client request ID %s", requestID))
 	}
 
-	response, err := httpClient.Do(request)
+	response, err := MakeHttpRequest(request)
 	if err != nil {
 		err = urlutil.RemoveUrlFromErr(err)
 		return -1, nil, errors.Wrapf(err, "http request failed")
