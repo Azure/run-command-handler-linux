@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
+	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
+	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
@@ -74,7 +78,13 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	os.Create(filepath.Join(previousStatusDirectory, "ABCD.1.status"))
 	os.Create(filepath.Join(previousStatusDirectory, "abc.cs")) // this should not be copied to currentExtensionVersionDirectory
 
-	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()))
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: path.Join(currentExtensionVersionDirectory, "events"),
+	}
+
+	extensionLogger := logging.New(nil)
+	extensionEventManager := extensionevents.New(extensionLogger, &handlerEnvironment)
+	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), extensionEventManager)
 	require.Nil(t, err)
 
 	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
