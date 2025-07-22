@@ -131,13 +131,14 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 	}
 
 	if err := os.MkdirAll(DataDir, 0755); err != nil {
-		extensionEvents.LogErrorEvent("install", "Failed to create data dir")
-		return "", "", errors.Wrap(err, "failed to create data dir"), constants.ExitCode_CreateDataDirectoryFailed
+		errMessage := fmt.Sprintf("Failed to create data dir: %v due to: %v", DataDir, err)
+		extensionEvents.LogErrorEvent("install", errMessage)
+		return "", "", errors.Wrap(err, errMessage), constants.ExitCode_CreateDataDirectoryFailed
 	}
 
 	ctx.Log("event", "created data dir", "path", DataDir)
 	ctx.Log("event", "installed")
-	extensionEvents.LogInformationalEvent("uninstall", "created data dir")
+	extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("created data dir: %v"))
 	return "", "", nil, constants.ExitCode_Okay
 }
 
@@ -152,10 +153,12 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 		ctx = ctx.With("path", constants.DataDir)
 		ctx.Log("event", "removing data dir", "path", constants.DataDir)
 		if err := os.RemoveAll(constants.DataDir); err != nil {
-			return "", "", errors.Wrap(err, "failed to delete data directory"), constants.ExitCode_RemoveDataDirectoryFailed
+			errMessage := fmt.Sprintf("Failed to delete data directory: %v due to: %v", DataDir, err)
+			extensionEvents.LogErrorEvent("uninstall", errMessage)
+			return "", "", errors.Wrap(err, errMessage), constants.ExitCode_RemoveDataDirectoryFailed
 		}
 		ctx.Log("event", "removed data dir")
-		extensionEvents.LogInformationalEvent("uninstall", "removed data dir")
+		extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("removed data dir %v", DataDir))
 	}
 	ctx.Log("event", "uninstalled")
 	return "", "", nil, constants.ExitCode_Okay
@@ -200,7 +203,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
 	if err != nil {
-		errMessage := fmt.Sprintf("Failed to download script: %v", err)
+		errMessage := fmt.Sprintf("Failed to download script: %v due to: %v", download.GetUriForLogging(cfg.ScriptURI()), err)
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "",
 			"",
@@ -456,7 +459,7 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, h types.Handler
 	}
 
 	if isProblematicVersion {
-		message := fmt.Sprintf("Rehydrating mrseq files deleted by from version '%s' using status files", oldExtensionVersion)
+		message := fmt.Sprintf("Rehydrating mrseq files deleted by version '%s' using status files", oldExtensionVersion)
 		ctx.Log("message", message)
 		extensionEvents.LogInformationalEvent("rehydratemrseq", message)
 		return doRehydrateMrSeqFilesForProblematicUpgrades(ctx, oldExtensionDirectory, newExtensionDirectory, extensionEvents)
@@ -474,7 +477,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 
 	extensionStatusDirectoryFDRef, err := os.Open(oldExtensionStatusDirectory)
 	if err != nil {
-		errMessage := fmt.Sprintf("Failed to open status directory '%s'", oldExtensionStatusDirectory)
+		errMessage := fmt.Sprintf("Failed to open status directory '%s' due to '%v'", oldExtensionStatusDirectory, err)
 		extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
 		return errors.Wrap(err, errMessage)
 	}
