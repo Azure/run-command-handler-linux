@@ -256,8 +256,3 @@ func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) (
 
 	return b, err
 }
-
-func ExitCodeToErrorClarification(exitcode int) int {
-	// Need to implement map to the translate
-	return exitcode
-}
