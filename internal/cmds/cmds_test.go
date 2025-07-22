@@ -188,6 +188,7 @@ func Test_checkAndSaveSeqNum(t *testing.T) {
 
 func Test_update_e2e_cmd(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	DataDir, _ = os.MkdirTemp("", "datadir")
 	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8")
 	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.9")
 	err := os.Mkdir(oldVersionDirectory, 0755)
@@ -239,6 +240,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 
 func Test_udpate_e2e_problematic_version(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	DataDir, _ = os.MkdirTemp("", "datadir")
 	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.17")
 	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.18")
 	err := os.Mkdir(oldVersionDirectory, 0755)
@@ -419,7 +421,7 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}},
 	}, metadata)
@@ -445,7 +447,7 @@ func Test_runCmd_fail(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: "non-existing-cmd"}},
 	}, metadata)
@@ -676,7 +678,7 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
 	}, metadata)
@@ -695,7 +697,7 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
 	}, metadata)
