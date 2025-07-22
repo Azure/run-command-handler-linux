@@ -78,6 +78,18 @@ func Test_blobDownload_fails_badCreds(t *testing.T) {
 		Container:   "foocontainer",
 	})
 
+	mockResponse := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Status:     "The chipmunks do not like you and thus returned a 403",
+	}
+
+	original := MakeHttpRequest
+	defer func() { MakeHttpRequest = original }()
+
+	MakeHttpRequest = func(*http.Request) (*http.Response, error) {
+		return mockResponse, nil
+	}
+
 	status, _, err := Download(testctx, d)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
@@ -93,6 +105,18 @@ func Test_blobDownload_fails_badRequest(t *testing.T) {
 			Blob:        "fooBlob.txt",
 			Container:   "foocontainer",
 		}}}
+
+	mockResponse := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Status:     "The chipmunks don't understand you. 400.",
+	}
+
+	original := MakeHttpRequest
+	defer func() { MakeHttpRequest = original }()
+
+	MakeHttpRequest = func(*http.Request) (*http.Response, error) {
+		return mockResponse, nil
+	}
 
 	status, _, err := Download(testctx, d)
 	require.NotNil(t, err)
