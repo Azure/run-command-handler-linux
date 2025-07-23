@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -78,8 +77,10 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	os.Create(filepath.Join(previousStatusDirectory, "ABCD.1.status"))
 	os.Create(filepath.Join(previousStatusDirectory, "abc.cs")) // this should not be copied to currentExtensionVersionDirectory
 
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
 	handlerEnvironment := handlerenv.HandlerEnvironment{
-		EventsFolder: path.Join(currentExtensionVersionDirectory, "events"),
+		EventsFolder: tempDir,
 	}
 
 	extensionLogger := logging.New(nil)
@@ -188,7 +189,11 @@ func Test_checkAndSaveSeqNum(t *testing.T) {
 
 func Test_update_e2e_cmd(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
 	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
 	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8")
 	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.9")
 	err := os.Mkdir(oldVersionDirectory, 0755)
@@ -205,6 +210,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
 	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
+	fakeEnv.HandlerEnvironment.EventsFolder = filepath.Join(oldVersionDirectory, constants.ExtensionEventsDirectory)
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
@@ -225,6 +231,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
 	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
 	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
+	fakeEnv.HandlerEnvironment.EventsFolder = filepath.Join(newVersionDirectory, constants.ExtensionEventsDirectory)
 	update_handler(t, fakeEnv, tempDir)
 
 	// Now, WALA will uninstall the old extension
@@ -240,7 +247,11 @@ func Test_update_e2e_cmd(t *testing.T) {
 
 func Test_udpate_e2e_problematic_version(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
 	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
 	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.17")
 	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.18")
 	err := os.Mkdir(oldVersionDirectory, 0755)
@@ -257,6 +268,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
 	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
+	fakeEnv.HandlerEnvironment.EventsFolder = filepath.Join(oldVersionDirectory, constants.ExtensionEventsDirectory)
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
@@ -292,6 +304,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.17")
 	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
 	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
+	fakeEnv.HandlerEnvironment.EventsFolder = filepath.Join(newVersionDirectory, constants.ExtensionEventsDirectory)
 	update_handler(t, fakeEnv, tempDir)
 
 	// Now, WALA will uninstall the old extension
