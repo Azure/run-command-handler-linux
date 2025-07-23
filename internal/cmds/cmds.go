@@ -325,6 +325,7 @@ func createExtensionEventManager(ctx *log.Context, hEnv types.HandlerEnvironment
 	return extensionEvents
 }
 
+// Converts from the local HandlerEnvironment to the azure-extension-platform HandlerEnvironment
 func convertToPlatformHandlerEnv(myEnv types.HandlerEnvironment) *handlerenv.HandlerEnvironment {
 	data, err := json.Marshal(myEnv.HandlerEnvironment)
 	if err != nil {
