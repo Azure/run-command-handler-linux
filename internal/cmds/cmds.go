@@ -138,7 +138,7 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 
 	ctx.Log("event", "created data dir", "path", DataDir)
 	ctx.Log("event", "installed")
-	extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("created data dir: %v"))
+	extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("created data dir: %v", DataDir))
 	return "", "", nil, constants.ExitCode_Okay
 }
 
