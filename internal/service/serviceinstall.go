@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/servicehandler"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
@@ -33,8 +34,9 @@ StandardError=append:%run_command_output_directory%
 WantedBy=multi-user.target`
 )
 
-func Register(ctx *log.Context) error {
+func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if !isSystemdSupported(ctx) {
+		extensionEvents.LogErrorEvent("register", "Systemd not supported. Failed to register service")
 		return errors.New("Systemd not supported. Failed to register service")
 	}
 	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
@@ -68,6 +70,8 @@ func Register(ctx *log.Context) error {
 	execDirectory := os.Getenv(constants.ExtensionPathEnvName) + "/bin/immediate-run-command-handler"
 	err = os.Chmod(execDirectory, 0744)
 	if err != nil {
+		errMessage := fmt.Sprintf("Error while marking the immediate run command binary as executable: %v", err)
+		extensionEvents.LogErrorEvent("register", errMessage)
 		return errors.Wrap(err, "error while marking the immediate run command binary as executable")
 	}
 
@@ -76,16 +80,17 @@ func Register(ctx *log.Context) error {
 		return err
 	}
 
-	err = Start(ctx)
+	err = Start(ctx, extensionEvents)
 	if err != nil {
 		return err
 	}
 
+	extensionEvents.LogInformationalEvent("register", "Service registration complete")
 	ctx.Log("message", "Service registration complete")
 	return nil
 }
 
-func DeRegister(ctx *log.Context) error {
+func DeRegister(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if isSystemdSupported(ctx) {
 		serviceHandler := getSystemdHandler(ctx)
 
@@ -95,13 +100,14 @@ func DeRegister(ctx *log.Context) error {
 			return err
 		}
 
+		extensionEvents.LogInformationalEvent("deregister", "Service deregistration complete")
 		ctx.Log("message", "Service deregistration complete")
 	}
 
 	return nil
 }
 
-func Start(ctx *log.Context) error {
+func Start(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if isSystemdSupported(ctx) {
 		serviceHandler := getSystemdHandler(ctx)
 
@@ -111,13 +117,14 @@ func Start(ctx *log.Context) error {
 			return err
 		}
 
+		extensionEvents.LogInformationalEvent("start", "Service started")
 		ctx.Log("message", "Service started")
 	}
 
 	return nil
 }
 
-func Disable(ctx *log.Context) error {
+func Disable(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if isSystemdSupported(ctx) {
 		serviceHandler := getSystemdHandler(ctx)
 
@@ -133,13 +140,15 @@ func Disable(ctx *log.Context) error {
 		if err != nil {
 			return err
 		}
+
+		extensionEvents.LogInformationalEvent("disable", "Service disabled")
 		ctx.Log("message", "Service disabled")
 	}
 
 	return nil
 }
 
-func Enable(ctx *log.Context) error {
+func Enable(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if isSystemdSupported(ctx) {
 		serviceHandler := getSystemdHandler(ctx)
 
@@ -148,13 +157,15 @@ func Enable(ctx *log.Context) error {
 		if err != nil {
 			return err
 		}
+
+		extensionEvents.LogInformationalEvent("enable", "Service enabled")
 		ctx.Log("message", "Service enabled")
 	}
 
 	return nil
 }
 
-func Stop(ctx *log.Context) error {
+func Stop(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if isSystemdSupported(ctx) {
 		serviceHandler := getSystemdHandler(ctx)
 
@@ -163,6 +174,8 @@ func Stop(ctx *log.Context) error {
 		if err != nil {
 			return err
 		}
+
+		extensionEvents.LogInformationalEvent("stop", "Service stopped")
 		ctx.Log("message", "Service stopped")
 	}
 

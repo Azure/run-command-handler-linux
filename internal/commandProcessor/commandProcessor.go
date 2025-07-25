@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
@@ -17,6 +18,10 @@ import (
 	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+)
+
+var (
+	handlerEnvironmentGetter func(name, version string) (he *handlerenv.HandlerEnvironment, _ error) = handlerenv.GetHandlerEnvironment
 )
 
 func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSettingsFile, extensionName string, seqNum int) error {
