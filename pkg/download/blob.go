@@ -2,6 +2,7 @@ package download
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -73,44 +74,53 @@ func NewBlobDownload(accountName, accountKey string, blob blobutil.AzureBlobRef)
 // GetSASBlob download a blob with specified uri and sas authorization and saves it to the target directory
 // Returns the filePath where the blob was downloaded
 func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
-	bloburl, err := url.Parse(blobURI + blobSas)
+	blobFullURL := blobURI + blobSas
+
 	loggableBlobUri := GetUriForLogging(blobURI)
+
+	resp, err := http.Get(blobFullURL)
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to download file: %q", loggableBlobUri)
+	}
+	defer resp.Body.Close() // Ensure the response body is closed after we're done
+
+	// Check if the HTTP status code indicates success (e.g., 200 OK)
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Wrapf(err, "Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status)
+	}
+
+	blobParsedurl, err := url.Parse(blobURI)
 	if err != nil {
 		return "", errors.Wrapf(err, "unable to parse URL: %q", loggableBlobUri)
 	}
-
-	containerRef, err := storage.GetContainerReferenceFromSASURI(*bloburl)
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to open storage container: %q", loggableBlobUri)
-	}
+	// Extract container name from Path of the url https://<hostName>/<Path>   For ex. Path = "containerName/dir1/dir2/file.sh"
+	trimmedPath := strings.Trim(blobParsedurl.Path, "/")
+	splitStrings := strings.Split(trimmedPath, "/")
+	containerName := splitStrings[0]
 
 	// Extract the blob path after container name
-	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
-	if fileName == "" {
-		return "", errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", loggableBlobUri)
+	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerName)
+	if fileName == "" || blobPathError != nil {
+		return "", errors.Wrapf(blobPathError, "Failed to extract blob path name from URL: %q", loggableBlobUri)
 	}
 
-	blobref := containerRef.GetBlobReference(fileName)
-	reader, err := blobref.Get(nil)
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to open storage blob: %q", loggableBlobUri)
-	}
-
+	// Create the local file
 	scriptFilePath := filepath.Join(targetDir, fileName)
 	const mode = 0500 // scripts should have execute permissions
-	file, err := os.OpenFile(scriptFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
+	outFile, err := os.OpenFile(scriptFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to open file '%s' for writing: ", scriptFilePath)
+		return "", errors.Wrapf(err, "Failed to open file '%s' for writing: ", scriptFilePath)
 	}
-	defer file.Close()
+	defer outFile.Close() // Ensure the file is closed after we're done
 
-	var buff = make([]byte, 1000)
-	for numBytes, _ := reader.Read(buff); numBytes > 0; numBytes, _ = reader.Read(buff) {
-		writtenBytes, writeErr := file.Write(buff[:numBytes])
-		if writtenBytes != numBytes || writeErr != nil {
-			return "", errors.Wrapf(writeErr, "failed to write to the file '%s': ", scriptFilePath)
-		}
+	// Write the body to the file using io.Copy
+	// io.Copy is efficient for large files as it streams data without
+	// loading the entire file into memory.
+	_, err = io.Copy(outFile, resp.Body)
+	if err != nil {
+		return "", errors.Wrapf(err, "Failed to copy data to file '%s'", scriptFilePath)
 	}
+
 	return scriptFilePath, nil
 }
 
