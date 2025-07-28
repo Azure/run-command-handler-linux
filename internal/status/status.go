@@ -50,7 +50,7 @@ func ReportStatusToLocalFileWithErrorClarification(ctx *log.Context, hEnv types.
 		return nil
 	}
 	var errorcode = constants.TranslateExitCodeToErrorClarification(exitcode)
-	rootStatusJson, err := getRootStatusJsonWithErrorCalrification(ctx, statusType, c, msg, true, metadata.ExtName, errorcode)
+	rootStatusJson, err := getRootStatusJsonWithErrorClarification(ctx, statusType, c, msg, true, metadata.ExtName, errorcode)
 	if err != nil {
 		return errors.Wrap(err, "failed to get json for status report")
 	}
@@ -222,7 +222,7 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 
 	return b, nil
 }
-func getRootStatusJsonWithErrorCalrification(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string, errorcode int) ([]byte, error) {
+func getRootStatusJsonWithErrorClarification(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string, errorcode int) ([]byte, error) {
 	ctx.Log("message", "creating json to report status")
 	statusReport := types.NewStatusReportWithErrorClarification(statusType, c.Name, msg, extName, errorcode)
 
