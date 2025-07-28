@@ -62,8 +62,7 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	return o.OnDemandNotify()
 }
 func IsEmptyStatusItem(statusItem1 types.StatusItem) bool {
-
-	return reflect.ValueOf(statusItem1).IsZero()
+	return reflect.DeepEqual(statusItem1, types.StatusItem{})
 }
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	latestStatusToReport := []ImmediateStatus{}

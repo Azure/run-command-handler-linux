@@ -38,7 +38,7 @@ func NewStatusReportWithErrorClarification(statusType StatusType, operation stri
 				FormattedMessage: FormattedMessage{
 					Lang:    "en",
 					Message: message},
-				SubStatus: []substastus{{
+				SubStatus: []subStatus{{
 					Name:   errorClarificationName,
 					Code:   errorClarificationValue,
 					Status: statusType,
@@ -78,8 +78,7 @@ type Status struct {
 	Operation        string           `json:"operation"`
 	Status           StatusType       `json:"status"`
 	FormattedMessage FormattedMessage `json:"formattedMessage"`
-	SubStatus        []substastus     `json:"substatus"` // optional substatus, can be nil
-
+	SubStatus        []subStatus      `json:"substatus"` // optional substatus, can be nil
 }
 
 // FormattedMessage is a struct used for serializing status
@@ -89,11 +88,15 @@ type FormattedMessage struct {
 }
 
 // substatus used for serialization
-type substastus struct {
+// It contains neccesary info that is used in CRP for error clarification
+type subStatus struct {
 	// Name is the name of the substatus
+	// Should be set as "ErroClarificationName"
 	Name string `json:"name"`
 	// Code is the code of the substatus
+	// Number code that is used in CRP for error clarification in conjunction with the errorclassification file
 	Code int `json:"code"`
 	// Status is the status of the substatus
+	// Status of the run command operation
 	Status StatusType `json:"status"`
 }
