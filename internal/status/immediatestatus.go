@@ -3,6 +3,7 @@ package status
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"sync"
 
@@ -60,21 +61,24 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
 	return o.OnDemandNotify()
 }
-func IsEqualStatusItem(statusItem1 types.StatusItem, statusItem2 types.StatusItem) bool {
-	if statusItem1.Version != statusItem2.Version ||
-		statusItem1.TimestampUTC != statusItem2.TimestampUTC {
-		return false
-	}
-	if statusItem1.Status.Name != statusItem2.Status.Name ||
-		statusItem1.Status.Operation != statusItem2.Status.Operation ||
-		statusItem1.Status.Status != statusItem2.Status.Status ||
-		statusItem1.Status.FormattedMessage != statusItem2.Status.FormattedMessage {
-		return false
-	}
-	if len(statusItem1.Status.SubStatus) != len(statusItem2.Status.SubStatus) {
-		return false
-	}
-	return true
+func IsEmptyStatusItem(statusItem1 types.StatusItem, statusItem2 types.StatusItem) bool {
+
+	return reflect.ValueOf(statusItem1).IsZero()
+
+	// if statusItem1.Version != statusItem2.Version ||
+	// 	statusItem1.TimestampUTC != statusItem2.TimestampUTC {
+	// 	return false
+	// }
+	// if statusItem1.Status.Name != statusItem2.Status.Name ||
+	// 	statusItem1.Status.Operation != statusItem2.Status.Operation ||
+	// 	statusItem1.Status.Status != statusItem2.Status.Status ||
+	// 	statusItem1.Status.FormattedMessage != statusItem2.Status.FormattedMessage {
+	// 	return false
+	// }
+	// if len(statusItem1.Status.SubStatus) != len(statusItem2.Status.SubStatus) {
+	// 	return false
+	// }
+	// return true
 }
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	latestStatusToReport := []ImmediateStatus{}
@@ -86,7 +90,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 		// Only report the latest active status for each goal state
 		goalStateKey := key.(types.GoalStateKey)
 		if goalStateKey.RuntimeSettingsState != "disabled" {
-			if !IsEqualStatusItem(value.(types.StatusItem), types.StatusItem{}) {
+			if !IsEmptyStatusItem(value.(types.StatusItem), types.StatusItem{}) {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
