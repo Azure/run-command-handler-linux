@@ -23,11 +23,11 @@ func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, metadat
 		return err
 	}
 
-	if c.Functions.ErrorReport == nil {
-		return c.Functions.ReportStatus(ctx, hEnv, metadata, t, c, msg)
-	}
+	// if c.Functions.ErrorReport == nil {
+	return c.Functions.ReportStatus(ctx, hEnv, metadata, t, c, msg)
+	// }
 
-	return c.Functions.ErrorReport(ctx, hEnv, metadata, t, c, msg, instanceview.ExitCode)
+	// return c.Functions.ErrorReport(ctx, hEnv, metadata, t, c, msg, instanceview.ExitCode)
 }
 
 func SerializeInstanceView(instanceview *types.RunCommandInstanceView) (string, error) {
