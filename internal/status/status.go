@@ -29,7 +29,7 @@ func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, me
 	}
 
 	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, true, metadata.ExtName)
-	if c.Functions.ErrorReport != nil {
+	if c.Functions.Pre != nil {
 		var errorcode = constants.TranslateExitCodeToErrorClarification(exitcode[0])
 		rootStatusJson, err = getRootStatusJsonWithErrorClarification(ctx, statusType, c, msg, true, metadata.ExtName, errorcode)
 	}
