@@ -200,23 +200,13 @@ func Test_update_e2e_cmd(t *testing.T) {
 	require.Nil(t, err, "Could not create old version subdirectory")
 	err = os.Mkdir(newVersionDirectory, 0755)
 	require.Nil(t, err, "Could not create new version subdirectory")
-	oldStatusPath := filepath.Join(oldVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(oldStatusPath, 0755)
-	require.Nil(t, err, "Could not create old version status subdirectory")
-	newStatusPath := filepath.Join(newVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(newStatusPath, 0755)
-	require.Nil(t, err, "Could not create new version status subdirectory")
-	oldEventsPath := filepath.Join(oldVersionDirectory, constants.ExtensionEventsDirectory)
-	err = os.Mkdir(oldEventsPath, 0755)
-	require.Nil(t, err, "Could not create old version events subdirectory")
-	newEventsPath := filepath.Join(newVersionDirectory, constants.ExtensionEventsDirectory)
-	err = os.Mkdir(newEventsPath, 0755)
-	require.Nil(t, err, "Could not create new version events subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
 
 	fakeEnv := types.HandlerEnvironment{}
-	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
-	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
-	fakeEnv.HandlerEnvironment.EventsFolder = oldEventsPath
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
@@ -235,9 +225,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionEnvName, "1.3.9")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
-	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
-	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
-	fakeEnv.HandlerEnvironment.EventsFolder = newEventsPath
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
 	update_handler(t, fakeEnv, tempDir)
 
 	// Now, WALA will uninstall the old extension
@@ -264,23 +252,13 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	require.Nil(t, err, "Could not create old version subdirectory")
 	err = os.Mkdir(newVersionDirectory, 0755)
 	require.Nil(t, err, "Could not create new version subdirectory")
-	oldStatusPath := filepath.Join(oldVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(oldStatusPath, 0755)
-	require.Nil(t, err, "Could not create old version status subdirectory")
-	newStatusPath := filepath.Join(newVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(newStatusPath, 0755)
-	require.Nil(t, err, "Could not create new version status subdirectory")
-	oldEventsPath := filepath.Join(oldVersionDirectory, constants.ExtensionEventsDirectory)
-	err = os.Mkdir(oldEventsPath, 0755)
-	require.Nil(t, err, "Could not create old version events subdirectory")
-	newEventsPath := filepath.Join(newVersionDirectory, constants.ExtensionEventsDirectory)
-	err = os.Mkdir(newEventsPath, 0755)
-	require.Nil(t, err, "Could not create new version events subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
 
 	fakeEnv := types.HandlerEnvironment{}
-	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
-	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
-	fakeEnv.HandlerEnvironment.EventsFolder = oldEventsPath
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
@@ -314,9 +292,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionEnvName, "1.3.18")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.17")
-	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
-	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
-	fakeEnv.HandlerEnvironment.EventsFolder = newEventsPath
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
 	update_handler(t, fakeEnv, tempDir)
 
 	// Now, WALA will uninstall the old extension
@@ -334,6 +310,19 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", true, 2)
 	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", true, 1)
 	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", true, 1)
+}
+
+func create_folder(t *testing.T, versionDirectory string, folderName string) string {
+	folderPath := filepath.Join(versionDirectory, folderName)
+	err := os.Mkdir(folderPath, 0755)
+	require.Nil(t, err, "Could not create folder "+folderName)
+	return folderPath
+}
+
+func update_handler_env(fakeEnv *types.HandlerEnvironment, statusFolder string, configFolder string, eventsFolder string) {
+	fakeEnv.HandlerEnvironment.StatusFolder = statusFolder
+	fakeEnv.HandlerEnvironment.ConfigFolder = configFolder
+	fakeEnv.HandlerEnvironment.EventsFolder = eventsFolder
 }
 
 func install_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {

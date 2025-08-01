@@ -150,9 +150,9 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 	}
 
 	{ // a new context scope with path
-		ctx = ctx.With("path", constants.DataDir)
-		ctx.Log("event", "removing data dir", "path", constants.DataDir)
-		if err := os.RemoveAll(constants.DataDir); err != nil {
+		ctx = ctx.With("path", DataDir)
+		ctx.Log("event", "removing data dir", "path", DataDir)
+		if err := os.RemoveAll(DataDir); err != nil {
 			errMessage := fmt.Sprintf("Failed to delete data directory: %v due to: %v", DataDir, err)
 			extensionEvents.LogErrorEvent("uninstall", errMessage)
 			return "", "", errors.Wrap(err, errMessage), constants.ExitCode_RemoveDataDirectoryFailed
