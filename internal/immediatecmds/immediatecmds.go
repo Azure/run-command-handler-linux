@@ -1,6 +1,9 @@
 package immediatecmds
 
 import (
+	"fmt"
+
+	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/service"
@@ -11,16 +14,20 @@ import (
 
 // Updates the service definition if any immediate run command service exists.
 // The action is skipped if the service has already been upgraded.
-func Update(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int) (int, error) {
+func Update(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int, extensionEvents *extensionevents.ExtensionEventManager) (int, error) {
 	ctx.Log("message", "updating immediate run command")
 	isInstalled, err := service.IsInstalled(ctx)
 	if err != nil {
+		errMessage := fmt.Sprintf("Failed to check if any runcommand service is installed: %v", err)
+		extensionEvents.LogErrorEvent("immediateupdate", errMessage)
 		return constants.ExitCode_CreateDataDirectoryFailed, errors.Wrap(err, "failed to check if any runcommand service is installed")
 	}
 
 	if isInstalled {
-		err = service.Register(ctx)
+		err = service.Register(ctx, extensionEvents)
 		if err != nil {
+			errMessage := fmt.Sprintf("Failed to upgrade run command service: %v", err)
+			extensionEvents.LogErrorEvent("immediateupdate", errMessage)
 			return constants.ExitCode_UpgradeInstalledServiceFailed, errors.Wrap(err, "failed to upgrade run command service")
 		}
 	}
@@ -28,25 +35,32 @@ func Update(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 	return constants.ExitCode_Okay, nil
 }
 
-func Disable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int) (int, error) {
+func Disable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int, extensionEvents *extensionevents.ExtensionEventManager) (int, error) {
 	isInstalled, err := service.IsInstalled(ctx)
 	if err != nil {
+		errMessage := fmt.Sprintf("Failed to check if runcommand service is installed: %v", err)
+		extensionEvents.LogErrorEvent("immediatedisable", errMessage)
 		return constants.ExitCode_DisableInstalledServiceFailed, errors.Wrap(err, "failed to check if runcommand service is installed")
 	}
 
 	if isInstalled {
 		isEnabled, err := service.IsEnabled(ctx)
 		if err != nil {
+			errMessage := fmt.Sprintf("Failed to check if service is enabled: %v", err)
+			extensionEvents.LogErrorEvent("immediatedisable", errMessage)
 			return constants.ExitCode_InstallServiceFailed, errors.Wrap(err, "failed to check if service is enabled")
 		}
 
 		if isEnabled {
-			err := service.Disable(ctx)
+			err := service.Disable(ctx, extensionEvents)
 			if err != nil {
+				errMessage := fmt.Sprintf("Failed to disable run command service: %v", err)
+				extensionEvents.LogErrorEvent("immediatedisable", errMessage)
 				return constants.ExitCode_DisableInstalledServiceFailed, errors.Wrap(err, "failed to disable run command service")
 			}
 		} else {
 			ctx.Log("message", "Service installed but already got disabled. Skipping request to disable")
+			extensionEvents.LogInformationalEvent("immediatedisable", "Service installed but already got disabled. Skipping request to disable")
 		}
 	}
 
@@ -58,51 +72,64 @@ func Install() (int, error) {
 	return constants.ExitCode_Okay, nil
 }
 
-func Uninstall(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int) (int, error) {
+func Uninstall(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int, extensionEvents *extensionevents.ExtensionEventManager) (int, error) {
 	ctx.Log("message", "proceeding to uninstall immediate run command")
 	isInstalled, err := service.IsInstalled(ctx)
 	if err != nil {
+		errMessage := fmt.Sprintf("Failed to check if runcommand service is installed: %v", err)
+		extensionEvents.LogErrorEvent("immediatedisable", errMessage)
 		return constants.ExitCode_RemoveDataDirectoryFailed, errors.Wrap(err, "failed to check if runcommand service is installed")
 	}
 
 	if isInstalled {
-		error := service.DeRegister(ctx)
+		error := service.DeRegister(ctx, extensionEvents)
 		if error != nil {
+			errMessage := fmt.Sprintf("Failed to uninstall run command service: %v", error)
+			extensionEvents.LogErrorEvent("immediatedisable", errMessage)
 			return constants.ExitCode_UninstallInstalledServiceFailed, errors.Wrap(err, "failed to uninstall run command service")
 		}
 	}
 	return constants.ExitCode_Okay, nil
 }
 
-func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int, cfg handlersettings.HandlerSettings) (int, error) {
+func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum int, cfg handlersettings.HandlerSettings, extensionEvents *extensionevents.ExtensionEventManager) (int, error) {
 	// If installService == true, then install RunCommand as a service
 	if cfg.InstallAsService() {
 		isInstalled, err2 := service.IsInstalled(ctx)
 		if err2 != nil {
 			ctx.Log("message", "could not check if service is already installed. Proceeding to overwrite configuration file to make sure it gets installed.")
+			extensionEvents.LogErrorEvent("immediateenable", "could not check if service is already installed. Proceeding to overwrite configuration file to make sure it gets installed.")
 		}
 
 		if !isInstalled {
-			err3 := service.Register(ctx)
+			err3 := service.Register(ctx, extensionEvents)
 			if err3 != nil {
+				errMessage := fmt.Sprintf("Failed to install RunCommand as a service: %v", err3)
+				extensionEvents.LogErrorEvent("immediateenable", errMessage)
 				return constants.ExitCode_InstallServiceFailed, errors.Wrap(err3, "failed to install RunCommand as a service")
 			}
 		} else {
 			isEnabled, err3 := service.IsEnabled(ctx)
 			if err3 != nil {
+				errMessage := fmt.Sprintf("Failed to check if service is already enabled: %v", err3)
+				extensionEvents.LogErrorEvent("immediateenable", errMessage)
 				return constants.ExitCode_InstallServiceFailed, errors.Wrap(err3, "failed to check if service is already enabled")
 			}
 
 			if !isEnabled {
-				err4 := service.Enable(ctx)
+				err4 := service.Enable(ctx, extensionEvents)
 
 				if err4 != nil {
+					errMessage := fmt.Sprintf("Failed to enable service: %v", err4)
+					extensionEvents.LogErrorEvent("immediateenable", errMessage)
 					return constants.ExitCode_InstallServiceFailed, errors.Wrap(err4, "failed to enable service")
 				}
 
-				err5 := service.Start(ctx)
+				err5 := service.Start(ctx, extensionEvents)
 
 				if err5 != nil {
+					errMessage := fmt.Sprintf("Failed to start service: %v", err5)
+					extensionEvents.LogErrorEvent("immediateenable", errMessage)
 					return constants.ExitCode_InstallServiceFailed, errors.Wrap(err5, "failed to start service")
 				}
 			}

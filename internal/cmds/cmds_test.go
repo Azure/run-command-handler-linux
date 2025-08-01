@@ -12,6 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
+	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
+	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
@@ -74,7 +77,15 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	os.Create(filepath.Join(previousStatusDirectory, "ABCD.1.status"))
 	os.Create(filepath.Join(previousStatusDirectory, "abc.cs")) // this should not be copied to currentExtensionVersionDirectory
 
-	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()))
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	extensionLogger := logging.New(nil)
+	extensionEventManager := extensionevents.New(extensionLogger, &handlerEnvironment)
+	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), extensionEventManager)
 	require.Nil(t, err)
 
 	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
@@ -178,23 +189,24 @@ func Test_checkAndSaveSeqNum(t *testing.T) {
 
 func Test_update_e2e_cmd(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
 	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
 	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8")
 	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.9")
 	err := os.Mkdir(oldVersionDirectory, 0755)
 	require.Nil(t, err, "Could not create old version subdirectory")
 	err = os.Mkdir(newVersionDirectory, 0755)
 	require.Nil(t, err, "Could not create new version subdirectory")
-	oldStatusPath := filepath.Join(oldVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(oldStatusPath, 0755)
-	require.Nil(t, err, "Could not create old version status subdirectory")
-	newStatusPath := filepath.Join(newVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(newStatusPath, 0755)
-	require.Nil(t, err, "Could not create new version status subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
 
 	fakeEnv := types.HandlerEnvironment{}
-	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
-	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
@@ -213,8 +225,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionEnvName, "1.3.9")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
-	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
-	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
 	update_handler(t, fakeEnv, tempDir)
 
 	// Now, WALA will uninstall the old extension
@@ -230,23 +241,24 @@ func Test_update_e2e_cmd(t *testing.T) {
 
 func Test_udpate_e2e_problematic_version(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
 	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
 	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.17")
 	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.18")
 	err := os.Mkdir(oldVersionDirectory, 0755)
 	require.Nil(t, err, "Could not create old version subdirectory")
 	err = os.Mkdir(newVersionDirectory, 0755)
 	require.Nil(t, err, "Could not create new version subdirectory")
-	oldStatusPath := filepath.Join(oldVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(oldStatusPath, 0755)
-	require.Nil(t, err, "Could not create old version status subdirectory")
-	newStatusPath := filepath.Join(newVersionDirectory, constants.StatusFileDirectory)
-	err = os.Mkdir(newStatusPath, 0755)
-	require.Nil(t, err, "Could not create new version status subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
 
 	fakeEnv := types.HandlerEnvironment{}
-	fakeEnv.HandlerEnvironment.ConfigFolder = oldVersionDirectory
-	fakeEnv.HandlerEnvironment.StatusFolder = oldStatusPath
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
@@ -280,8 +292,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	os.Setenv(constants.ExtensionVersionEnvName, "1.3.18")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.17")
-	fakeEnv.HandlerEnvironment.StatusFolder = newStatusPath
-	fakeEnv.HandlerEnvironment.ConfigFolder = newVersionDirectory
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
 	update_handler(t, fakeEnv, tempDir)
 
 	// Now, WALA will uninstall the old extension
@@ -299,6 +310,19 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", true, 2)
 	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", true, 1)
 	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", true, 1)
+}
+
+func create_folder(t *testing.T, versionDirectory string, folderName string) string {
+	folderPath := filepath.Join(versionDirectory, folderName)
+	err := os.Mkdir(folderPath, 0755)
+	require.Nil(t, err, "Could not create folder "+folderName)
+	return folderPath
+}
+
+func update_handler_env(fakeEnv *types.HandlerEnvironment, statusFolder string, configFolder string, eventsFolder string) {
+	fakeEnv.HandlerEnvironment.StatusFolder = statusFolder
+	fakeEnv.HandlerEnvironment.ConfigFolder = configFolder
+	fakeEnv.HandlerEnvironment.EventsFolder = eventsFolder
 }
 
 func install_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
