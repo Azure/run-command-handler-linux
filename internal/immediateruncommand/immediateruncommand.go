@@ -52,7 +52,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 			time.Sleep(time.Second * time.Duration(5))
 		} else {
 			if lastProcessedETag != newProcessedETag {
-				ctx.Log("message", fmt.Sprint("Resuming wait for immediate goal states. New etag: %v. Old etag: %v", newProcessedETag, lastProcessedETag))
+				ctx.Log("message", fmt.Sprintf("Resuming wait for immediate goal states. New etag: %v. Old etag: %v", newProcessedETag, lastProcessedETag))
 			}
 
 			lastProcessedETag = newProcessedETag
