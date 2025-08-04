@@ -49,7 +49,6 @@ func GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManage
 
 // Returns a new requestFactory object with the VMSettings API Uri set
 func newVMSettingsRequestFactory(ctx *log.Context) (*requestFactory, error) {
-	ctx.Log("message", "trying to create new request factory")
 	url, err := getOperationUri(ctx, vmSettingsOperation)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to obtain VMSettingsURI")
@@ -60,14 +59,13 @@ func newVMSettingsRequestFactory(ctx *log.Context) (*requestFactory, error) {
 
 // GetRequest returns a new request with the provided url
 func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request, error) {
-	ctx.Log("message", fmt.Sprintf("performing make request to %v", u.url))
 	request, err := http.NewRequest("GET", u.url, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
+		errMsg := fmt.Sprintf("failed to create request to %v", u.url)
+		return nil, errors.Wrap(err, errMsg)
 	}
 
 	if eTag != "" {
-		ctx.Log("message", "setting request headers to include ETag "+eTag)
 		request.Header.Set(constants.IfNoneMatchHeaderName, eTag)
 	}
 	return request, err

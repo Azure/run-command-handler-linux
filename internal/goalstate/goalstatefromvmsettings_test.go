@@ -33,6 +33,23 @@ func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string)
 		},
 	}
 
+	testExtensionGoalState := hostgacommunicator.ImmediateExtensionGoalState{
+		Name: "Microsoft.Azure.Extensions.Edp.RunCommandHandlerLinuxTest",
+		Settings: []settings.SettingsCommon{
+			{
+				PublicSettings: map[string]interface{}{
+					"string": "string",
+					"int":    5,
+				},
+				ProtectedSettingsBase64: "protectedsettings",
+				SettingsCertThumbprint:  "thumprint",
+				SeqNo:                   &seqNum,
+				ExtensionName:           &extName,
+				ExtensionState:          &extName,
+			},
+		},
+	}
+
 	nonImmediateGoalState := hostgacommunicator.ImmediateExtensionGoalState{
 		Name: "Microsoft.CPlat.Core.NonRunCommandHandler",
 		Settings: []settings.SettingsCommon{
@@ -55,6 +72,7 @@ func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string)
 			immediateGoalState,
 			immediateGoalState,
 			immediateGoalState,
+			testExtensionGoalState,
 			nonImmediateGoalState,
 			nonImmediateGoalState,
 		},
@@ -85,7 +103,7 @@ func Test_GetFilteredImmediateVMSettings(t *testing.T) {
 	communicator := new(TestCommunicator)
 	actualIRCGoalStates, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, communicator, "")
 	require.Nil(t, err)
-	require.Equal(t, 3, len(actualIRCGoalStates))
+	require.Equal(t, 4, len(actualIRCGoalStates))
 }
 
 func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
