@@ -24,7 +24,7 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 }
 
 func NewStatusReportWithErrorClarification(statusType StatusType, operation string, message string, extName string, errorcode int) StatusReport {
-	errorClarificationName := "ErrroClarificationName"
+	errorClarificationName := "ErrorClarification"
 	errorClarificationValue := errorcode
 
 	return []StatusItem{
