@@ -44,7 +44,6 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 
 	ctx.Log("message", fmt.Sprintf("Polling for goal state every %v seconds", constants.PolingIntervalInSeconds))
 	for {
-		ctx.Log("message", "processing new immediate run command goal states. Last processed ETag: "+lastProcessedETag)
 		newProcessedETag, err := processImmediateRunCommandGoalStates(ctx, communicator, lastProcessedETag)
 
 		if err != nil {
@@ -52,6 +51,10 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 			ctx.Log("message", "sleep for 5 seconds before retrying")
 			time.Sleep(time.Second * time.Duration(5))
 		} else {
+			if lastProcessedETag != newProcessedETag {
+				ctx.Log("message", fmt.Sprintf("Resuming wait for immediate goal states. New etag: %v. Old etag: %v", newProcessedETag, lastProcessedETag))
+			}
+
 			lastProcessedETag = newProcessedETag
 			time.Sleep(time.Second * time.Duration(constants.PolingIntervalInSeconds))
 		}
@@ -59,8 +62,13 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 }
 
 func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.HostGACommunicator, lastProcessedETag string) (string, error) {
-	maxTasksToFetch := int(math.Max(float64(maxConcurrentTasks-executingTasks.Get()), 0))
-	ctx.Log("message", fmt.Sprintf("concurrent tasks: %v out of max %v", executingTasks.Get(), maxConcurrentTasks))
+	executingTaskCount := executingTasks.Get()
+	maxTasksToFetch := int(math.Max(float64(maxConcurrentTasks-executingTaskCount), 0))
+
+	if executingTaskCount > 0 {
+		ctx.Log("message", fmt.Sprintf("concurrent tasks: %v out of max %v", executingTaskCount, maxConcurrentTasks))
+	}
+
 	if maxTasksToFetch == 0 {
 		ctx.Log("warning", "will not fetch new tasks in this iteration as we have reached maximum capacity...")
 		return lastProcessedETag, nil

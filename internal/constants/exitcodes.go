@@ -34,6 +34,7 @@ const (
 	ExitCode_SkippedImmediateGoalState                    = -221
 	ExitCode_ImmediateTaskTimeout                         = -222
 	ExitCode_ImmediateTaskFailed                          = -223
+	ExitCode_CouldNotRehydrateMrSeq                       = -224
 
 	// Unknown errors (-300s):
 )

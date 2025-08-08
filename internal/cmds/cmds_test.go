@@ -1,17 +1,24 @@
 package commands
 
 import (
+	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
+	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
+	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/ahmetb/go-httpbin"
 	"github.com/go-kit/kit/log"
@@ -70,7 +77,15 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	os.Create(filepath.Join(previousStatusDirectory, "ABCD.1.status"))
 	os.Create(filepath.Join(previousStatusDirectory, "abc.cs")) // this should not be copied to currentExtensionVersionDirectory
 
-	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()))
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	extensionLogger := logging.New(nil)
+	extensionEventManager := extensionevents.New(extensionLogger, &handlerEnvironment)
+	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), extensionEventManager)
 	require.Nil(t, err)
 
 	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
@@ -172,13 +187,255 @@ func Test_checkAndSaveSeqNum(t *testing.T) {
 	require.True(t, shouldExit)
 }
 
+func Test_update_e2e_cmd(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
+	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
+	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8")
+	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.9")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
+
+	fakeEnv := types.HandlerEnvironment{}
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
+
+	// Create two extensions
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true, 0)
+
+	// Now, pretend that the extension was updated
+	// Step 1: WALA calls Disable on our two extensions
+	disable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
+
+	// Step 2: WALA will call update
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.9")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
+	update_handler(t, fakeEnv, tempDir)
+
+	// Now, WALA will uninstall the old extension
+	uninstall_handler(t, fakeEnv, tempDir)
+
+	// Then, WALA will install the new extension
+	install_handler(t, fakeEnv, tempDir)
+
+	// Now call enable and verify we did NOT re-execute the script
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 0)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+}
+
+func Test_udpate_e2e_problematic_version(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
+	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
+	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.17")
+	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.18")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
+
+	fakeEnv := types.HandlerEnvironment{}
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.17")
+
+	// Create three extensions
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk", true, 0)
+
+	// Run one of them again to obtain multiple status files
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 1)
+
+	// Now, pretend that the extension was updated
+	// Step 1: WALA calls Disable on our two extensions
+	disable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk")
+
+	// To simulate the bug existing in 1.3.17, delete the mrseq files
+	// Don't disable the stubborn chipmunk to test a .mrseq file that for some reason wasn't deleted
+	err = os.Remove(filepath.Join(oldVersionDirectory, "happyChipmunk"+constants.MrSeqFileExtension))
+	require.Nil(t, err, "Could not delete happyChipmunk.mrseq")
+	err = os.Remove(filepath.Join(oldVersionDirectory, "crazyChipmunk"+constants.MrSeqFileExtension))
+	require.Nil(t, err, "Could not delete crazyChipmunk.mrseq")
+
+	// Add a malformatted .status file just to mess with the logic
+	os.WriteFile(filepath.Join(oldStatusPath, "this.is.a.bad.chipmunk.0.status"), []byte("0"), os.FileMode(0600))
+
+	// Step 2: WALA will call update
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.18")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.17")
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
+	update_handler(t, fakeEnv, tempDir)
+
+	// Now, WALA will uninstall the old extension
+	uninstall_handler(t, fakeEnv, tempDir)
+
+	// Then, WALA will install the new extension
+	install_handler(t, fakeEnv, tempDir)
+
+	// Now call enable and verify we did NOT re-execute the script
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", false, 0)
+
+	// Run them again with a higher seqNo to ensure they're now executed
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", true, 2)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", true, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", true, 1)
+}
+
+func create_folder(t *testing.T, versionDirectory string, folderName string) string {
+	folderPath := filepath.Join(versionDirectory, folderName)
+	err := os.Mkdir(folderPath, 0755)
+	require.Nil(t, err, "Could not create folder "+folderName)
+	return folderPath
+}
+
+func update_handler_env(fakeEnv *types.HandlerEnvironment, statusFolder string, configFolder string, eventsFolder string) {
+	fakeEnv.HandlerEnvironment.StatusFolder = statusFolder
+	fakeEnv.HandlerEnvironment.ConfigFolder = configFolder
+	fakeEnv.HandlerEnvironment.EventsFolder = eventsFolder
+}
+
+func install_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
+	generic_handler_call(t, fakeEnv, tempDir, "install", types.CmdInstallTemplate, CmdInstall)
+}
+
+func uninstall_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
+	generic_handler_call(t, fakeEnv, tempDir, "uninstall", types.CmdUninstallTemplate, CmdUninstall)
+}
+
+func update_handler(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string) {
+	generic_handler_call(t, fakeEnv, tempDir, "update", types.CmdUpdateTemplate, CmdUpdate)
+}
+
+func generic_handler_call(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, cmdName string, cmdTemplate types.Cmd, cmd types.Cmd) {
+	fakeInstanceView := types.RunCommandInstanceView{}
+
+	metadata := types.NewRCMetadata("", 0, constants.DownloadFolder, tempDir)
+	_, _, err, exitCode := cmd.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, cmdTemplate)
+	require.Nil(t, err, cmdName+" command should run successfully")
+	require.Equal(t, constants.ExitCode_Okay, exitCode)
+}
+
+func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, extName string, shouldExecuteScript bool, seqNo int) {
+	fakeInstanceView := types.RunCommandInstanceView{}
+	wasCalled := false
+
+	settingsCommon := settings.SettingsCommon{
+		ExtensionName:           &extName,
+		ProtectedSettingsBase64: "",
+		SettingsCertThumbprint:  "SomeProtectedSettingsInBase64",
+		PublicSettings: map[string]interface{}{
+			"source": map[string]interface{}{
+				"script": "echo Hello World!",
+			},
+			"runAsUser": "",
+		},
+	}
+
+	handlerSettings := handlersettings.HandlerSettingsFile{
+		RuntimeSettings: []handlersettings.RunTimeSettingsFile{
+			{
+				HandlerSettings: settingsCommon,
+			},
+		},
+	}
+
+	settingsFilePath := filepath.Join(tempDir, extName+"."+strconv.Itoa(seqNo)+".settings")
+	file, err := os.Create(settingsFilePath)
+	require.Nil(t, err, "Could not create settings file")
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(handlerSettings)
+	require.Nil(t, err, "Could not serialze settings file")
+
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+		wasCalled = true
+		return nil, 0 // mock behavior
+	}
+
+	metadata := types.NewRCMetadata(extName, seqNo, constants.DownloadFolder, tempDir)
+	metadata.MostRecentSequence = filepath.Join(tempDir, extName+constants.MrSeqFileExtension)
+	metadata.SeqNum = seqNo
+
+	// Call the EnablePre function (Enable is the only function that has one)
+	ctx := log.NewContext(log.NewNopLogger())
+	err = CmdEnable.Functions.Pre(ctx, fakeEnv, metadata, types.CmdEnableTemplate)
+
+	// If we're not expecting the script to run, then EnablePre will return an error
+	if shouldExecuteScript {
+		require.Nil(t, err, "EnablePre failed")
+
+		// Call the Enable function
+		_, _, err, exitCode := CmdEnable.Functions.Invoke(ctx, fakeEnv, &fakeInstanceView, metadata, types.CmdEnableTemplate)
+		require.Nil(t, err, "command should run successfully")
+		require.Equal(t, constants.ExitCode_Okay, exitCode)
+
+		// Verify whether we should have run the script
+		require.Equal(t, shouldExecuteScript, wasCalled)
+	} else {
+		require.Equal(t, ErrAlreadyProcessed, err)
+	}
+
+	// Report status to create a status file
+	err = CmdEnable.Functions.ReportStatus(ctx, fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "The chipmunk is satisfied")
+	require.Nil(t, err, "ReportStatus failed")
+
+	// Verify we have a .mrseq
+	if _, err := os.Stat(metadata.MostRecentSequence); errors.Is(err, os.ErrNotExist) {
+		require.Fail(t, extName+".mrseq should exist but does not")
+	}
+}
+
+func disable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir string, extName string) {
+	fakeInstanceView := types.RunCommandInstanceView{}
+
+	metadata := types.NewRCMetadata(extName, 0, constants.DownloadFolder, tempDir)
+	metadata.MostRecentSequence = filepath.Join(tempDir, extName+constants.MrSeqFileExtension)
+	_, _, err, _ := CmdDisable.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, types.CmdDisableTemplate)
+	require.Nil(t, err)
+
+	// The .mrseq should still be here
+	if _, err := os.Stat(metadata.MostRecentSequence); errors.Is(err, os.ErrNotExist) {
+		require.Fail(t, extName+".mrseq should exist but does not")
+	}
+}
+
 func Test_runCmd_success(t *testing.T) {
 	var script = "date"
-	dir, err := ioutil.TempDir("", "")
+	dir, err := os.MkdirTemp("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}},
 	}, metadata)
@@ -204,7 +461,7 @@ func Test_runCmd_fail(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: "non-existing-cmd"}},
 	}, metadata)
@@ -435,7 +692,7 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
 	}, metadata)
@@ -454,7 +711,7 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
 	}, metadata)

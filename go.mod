@@ -1,11 +1,11 @@
 module github.com/Azure/run-command-handler-linux
 
-go 1.23
+go 1.23.0
 
-toolchain go1.24.1
+toolchain go1.24.5
 
 require (
-	github.com/Azure/azure-extension-foundation v0.0.0-20230404211847-9858bdd5c187
+	github.com/Azure/azure-extension-foundation v0.0.0-20250620154556-caff9e3c3c5c
 	github.com/Azure/azure-extension-platform v0.0.0-20250107200156-aa20f765d49f
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/text v0.21.0
+	golang.org/x/text v0.23.0
 )
 
 require (
@@ -36,16 +36,16 @@ require (
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/gorilla/context v0.0.0-20160525203319-aed02d124ae4 // indirect
 	github.com/gorilla/mux v0.0.0-20160605233521-9fa818a44c2b // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
