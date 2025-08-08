@@ -109,7 +109,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 	}
 
 	// Overwrite function to report status to HGAP. This function prepares the status to be sent to the HGAP and then calls the notifier to send it.
-	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
+	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, exitcode ...int) error {
 		if !c.ShouldReportStatus {
 			ctx.Log("status", fmt.Sprintf("status not reported for operation %v (by design)", c.Name))
 			return nil

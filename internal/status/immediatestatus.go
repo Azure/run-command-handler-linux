@@ -3,6 +3,7 @@ package status
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"sync"
 
@@ -60,7 +61,9 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
 	return o.OnDemandNotify()
 }
-
+func IsEmptyStatusItem(statusItem1 types.StatusItem) bool {
+	return reflect.DeepEqual(statusItem1, types.StatusItem{})
+}
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	latestStatusToReport := []ImmediateStatus{}
 	goalStateKeysToCheckToRemove := []types.GoalStateKey{}
@@ -71,7 +74,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 		// Only report the latest active status for each goal state
 		goalStateKey := key.(types.GoalStateKey)
 		if goalStateKey.RuntimeSettingsState != "disabled" {
-			if value.(types.StatusItem) != (types.StatusItem{}) {
+			if !IsEmptyStatusItem(value.(types.StatusItem)) {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{

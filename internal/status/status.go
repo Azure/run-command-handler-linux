@@ -22,13 +22,40 @@ var immediateGSInTerminalStatusLock = sync.Mutex{}
 // If an error occurs reporting the status, it will be logged and returned.
 //
 // This function is used by default for reporting status to the local file system unless a different method is specified.
-func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
+func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, exitcode ...int) error {
 	if !c.ShouldReportStatus {
 		ctx.Log("status", "not reported for operation (by design)")
 		return nil
 	}
 
 	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, true, metadata.ExtName)
+	if c.Functions.Pre != nil {
+		var errorcode = constants.TranslateExitCodeToErrorClarification(exitcode[0])
+		rootStatusJson, err = getRootStatusJsonWithErrorClarification(ctx, statusType, c, msg, true, metadata.ExtName, errorcode)
+	}
+
+	if err != nil {
+		return errors.Wrap(err, "failed to get json for status report")
+	}
+
+	ctx.Log("message", "reporting status by writing status file locally")
+	err = SaveStatusReport(hEnv.HandlerEnvironment.StatusFolder, metadata.ExtName, metadata.SeqNum, rootStatusJson)
+	if err != nil {
+		ctx.Log("event", "failed to save handler status", "error", err)
+		return errors.Wrap(err, "failed to save handler status")
+	}
+
+	ctx.Log("message", "Run Command status was written to file successfully.")
+	return nil
+}
+
+func ReportStatusToLocalFileWithErrorClarification(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, exitcode int) error {
+	if !c.ShouldReportStatus {
+		ctx.Log("status", "not reported for operation (by design)")
+		return nil
+	}
+	var errorcode = constants.TranslateExitCodeToErrorClarification(exitcode)
+	rootStatusJson, err := getRootStatusJsonWithErrorClarification(ctx, statusType, c, msg, true, metadata.ExtName, errorcode)
 	if err != nil {
 		return errors.Wrap(err, "failed to get json for status report")
 	}
@@ -190,7 +217,19 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 
 func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string) ([]byte, error) {
 	ctx.Log("message", "creating json to report status")
+
 	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName)
+
+	b, err := MarshalStatusReportIntoJson(statusReport, indent)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal status report into json")
+	}
+
+	return b, nil
+}
+func getRootStatusJsonWithErrorClarification(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string, errorcode int) ([]byte, error) {
+	ctx.Log("message", "creating json to report status")
+	statusReport := types.NewStatusReportWithErrorClarification(statusType, c.Name, msg, extName, errorcode)
 
 	b, err := MarshalStatusReportIntoJson(statusReport, indent)
 	if err != nil {
