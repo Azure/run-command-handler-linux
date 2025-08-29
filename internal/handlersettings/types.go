@@ -87,6 +87,7 @@ type PublicSettings struct {
 	TimeoutInSeconds                int                   `json:"timeoutInSeconds,int"`
 	AsyncExecution                  bool                  `json:"asyncExecution,bool"`
 	TreatFailureAsDeploymentFailure bool                  `json:"treatFailureAsDeploymentFailure,bool"`
+	ForceRerun                      bool                  `json:"forceRerun,bool"`
 
 	// List of artifacts to download before running the script
 	Artifacts []PublicArtifactSource `json:"artifacts"`

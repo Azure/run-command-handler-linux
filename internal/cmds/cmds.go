@@ -165,9 +165,18 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 }
 
 func enablePre(ctx *log.Context, h types.HandlerEnvironment, metadata types.RCMetadata, c types.Cmd) error {
+	extensionEvents := createExtensionEventManager(ctx, h)
+
+	// parse the extension handler settings
+	cfg, err1 := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, metadata.ExtName, metadata.SeqNum, ctx)
+	if err1 != nil {
+		errMessage := fmt.Sprintf("Failed to get configuration in enablePre: %v", err1)
+		extensionEvents.LogErrorEvent("enablePre", errMessage)
+		return errors.Wrap(err1, "failed to get configuration")
+	}
 	// exit if this sequence number (a snapshot of the configuration) is already
 	// processed. if not, save this sequence number before proceeding.
-	if shouldExit, err := checkAndSaveSeqNum(ctx, metadata.SeqNum, metadata.MostRecentSequence); err != nil {
+	if shouldExit, err := checkAndSaveSeqNum(ctx, metadata.SeqNum, metadata.MostRecentSequence, cfg.ForceRerun); err != nil {
 		return errors.Wrap(err, "failed to process sequence number")
 	} else if shouldExit {
 		ctx.Log("event", "exit", "message", "the script configuration has already been processed, will not run again")
@@ -388,14 +397,14 @@ func getOutput(ctx *log.Context, stdoutFileName string, stderrFileName string) (
 // checkAndSaveSeqNum checks if the given seqNum is already processed
 // according to the specified seqNumFile and if so, returns true,
 // otherwise saves the given seqNum into seqNumFile returns false.
-func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit bool, _ error) {
+func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string, forceRerun bool) (shouldExit bool, _ error) {
 	ctx.Log("event", "comparing seqnum", "path", mrseqPath)
-	smaller, err := seqnum.IsSmallerThan(mrseqPath, seq)
+	isSavedSeqNumSmallerThanNewSeqNum, err := seqnum.IsSmallerThan(mrseqPath, seq)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to check sequence number")
 	}
 
-	if !smaller {
+	if !forceRerun && !isSavedSeqNumSmallerThanNewSeqNum {
 		// stored sequence number is equals or greater than the current
 		// sequence number.
 		return true, nil
