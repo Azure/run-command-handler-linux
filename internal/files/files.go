@@ -59,7 +59,8 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 		if UseMockSASDownloadFailure {
 			scriptSASDownloadErr = errors.New("Downloading script using SAS token failed.")
 		} else {
-			downloadedFilePath, scriptSASDownloadErr = download.GetSASBlob(url, scriptSAS, downloadDir)
+			ctx.Log("scriptSAS", scriptSAS)
+			downloadedFilePath, scriptSASDownloadErr = download.GetSASBlob(ctx, url, scriptSAS, downloadDir)
 		}
 		// Download was successful using SAS. So use downloadedFilePath
 		if scriptSASDownloadErr == nil && downloadedFilePath != "" {

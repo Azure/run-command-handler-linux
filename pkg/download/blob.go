@@ -12,6 +12,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/pkg/blobutil"
+	"github.com/go-kit/kit/log"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
@@ -73,20 +74,31 @@ func NewBlobDownload(accountName, accountKey string, blob blobutil.AzureBlobRef)
 
 // GetSASBlob download a blob with specified uri and sas authorization and saves it to the target directory
 // Returns the filePath where the blob was downloaded
-func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
+func GetSASBlob(ctx *log.Context, blobURI, blobSas, targetDir string) (string, error) {
 	blobFullURL := blobURI + blobSas
+	ctx.Log("blobFullURL", blobFullURL)
+	ctx.Log("blobURI", blobURI)
+	ctx.Log("blobSas", blobSas)
 
 	loggableBlobUri := GetUriForLogging(blobURI)
 
 	resp, err := http.Get(blobFullURL)
 	if err != nil {
+		ctx.Log("blobSas", blobSas)
 		return "", errors.Wrapf(err, "Failed to download file: %q", loggableBlobUri)
+	} else {
+		ctx.Log("ResponseBody", resp.Body)
 	}
+
 	defer resp.Body.Close() // Ensure the response body is closed after we're done
 
 	// Check if the HTTP status code indicates success (e.g., 200 OK)
 	if resp.StatusCode != http.StatusOK {
 		return "", errors.Wrapf(err, "Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status)
+	} else {
+		ctx.Log("ResponseBody", resp.Body)
+		ctx.Log("StatusCode", resp.StatusCode)
+		os.WriteFile("/home/vivekl/temp/responsebody.txt", []byte(fmt.Sprintf("%v", resp.Body)), 0644)
 	}
 
 	blobParsedurl, err := url.Parse(blobURI)
@@ -98,10 +110,16 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	splitStrings := strings.Split(trimmedPath, "/")
 	containerName := splitStrings[0]
 
+	ctx.Log("trimmedPath", trimmedPath)
+	ctx.Log("containerName", containerName)
+
 	// Extract the blob path after container name
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerName)
 	if fileName == "" || blobPathError != nil {
+		ctx.Log("fileNameErr", fileName)
 		return "", errors.Wrapf(blobPathError, "Failed to extract blob path name from URL: %q", loggableBlobUri)
+	} else {
+		ctx.Log("fileName", fileName)
 	}
 
 	// Create the local file
