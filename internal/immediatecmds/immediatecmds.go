@@ -20,7 +20,7 @@ func Update(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 	if err != nil {
 		errMessage := fmt.Sprintf("Failed to check if any runcommand service is installed: %v", err)
 		extensionEvents.LogErrorEvent("immediateupdate", errMessage)
-		return constants.ExitCode_CreateDataDirectoryFailed, errors.Wrap(err, "failed to check if any runcommand service is installed")
+		return constants.FileSystem_CreateDataDirectoryFailed, errors.Wrap(err, "failed to check if any runcommand service is installed")
 	}
 
 	if isInstalled {
@@ -78,7 +78,7 @@ func Uninstall(ctx *log.Context, h types.HandlerEnvironment, extName string, seq
 	if err != nil {
 		errMessage := fmt.Sprintf("Failed to check if runcommand service is installed: %v", err)
 		extensionEvents.LogErrorEvent("immediatedisable", errMessage)
-		return constants.ExitCode_RemoveDataDirectoryFailed, errors.Wrap(err, "failed to check if runcommand service is installed")
+		return constants.FileSystem_RemoveDataDirectoryFailed, errors.Wrap(err, "failed to check if runcommand service is installed")
 	}
 
 	if isInstalled {

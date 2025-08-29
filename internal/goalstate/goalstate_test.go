@@ -47,7 +47,7 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 	instView := types.RunCommandInstanceView{
 		ExecutionState:   types.Failed,
 		ExecutionMessage: "Execution failed",
-		ExitCode:         constants.ExitCode_SkippedImmediateGoalState,
+		ExitCode:         constants.ImmediateRC_CommandSkipped,
 		Output:           "",
 		Error:            errorMsg,
 		StartTime:        time.Now().UTC().Format(time.RFC3339),

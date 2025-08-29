@@ -155,7 +155,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 			instView := types.RunCommandInstanceView{
 				ExecutionState:   types.Failed,
 				ExecutionMessage: "Execution was skipped due to reaching the maximum concurrent tasks",
-				ExitCode:         constants.ExitCode_SkippedImmediateGoalState,
+				ExitCode:         constants.ImmediateRC_CommandSkipped,
 				Output:           "",
 				Error:            errorMsg,
 				StartTime:        time.Now().UTC().Format(time.RFC3339),

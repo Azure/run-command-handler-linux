@@ -21,13 +21,13 @@ func ParseAndValidateSettings(ctx *log.Context, configFilePath string) (h Handle
 
 	ctx.Log("event", "parsing configuration json")
 	if err := UnmarshalHandlerSettings(pubJSON, protJSON, &h.PublicSettings, &h.ProtectedSettings); err != nil {
-		return h, errors.Wrap(err, "json parsing error")
+		return h, err
 	}
 	ctx.Log("event", "parsed configuration json")
 
 	ctx.Log("event", "validating configuration logically")
 	if err := h.validate(); err != nil {
-		return h, errors.Wrap(err, "invalid configuration")
+		return h, err
 	}
 	ctx.Log("event", "validated configuration")
 	return h, nil
@@ -38,6 +38,5 @@ func ParseAndValidateSettings(ctx *log.Context, configFilePath string) (h Handle
 // JSON objects.
 func readSettings(configFilePath string) (pubSettingsJSON, protSettingsJSON map[string]interface{}, err error) {
 	pubSettingsJSON, protSettingsJSON, err = ReadSettings(configFilePath)
-	err = errors.Wrapf(err, "error reading extension configuration")
 	return
 }
