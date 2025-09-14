@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/pkg/errors"
 )
@@ -31,13 +33,13 @@ func ReadSettings(configFilePath string) (public, protected map[string]interface
 	// }
 	hs, err := parseHandlerSettingsFile(configFilePath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error parsing settings file: %v", err)
+		return nil, nil, err
 	}
 
 	public = hs.PublicSettings
 	configFolder := filepath.Dir(configFilePath)
 	if err := unmarshalProtectedSettings(configFolder, hs, &protected); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse protected settings: %v", err)
+		return nil, nil, err
 	}
 	return public, protected, nil
 }
@@ -47,10 +49,10 @@ func ReadSettings(configFilePath string) (public, protected map[string]interface
 // (of struct types that contain structured fields for settings).
 func UnmarshalHandlerSettings(publicSettings, protectedSettings map[string]interface{}, publicV, protectedV interface{}) error {
 	if err := unmarshalSettings(publicSettings, &publicV); err != nil {
-		return fmt.Errorf("failed to unmarshal public settings: %v", err)
+		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to unmarshal public settings: %v", err))
 	}
 	if err := unmarshalSettings(protectedSettings, &protectedV); err != nil {
-		return fmt.Errorf("failed to unmarshal protected settings: %v", err)
+		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to unmarshal protected settings: %v", err))
 	}
 	return nil
 }
@@ -73,7 +75,7 @@ func unmarshalSettings(in interface{}, v interface{}) error {
 func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return h, fmt.Errorf("error reading %s: %v", path, err)
+		return h, vmextension.NewErrorWithClarification(constants.Internal_CouldNotParseSettings, fmt.Errorf("error reading %s: %v", path, err))
 	}
 	if len(b) == 0 { // if no config is specified, we get an empty file
 		return h, nil
@@ -81,10 +83,10 @@ func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) 
 
 	var f HandlerSettingsFile
 	if err := json.Unmarshal(b, &f); err != nil {
-		return h, fmt.Errorf("error parsing json: %v", err)
+		return h, vmextension.NewErrorWithClarification(constants.Internal_InvalidHandlerSettingsJson, fmt.Errorf("error parsing json: %v", err))
 	}
 	if len(f.RuntimeSettings) != 1 {
-		return h, fmt.Errorf("wrong runtimeSettings count. expected:1, got:%d", len(f.RuntimeSettings))
+		return h, vmextension.NewErrorWithClarification(constants.Internal_InvalidHandlerSettingsCount, fmt.Errorf("wrong runtimeSettings count. expected:1, got:%d", len(f.RuntimeSettings)))
 	}
 	return f.RuntimeSettings[0].HandlerSettings, nil
 }
@@ -97,12 +99,12 @@ func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon,
 		return nil
 	}
 	if hs.SettingsCertThumbprint == "" {
-		return errors.New("HandlerSettings has protected settings but no cert thumbprint")
+		return vmextension.NewErrorWithClarification(constants.Internal_NoHandlerSettingsThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(hs.ProtectedSettingsBase64)
 	if err != nil {
-		return fmt.Errorf("failed to decode base64: %v", err)
+		return vmextension.NewErrorWithClarification(constants.Internal_HandlerSettingsFailedToDecode, fmt.Errorf("failed to decode base64: %v", err))
 	}
 
 	// go two levels up where certs are placed (/var/lib/waagent)
@@ -131,13 +133,13 @@ func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon,
 		cmd.Stdout = &bOut
 		cmd.Stderr = &bErr
 		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(errMsg, "decrypting protected settings with smime command failed: error=%v stderr=%s", err, bErr.String())
+			return vmextension.NewErrorWithClarification(constants.Internal_DecryptingProtectedSettingsFailed, errors.Wrapf(errMsg, "decrypting protected settings with smime command failed: error=%v stderr=%s", err, bErr.String()))
 		}
 	}
 
 	// decrypted: json object for protected settings
 	if err := json.Unmarshal(bOut.Bytes(), &v); err != nil {
-		return fmt.Errorf("failed to unmarshal decrypted settings json: %v", err)
+		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalProtectedSettingsFailed, fmt.Errorf("failed to unmarshal decrypted settings json: %v", err))
 	}
 	return nil
 }

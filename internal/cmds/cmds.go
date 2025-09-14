@@ -133,7 +133,7 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 	if err := os.MkdirAll(DataDir, 0755); err != nil {
 		errMessage := fmt.Sprintf("Failed to create data dir: %v due to: %v", DataDir, err)
 		extensionEvents.LogErrorEvent("install", errMessage)
-		return "", "", errors.Wrap(err, errMessage), constants.ExitCode_CreateDataDirectoryFailed
+		return "", "", errors.Wrap(err, errMessage), constants.FileSystem_CreateDataDirectoryFailed
 	}
 
 	ctx.Log("event", "created data dir", "path", DataDir)
@@ -155,7 +155,7 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 		if err := os.RemoveAll(DataDir); err != nil {
 			errMessage := fmt.Sprintf("Failed to delete data directory: %v due to: %v", DataDir, err)
 			extensionEvents.LogErrorEvent("uninstall", errMessage)
-			return "", "", errors.Wrap(err, errMessage), constants.ExitCode_RemoveDataDirectoryFailed
+			return "", "", errors.Wrap(err, errMessage), constants.FileSystem_RemoveDataDirectoryFailed
 		}
 		ctx.Log("event", "removed data dir")
 		extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("removed data dir %v", DataDir))
@@ -190,7 +190,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	if err1 != nil {
 		errMessage := fmt.Sprintf("Failed to get configuration: %v", err1)
 		extensionEvents.LogErrorEvent("enable", errMessage)
-		return "", "", errors.Wrap(err1, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed
+		return "", "", err1, constants.CommandExecution_BadConfig
 	}
 
 	exitCode, err := immediatecmds.Enable(ctx, h, metadata.ExtName, metadata.SeqNum, cfg, extensionEvents)
@@ -208,7 +208,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		return "",
 			"",
 			errors.Wrap(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
-			constants.ExitCode_ScriptBlobDownloadFailed
+			constants.FileDownload_GenericError
 	}
 
 	err = downloadArtifacts(ctx, dir, &cfg)
@@ -217,7 +217,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "", "",
 			errors.Wrap(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
-			constants.ExitCode_DownloadArtifactFailed
+			constants.ArtifactDownload_GenericError
 	}
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions OR managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity and provide outputBlobUri / errorBlobUri and corresponding clientId in outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). In case of system-assigned identity, do not use outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). For more info, refer https://aka.ms/RunCommandManagedLinux"
@@ -236,7 +236,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed
+				constants.AppendBlobCreation_Other
 		}
 	}
 
@@ -254,7 +254,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed
+				constants.AppendBlobCreation_Other
 		}
 	}
 
@@ -849,7 +849,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 		err := files.SaveScriptFile(scriptFilePath, cfg.Script())
 		if err != nil {
 			ctx.Log("event", "failed to save script to file", "error", err, "file", scriptFilePath)
-			return errors.Wrap(err, "failed to save script to file"), constants.ExitCode_SaveScriptFailed
+			return errors.Wrap(err, "failed to save script to file"), constants.FileDownload_UnableToWriteFile
 		}
 	} else if cfg.ScriptURI() != "" {
 		// If scriptUri is specified then cmd should start it

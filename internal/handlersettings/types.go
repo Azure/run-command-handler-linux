@@ -1,6 +1,8 @@
 package handlersettings
 
 import (
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/pkg/errors"
 )
 
@@ -70,7 +72,7 @@ func (s HandlerSettings) validate() error {
 	// If installAsService is false, then the source has to be specified
 	if !s.PublicSettings.InstallAsService {
 		if s.PublicSettings.Source == nil || (s.PublicSettings.Source.Script == "") == (s.PublicSettings.Source.ScriptURI == "") {
-			return errSourceNotSpecified
+			return vmextension.NewErrorWithClarification(constants.CustomerInput_NoScriptSpecified, errSourceNotSpecified)
 		}
 	}
 	return nil
