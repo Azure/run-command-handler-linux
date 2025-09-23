@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
@@ -186,11 +187,11 @@ func ExecCmdInDir(ctx *log.Context, scriptFilePath, workdir string, cfg *handler
 
 	outF, err := os.OpenFile(stdoutFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open stdout file"), constants.FileSystem_OpenStandardOutFailed
+		return vmextension.NewErrorWithClarification(constants.FileSystem_OpenStandardOutFailed, fmt.Errorf("failed to open stdout file: %v", err)), constants.FileSystem_OpenStandardOutFailed
 	}
 	errF, err := os.OpenFile(stderrFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open stderr file"), constants.FileSystem_OpenStandardErrorFailed
+		return vmextension.NewErrorWithClarification(constants.FileSystem_OpenStandardErrorFailed, fmt.Errorf("failed to open stderr file: %v", err)), constants.FileSystem_OpenStandardErrorFailed
 	}
 
 	exitCode, err := Exec(ctx, scriptFilePath, workdir, outF, errF, cfg)
