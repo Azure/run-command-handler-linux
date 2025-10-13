@@ -5,6 +5,9 @@ BIN_ARM64=run-command-handler-arm64
 IMMEDIATE_BIN_ARM64=immediate-run-command-handler-arm64
 BUNDLEDIR=bundle
 BUNDLE=run-command-handler.zip
+LDFLAGS_COMMON=-m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`
+LDFLAGS_MAIN=-X main.Version=`grep ${LDFLAGS_COMMON}
+LDFLAGS_IMMEDIATE=-X immediateruncommandservice.Version=`grep ${LDFLAGS_COMMON}
 
 bundle: clean binary
 	$(info creating $(BUNDLEDIR) directory)
@@ -17,24 +20,20 @@ bundle: clean binary
 
 binary: clean
 	$(info building amd64 binaries)
-	GOOS=linux GOARCH=amd64 go build -v \
-	  -ldflags "-X main.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
-	  -o $(BINDIR)/$(BIN) ./cmd/main 
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags "netgo,osusergo" -v \
+	  -ldflags "${LDFLAGS_MAIN}" -o $(BINDIR)/$(BIN) ./cmd/main 
 
 	$(info building amd64 immediate run command service)
-	OOS=linux GOARCH=amd64 go build -v \
-	  -ldflags "-X immediateruncommandservice.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
-	  -o $(BINDIR)/$(IMMEDIATE_BIN) ./cmd/immediateruncommandservice
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags "netgo,osusergo" -v \
+	  -ldflags "${LDFLAGS_IMMEDIATE}" -o $(BINDIR)/$(IMMEDIATE_BIN) ./cmd/immediateruncommandservice
 
 	$(info building arm64 binaries)
-	GOOS=linux GOARCH=arm64 go build -v \
-	  -ldflags "-X main.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
-	  -o $(BINDIR)/$(BIN_ARM64) ./cmd/main
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags "netgo,osusergo" -v \
+	  -ldflags "${LDFLAGS_MAIN}" -o $(BINDIR)/$(BIN_ARM64) ./cmd/main
 	
 	$(info building amd64 immediate run command service)
-	GOOS=linux GOARCH=arm64 go build -v \
-	  -ldflags "-X immediateruncommandservice.Version=`grep -E -m 1 -o  '<Version>(.*)</Version>' misc/manifest.xml | awk -F">" '{print $$2}' | awk -F"<" '{print $$1}'`" \
-	  -o $(BINDIR)/$(IMMEDIATE_BIN_ARM64) ./cmd/immediateruncommandservice
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags "netgo,osusergo" -v \
+	  -ldflags "${LDFLAGS_IMMEDIATE}" -o $(BINDIR)/$(IMMEDIATE_BIN_ARM64) ./cmd/immediateruncommandservice
 
 	$(info copy run-command-shim into $(BINDIR))
 	cp ./misc/run-command-shim ./$(BINDIR)
