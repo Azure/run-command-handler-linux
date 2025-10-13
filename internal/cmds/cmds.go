@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
@@ -587,7 +588,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 			if errr != nil {
 				errMessage := fmt.Sprintf("Failed to create directory '%s'", newExtensionDirectory)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return nil, errors.Wrap(errr, errMessage)
+				return nil, vmextension.NewErrorWithClarification(constants.Internal_CouldNotCreateStatusDirectory, fmt.Errorf("Failed to create directory '%s': %v", newExtensionDirectory, err))
 			}
 		}
 	}
@@ -595,7 +596,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 	if oldExtensionDirectory == "" || newExtensionDirectory == "" {
 		errMessage := "oldExtesionDirectory or newExtensionDirectory is empty"
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, errors.New(errMessage)
+		return nil, vmextension.NewErrorWithClarification(constants.Internal_ExtensionDirectoryNameEmpty, errors.New(errMessage))
 	}
 
 	// Check if the directory exists
@@ -604,7 +605,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		errMessage := fmt.Sprintf("could not open sourceDirectory %s", oldExtensionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, errors.Wrap(err, errMessage)
+		return nil, vmextension.NewErrorWithClarification(constants.Internal_CouldNotOpenSubdirectory, fmt.Errorf("%s: %v", errMessage, err))
 	}
 
 	directoryEntries, err := sourceDirectoryFDRef.ReadDir(0)
@@ -612,7 +613,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		errMessage := fmt.Sprintf("could not read directory entries from sourceDirectory %s", oldExtensionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, errors.Wrap(err, errMessage)
+		return nil, vmextension.NewErrorWithClarification(constants.Internal_CouldNotReadDirectoryEntries, fmt.Errorf("%s: %v", errMessage, err))
 	}
 
 	numberOfFilesMigrated := 0
@@ -630,7 +631,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 				errMessage := "Failed to open '%s' file '%s' for reading. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, sourceFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrapf(sourceFileOpenError, errMessage)
+				return fileNamesMigrated, vmextension.NewErrorWithClarification(constants.Internal_FailedToOpenFileForReading, fmt.Errorf("%s: %v", errMessage, sourceFileOpenError))
 			}
 			defer sourceFile.Close()
 
@@ -639,7 +640,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 				errMessage := "Failed to create '%s' file '%s'. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, destinationFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrapf(destFileCreateError, errMessage)
+				return fileNamesMigrated, vmextension.NewErrorWithClarification(constants.Internal_FailedToCreateFile, fmt.Errorf("%s: %v", errMessage, destFileCreateError))
 			}
 			defer destFile.Close()
 
@@ -649,7 +650,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 					fileExtensionSuffix, sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", errMessage)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrapf(copyError, errMessage)
+				return fileNamesMigrated, vmextension.NewErrorWithClarification(constants.Internal_FailedToCopyFile, fmt.Errorf("%s: %v", errMessage, copyError))
 			} else {
 				message := fmt.Sprintf("File '%s' was copied successfully to '%s'", sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", message)

@@ -25,7 +25,17 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 
 func NewStatusReportWithErrorClarification(statusType StatusType, operation string, message string, extName string, errorcode int) StatusReport {
 	errorClarificationName := "ErrorClarification"
-	errorClarificationValue := errorcode
+
+	var subStatuses []subStatus
+
+	// Add subStatus only if errorcode is non-zero
+	if errorcode != 0 {
+		subStatuses = append(subStatuses, subStatus{
+			Name:   errorClarificationName,
+			Code:   errorcode,
+			Status: statusType,
+		})
+	}
 
 	return []StatusItem{
 		{
@@ -38,11 +48,7 @@ func NewStatusReportWithErrorClarification(statusType StatusType, operation stri
 				FormattedMessage: FormattedMessage{
 					Lang:    "en",
 					Message: message},
-				SubStatus: []subStatus{{
-					Name:   errorClarificationName,
-					Code:   errorClarificationValue,
-					Status: statusType,
-				}},
+				SubStatus: subStatuses,
 			},
 		},
 	}

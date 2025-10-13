@@ -28,6 +28,14 @@ const (
 	Internal_UnmarshalProtectedSettingsFailed  = -38
 	Internal_UnmarshalSettingsFailed           = -39
 
+	Internal_CouldNotCreateStatusDirectory = -50
+	Internal_ExtensionDirectoryNameEmpty   = -51
+	Internal_CouldNotOpenSubdirectory      = -52
+	Internal_CouldNotReadDirectoryEntries  = -53
+	Internal_FailedToOpenFileForReading    = -54
+	Internal_FailedToCreateFile            = -55
+	Internal_FailedToCopyFile              = -56
+
 	SystemError = -1 // CRP will interpret anything > 0 as a user error
 
 	// User errors

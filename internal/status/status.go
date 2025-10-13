@@ -52,29 +52,6 @@ func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, me
 	return nil
 }
 
-func ReportStatusToLocalFileWithErrorClarification(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, exitCode int) error {
-	if !c.ShouldReportStatus {
-		ctx.Log("status", "not reported for operation (by design)")
-		return nil
-	}
-
-	errorCode := exitCode
-	rootStatusJson, err := getRootStatusJsonWithErrorClarification(ctx, statusType, c, msg, true, metadata.ExtName, errorCode)
-	if err != nil {
-		return errors.Wrap(err, "failed to get json for status report")
-	}
-
-	ctx.Log("message", "reporting status by writing status file locally")
-	err = SaveStatusReport(hEnv.HandlerEnvironment.StatusFolder, metadata.ExtName, metadata.SeqNum, rootStatusJson)
-	if err != nil {
-		ctx.Log("event", "failed to save handler status", "error", err)
-		return errors.Wrap(err, "failed to save handler status")
-	}
-
-	ctx.Log("message", "Run Command status was written to file successfully.")
-	return nil
-}
-
 // SaveStatusReport persists the status message to the specified status folder using the
 // sequence number. The operation consists of writing to a temporary file in the
 // same folder and moving it to the final destination for atomicity.
