@@ -44,7 +44,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if !strings.HasPrefix(scriptPath, constants.DataDir) {
 			errMessage := "Failed to determine RunAs script path. Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage)
-			return constants.Internal_IncorrectRunAsScriptPath, errors.New(errMessage)
+			return constants.Internal_IncorrectRunAsScriptPath, vmextension.NewErrorWithClarification(constants.Internal_IncorrectRunAsScriptPath, errors.New(errMessage))
 		}
 
 		// Gets suffix "download/<runcommandName>/0/script.sh"
@@ -60,22 +60,22 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		// Get reference to source script by opening it
 		sourceScriptFile, sourceScriptFileOpenError := os.OpenFile(scriptPath, os.O_RDONLY, 0400)
 		if sourceScriptFileOpenError != nil {
-			errMessage := "Failed to open source script. Contact ICM team AzureRT\\Extensions for this service error."
-			ctx.Log("message", errMessage+fmt.Sprintf(" Source script file is '%s'", scriptPath))
-			return constants.Internal_RunAsOpenSourceScriptFileFailed, errors.Wrapf(sourceScriptFileOpenError, errMessage)
+			errMessage := fmt.Sprintf("Failed to open source script. Contact ICM team AzureRT\\Extensions for this service error. Source script file is '%s'", scriptPath)
+			ctx.Log("message", errMessage)
+			return constants.Internal_RunAsOpenSourceScriptFileFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsOpenSourceScriptFileFailed, sourceScriptFileOpenError)
 		}
 
 		destScriptFile, destScriptCreateError := os.Create(runAsScriptFilePath)
 		if destScriptCreateError != nil {
-			errMessage := "Failed to create script for Run As in Run As directory. Contact ICM team AzureRT\\Extensions for this service error."
-			ctx.Log("message", errMessage+fmt.Sprintf(" Destination runAs script file is '%s'", runAsScriptFilePath))
-			return constants.Internal_RunAsOpenSourceScriptFileFailed, errors.Wrapf(destScriptCreateError, errMessage)
+			errMessage := fmt.Sprintf("Failed to create script for Run As in Run As directory. Contact ICM team AzureRT\\Extensions for this service error. Destination runAs script file is '%s'", runAsScriptFilePath)
+			ctx.Log("message", errMessage)
+			return constants.Internal_RunAsOpenSourceScriptFileFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsOpenSourceScriptFileFailed, destScriptCreateError)
 		}
 		_, runAsScriptCopyError := io.Copy(destScriptFile, sourceScriptFile)
 		if runAsScriptCopyError != nil {
 			errMessage := fmt.Sprintf("Failed to copy script file '%s' to Run As path '%s'. Contact ICM team AzureRT\\Extensions for this service error.", scriptPath, runAsScriptFilePath)
 			ctx.Log("message", errMessage)
-			return constants.Internal_RunAsCopySourceScriptToRunAsScriptFileFailed, errors.Wrapf(runAsScriptCopyError, errMessage)
+			return constants.Internal_RunAsCopySourceScriptToRunAsScriptFileFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsCopySourceScriptToRunAsScriptFileFailed, runAsScriptCopyError)
 		}
 		sourceScriptFile.Close()
 		destScriptFile.Close()
@@ -85,28 +85,28 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if lookupUserError != nil {
 			errMessage := fmt.Sprintf("Failed to lookup RunAs user '%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return constants.CommandExecution_RunAsUserLogonFailed, errors.Wrapf(lookupUserError, errMessage)
+			return constants.CommandExecution_RunAsUserLogonFailed, vmextension.NewErrorWithClarification(constants.CommandExecution_RunAsUserLogonFailed, lookupUserError)
 		}
 
 		lookedUpUserUid, lookedUpUserUidErr := strconv.Atoi(lookedUpUser.Uid)
 		if lookedUpUserUidErr != nil {
 			errMessage := "Failed to determine RunAs user's Uid and Guid . Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage)
-			return constants.Internal_RunAsLookupUserUidFailed, errors.Wrapf(lookedUpUserUidErr, errMessage)
+			return constants.Internal_RunAsLookupUserUidFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsLookupUserUidFailed, lookedUpUserUidErr)
 		}
 
 		runAsScriptChownError := os.Chown(runAsScriptFilePath, lookedUpUserUid, os.Getegid())
 		if runAsScriptChownError != nil {
 			errMessage := fmt.Sprintf("Failed to change owner of file '%s' to RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return constants.Internal_RunAsScriptFileChangeOwnerFailed, errors.Wrapf(runAsScriptChownError, errMessage)
+			return constants.Internal_RunAsScriptFileChangeOwnerFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsScriptFileChangeOwnerFailed, runAsScriptChownError)
 		}
 
 		runAsScriptChmodError := os.Chmod(runAsScriptFilePath, 0550)
 		if runAsScriptChmodError != nil {
 			errMessage := fmt.Sprintf("Failed to change permissions to execute for file '%s' for RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return constants.Internal_RunAsScriptFileChangePermissionsFailed, errors.Wrapf(runAsScriptChmodError, errMessage)
+			return constants.Internal_RunAsScriptFileChangePermissionsFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsScriptFileChangePermissionsFailed, runAsScriptChmodError)
 		}
 
 		// echo pipes the RunAsPassword to sudo -S for RunAsUser instead of prompting the password interactively from user and blocking.
@@ -141,7 +141,9 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 				} else if exitCode != 0 {
 					exitCode = constants.CommandExecution_FailureExitCode
 				}
-				return exitCode, fmt.Errorf("command terminated with exit status=%d", commandExitCode)
+
+				commandFailedErr := fmt.Errorf("command terminated with exit status=%d", commandExitCode)
+				return exitCode, vmextension.NewErrorWithClarification(exitCode, commandFailedErr)
 			}
 		}
 	}
