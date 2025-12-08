@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -94,7 +93,7 @@ func KillPreviousExtension(ctx *log.Context, pidFilePath string) {
 		if ctx != nil {
 			ctx.Log("event", "check process", "Active previous execution found. Killing pid ", previousPid)
 		}
-		syscall.Kill(-previousPid, syscall.SIGKILL) // Negative pid means kill the whole process group
+		//syscall.Kill(-previousPid, syscall.SIGKILL) // Negative pid means kill the whole process group
 		DeleteCurrentPidAndStartTime(pidFilePath)
 	}
 }

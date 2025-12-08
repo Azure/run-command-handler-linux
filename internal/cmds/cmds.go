@@ -75,6 +75,9 @@ var (
 	RunCmd  = runCmd
 	DataDir = constants.DataDir
 
+	// Used by unit tests to mock out executing the command
+	ExecCmdInDir = exec.ExecCmdInDir
+
 	ErrAlreadyProcessed = errors.New("the script configuration has already been processed, will not run again")
 )
 
@@ -85,17 +88,23 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		return "", "", err, exitCode
 	}
 
-	err = rehydrateMrSeqFilesForProblematicUpgrades(ctx, h, extensionEvents)
-	if err != nil {
-		// If we fail on update, then there's a risk we could re-execute the customer's script. Don't take that chance.
-		// By failing Update, the extension goal state will fail. WALA will try us again on the next goal state.
-		ctx.Log("event", "Unable to rehydrate mrseq files")
-		return "", "", err, constants.ExitCode_CouldNotRehydrateMrSeq
+	// Figure out the directories from which and to where we're upgrading. We cannot entirely rely on the environment variables from the Guest Agent
+	upgradeFromVersionDirectory, upgradeToVersionDirectory, upgradeFromVersion := determineUpgradeVersionDirectories(ctx, extensionEvents)
+
+	if compareVersions(constants.FirstVersionNoRehydration, upgradeFromVersion) > 0 {
+		// Rehydrate any mrseq files from the corresponding status file.
+		err = rehydrateMrSeqFilesForProblematicUpgrades(ctx, upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
+		if err != nil {
+			// If we fail on update, then there's a risk we could re-execute the customer's script. Don't take that chance.
+			// By failing Update, the extension goal state will fail. WALA will try us again on the next goal state.
+			ctx.Log("event", "Unable to rehydrate mrseq files")
+			return "", "", err, constants.ExitCode_CouldNotRehydrateMrSeq
+		}
 	}
 
 	// Copy any .mrseq or .status files -Most Recently executed Sequence number files and status files for Run Commands from old version to new version.
 	// This is necessary to prevent rerunning of already executed Run Commands after upgrade of extension version, and also return their statuses.
-	copyError := CopyStateForUpdate(ctx, extensionEvents)
+	copyError := CopyStateForUpdate(ctx, upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
 	if copyError != nil {
 		return "", "", errors.Wrap(copyError, "Migrating *.mrseq or .status files failed during update."), constants.ExitCode_CopyStateForUpdateFailed
 	}
@@ -417,15 +426,15 @@ func resetSeqNum(ctx log.Logger, mrseqPath string, extensionEvents *extensioneve
 }
 
 // Copy state of the extension from old version to new version during update (.mrseq files, .status files)
-func CopyStateForUpdate(ctx log.Logger, extensionEvents *extensionevents.ExtensionEventManager) error {
+func CopyStateForUpdate(ctx log.Logger, upgradeFromVersionDirectory string, upgradeToVersionDirectory string, extensionEvents *extensionevents.ExtensionEventManager) error {
 	// Copy .mrseq files (Most Recently executed Sequence number) that helps determine whether a sequence number of Run Command has been previously executed or not.
-	mrseqFilesNameList, mrseqFileCopyErr := copyFiles(ctx, constants.MrSeqFileExtension, "", extensionEvents)
+	mrseqFilesNameList, mrseqFileCopyErr := copyFiles(ctx, constants.MrSeqFileExtension, "", upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
 	if mrseqFileCopyErr != nil {
 		return mrseqFileCopyErr
 	}
 
 	// Copy .status files of already executed sequence numbers
-	_, statusFileCopyErr := copyFiles(ctx, ".status", constants.StatusFileDirectory, extensionEvents)
+	_, statusFileCopyErr := copyFiles(ctx, ".status", constants.StatusFileDirectory, upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
 	if statusFileCopyErr != nil {
 		return statusFileCopyErr
 	}
@@ -440,41 +449,140 @@ func CopyStateForUpdate(ctx log.Logger, extensionEvents *extensionevents.Extensi
 	return nil
 }
 
-func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, h types.HandlerEnvironment, extensionEvents *extensionevents.ExtensionEventManager) error {
-	// First, determine whether we're upgrading from a 'problematic' version, defined as one
-	// where we mistakenly deleted the mrseq files in the Disable call
-	newExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
-	oldExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
-	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
-	oldExtensionDirectory := strings.ReplaceAll(newExtensionDirectory, newExtensionVersion, oldExtensionVersion)
+func determineUpgradeVersionDirectories(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) (upgradeFromVersionDirectory string, upgradeToVersionDirectory string, upgradeFromVersion string) {
+	// These two environment variables will tell us the extension versions involved, but won't actually tell us
+	// the from/to versions
+	firstExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	secondExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
 
-	// The following are problematic versions:
-	// Production: 1.3.17
-	// Test: 1.8.0, 1.9.0
-	isProblematicVersion := false
-	isTestExtension := strings.Contains(oldExtensionDirectory, constants.RunCommandTestExtensionName)
-	if isTestExtension {
-		isProblematicVersion = (oldExtensionVersion == constants.FirstTestVersionThatDeletesMrSeqFiles || oldExtensionVersion == constants.SecondTestVersionThatDeletesMrSeqFiles)
-	} else {
-		isProblematicVersion = (oldExtensionVersion == constants.ProductionVersionThatDeletesMrSeqFiles)
+	// To determine to which version we're actually upgrading, we'll need to look into the folders
+	// The higher version isn't necessarily the one we're upgrading to, since we may be downgrading
+	// If one has at least one .mrseq file, and the other has none, then we're upgrading to the one that has none
+	// If neither has a .mrseq file, then just choose the higher version number
+	// If both have .mrseq files, then this shouldn't happen, but for the sake of sanity choose the highe version number
+	firstExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
+	secondExtensionDirectory := strings.ReplaceAll(firstExtensionDirectory, firstExtensionVersion, secondExtensionVersion)
+
+	// Check for *.mrseq presence in each directory
+	firstHasMrseq := hasMrseq(ctx, firstExtensionDirectory)
+	secondHasMrseq := hasMrseq(ctx, secondExtensionDirectory)
+
+	// If one has mrseq and the other doesn't → upgrade to the one without mrseq
+	if firstHasMrseq != secondHasMrseq {
+		if firstHasMrseq && !secondHasMrseq {
+			upgradeToVersionDirectory, upgradeFromVersionDirectory = secondExtensionDirectory, firstExtensionDirectory
+			upgradeFromVersion = firstExtensionVersion
+		} else {
+			upgradeToVersionDirectory, upgradeFromVersionDirectory = firstExtensionDirectory, secondExtensionDirectory
+			upgradeFromVersion = secondExtensionVersion
+		}
+
+		msg := fmt.Sprintf("determineUpgradeVersions: mrseq-guided choice → to='%s' from='%s'", upgradeToVersionDirectory, upgradeFromVersionDirectory)
+		ctx.Log("message", msg)
+		extensionEvents.LogInformationalEvent("determineUpgradeVersions", msg)
+
+		return upgradeFromVersionDirectory, upgradeToVersionDirectory, upgradeFromVersion
 	}
 
-	if isProblematicVersion {
-		message := fmt.Sprintf("Rehydrating mrseq files deleted by version '%s' using status files", oldExtensionVersion)
-		ctx.Log("message", message)
-		extensionEvents.LogInformationalEvent("rehydratemrseq", message)
-		return doRehydrateMrSeqFilesForProblematicUpgrades(ctx, oldExtensionDirectory, newExtensionDirectory, extensionEvents)
-	} else {
-		message := fmt.Sprintf("Previous extension version '%s' does not require mrseq hydration", oldExtensionVersion)
-		ctx.Log("message", message)
-		extensionEvents.LogInformationalEvent("rehydratemrseq", message)
+	// Rule 2 & 3: neither has mrseq OR both have mrseq → choose higher version number as upgradeTo
+	switch c := compareVersions(firstExtensionVersion, secondExtensionVersion); {
+	case c > 0:
+		upgradeToVersionDirectory, upgradeFromVersionDirectory = firstExtensionDirectory, secondExtensionDirectory
+		upgradeFromVersion = secondExtensionVersion
+	case c < 0:
+		upgradeToVersionDirectory, upgradeFromVersionDirectory = secondExtensionDirectory, firstExtensionDirectory
+		upgradeFromVersion = firstExtensionVersion
+	default:
+		// Equal versions (shouldn’t normally happen in an upgrade path). Keep first as "to".
+		upgradeToVersionDirectory, upgradeFromVersionDirectory = firstExtensionDirectory, secondExtensionDirectory
+		upgradeFromVersion = secondExtensionVersion
 	}
 
-	return nil
+	msg := fmt.Sprintf("determineUpgradeVersions: version-ordered choice → to='%s' from='%s' (mrseq first=%t second=%t)", upgradeToVersionDirectory, upgradeFromVersionDirectory, firstHasMrseq, secondHasMrseq)
+	ctx.Log("message", msg)
+	extensionEvents.LogInformationalEvent("determineUpgradeVersions", msg)
+
+	return upgradeFromVersionDirectory, upgradeToVersionDirectory, upgradeFromVersion
 }
 
-func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionDirectory string, newExtensionDirectory string, extensionEvents *extensionevents.ExtensionEventManager) error {
-	oldExtensionStatusDirectory := filepath.Join(oldExtensionDirectory, constants.StatusFileDirectory)
+// hasMrseq returns true if the given directory contains at least one *.mrseq file.
+// It is resilient to missing directories and IO errors (logs and returns false).
+func hasMrseq(ctx *log.Context, dir string) bool {
+	if dir == "" {
+		return false
+	}
+	// Resolve glob pattern
+	pattern := filepath.Join(dir, "*.mrseq")
+
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		ctx.Log("error", fmt.Sprintf("hasMrseq: glob error for '%s': %v", pattern, err))
+		return false
+	}
+	return len(matches) > 0
+}
+
+// compareVersions compares two dotted version strings (e.g., "2.1", "2.1.0", "2.1.0.3").
+// Returns: +1 if a>b, -1 if a<b, 0 if equal.
+func compareVersions(a, b string) int {
+	aParts := splitVersion(a)
+	bParts := splitVersion(b)
+
+	// Normalize lengths to the same number of components (4 segments max is common for extensions)
+	const maxSeg = 4
+	aParts = padTo(aParts, maxSeg)
+	bParts = padTo(bParts, maxSeg)
+
+	for i := 0; i < maxSeg; i++ {
+		if aParts[i] > bParts[i] {
+			return 1
+		}
+		if aParts[i] < bParts[i] {
+			return -1
+		}
+	}
+	return 0
+}
+
+// splitVersion converts "x.y.z.t" → []int{ x, y, z, t } (non-numeric parts treated as 0).
+func splitVersion(v string) []int {
+	parts := strings.Split(v, ".")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		// Trim any stray spaces; non-numeric gets 0
+		p = strings.TrimSpace(p)
+		n := 0
+		for i := 0; i < len(p); i++ {
+			if p[i] < '0' || p[i] > '9' {
+				// non-numeric component; keep as 0
+				n = 0
+				goto done
+			}
+		}
+		if p != "" {
+			// safe Atoi without error branch since we checked digits
+			for i := 0; i < len(p); i++ {
+				n = n*10 + int(p[i]-'0')
+			}
+		}
+	done:
+		out = append(out, n)
+	}
+	return out
+}
+
+func padTo(in []int, size int) []int {
+	if len(in) >= size {
+		return in[:size]
+	}
+	out := make([]int, size)
+	copy(out, in)
+	// remaining default to 0
+	return out
+}
+
+func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersionDirectory string, updateToVersionDirectory string, extensionEvents *extensionevents.ExtensionEventManager) error {
+	oldExtensionStatusDirectory := filepath.Join(updateFromVersionDirectory, constants.StatusFileDirectory)
 
 	extensionStatusDirectoryFDRef, err := os.Open(oldExtensionStatusDirectory)
 	if err != nil {
@@ -489,7 +597,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 	// If we find any status files missing their corresponding mrseq, then rehydrate it by taking the seqNo from the status file name
 	statusFiles, err := extensionStatusDirectoryFDRef.ReadDir(0)
 	if err != nil {
-		errMessage := fmt.Sprintf("could not read directory entries from status directory %s", oldExtensionDirectory)
+		errMessage := fmt.Sprintf("could not read directory entries from status directory %s", updateFromVersionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
 		return errors.Wrap(err, errMessage)
@@ -507,7 +615,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 				seqNo := parts[1]
 				seqNoAsInt, _ := strconv.Atoi(seqNo)
 				mrSeqFileName := extensionName + constants.MrSeqFileExtension
-				mrSeqFilePath := filepath.Join(newExtensionDirectory, mrSeqFileName)
+				mrSeqFilePath := filepath.Join(updateToVersionDirectory, mrSeqFileName)
 
 				_, err = os.Stat(mrSeqFilePath)
 				if err != nil {
@@ -563,45 +671,39 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 }
 
 // Copy files like *.mrseq (Most Recently executed Sequence number), .status files from old extension version to new extension version during update.
-func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory string, extensionEvents *extensionevents.ExtensionEventManager) (*list.List, error) {
+func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory string, upgradeFromVersionDirectory string, upgradeToVersionDirectory string, extensionEvents *extensionevents.ExtensionEventManager) (*list.List, error) {
 
-	newExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
-	oldExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
-
-	message := fmt.Sprintf("Migrating '%s' files from extension version '%s' to '%s'", fileExtensionSuffix, oldExtensionVersion, newExtensionVersion)
+	message := fmt.Sprintf("Migrating '%s' files from '%s' to '%s'", fileExtensionSuffix, upgradeFromVersionDirectory, upgradeToVersionDirectory)
 	ctx.Log("message", message)
 	extensionEvents.LogInformationalEvent("copyfiles", message)
 
-	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
-	oldExtensionDirectory := strings.ReplaceAll(newExtensionDirectory, newExtensionVersion, oldExtensionVersion)
-
 	// Append subdirectory like "status" under extension folder if provided.
 	if extensionSubdirectory != "" {
-		newExtensionDirectory = filepath.Join(newExtensionDirectory, extensionSubdirectory)
-		oldExtensionDirectory = filepath.Join(oldExtensionDirectory, extensionSubdirectory)
+		upgradeToVersionDirectory = filepath.Join(upgradeToVersionDirectory, extensionSubdirectory)
+		upgradeFromVersionDirectory = filepath.Join(upgradeFromVersionDirectory, extensionSubdirectory)
 
 		// Create subdirectory like "status" directory if it does not exist
-		_, err := os.Open(newExtensionDirectory)
+		_, err := os.Open(upgradeToVersionDirectory)
 		if err != nil {
-			errr := os.Mkdir(newExtensionDirectory, 0700)
+			errr := os.Mkdir(upgradeToVersionDirectory, 0700)
 			if errr != nil {
-				errMessage := fmt.Sprintf("Failed to create directory '%s'", newExtensionDirectory)
+				errMessage := fmt.Sprintf("Failed to create directory '%s'", upgradeToVersionDirectory)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
 				return nil, errors.Wrap(errr, errMessage)
 			}
 		}
 	}
 
-	if oldExtensionDirectory == "" || newExtensionDirectory == "" {
+	if upgradeFromVersionDirectory == "" || upgradeToVersionDirectory == "" {
 		errMessage := "oldExtesionDirectory or newExtensionDirectory is empty"
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
 		return nil, errors.New(errMessage)
 	}
 
 	// Check if the directory exists
-	sourceDirectoryFDRef, err := os.Open(oldExtensionDirectory)
+	sourceDirectoryFDRef, err := os.Open(upgradeFromVersionDirectory)
 	if err != nil {
-		errMessage := fmt.Sprintf("could not open sourceDirectory %s", oldExtensionDirectory)
+		errMessage := fmt.Sprintf("could not open sourceDirectory %s", upgradeFromVersionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
 		return nil, errors.Wrap(err, errMessage)
@@ -609,7 +711,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 
 	directoryEntries, err := sourceDirectoryFDRef.ReadDir(0)
 	if err != nil {
-		errMessage := fmt.Sprintf("could not read directory entries from sourceDirectory %s", oldExtensionDirectory)
+		errMessage := fmt.Sprintf("could not read directory entries from sourceDirectory %s", upgradeFromVersionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
 		return nil, errors.Wrap(err, errMessage)
@@ -622,8 +724,8 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		fileName := dirEntry.Name()
 
 		if strings.HasSuffix(fileName, fileExtensionSuffix) {
-			sourceFileFullPath := filepath.Join(oldExtensionDirectory, fileName)
-			destinationFileFullPath := filepath.Join(newExtensionDirectory, fileName)
+			sourceFileFullPath := filepath.Join(upgradeFromVersionDirectory, fileName)
+			destinationFileFullPath := filepath.Join(upgradeToVersionDirectory, fileName)
 
 			sourceFile, sourceFileOpenError := os.Open(sourceFileFullPath)
 			if sourceFileOpenError != nil {
@@ -660,7 +762,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		}
 	}
 
-	message = fmt.Sprintf("Migrated %d '%s' files from extension version '%s' to '%s'", numberOfFilesMigrated, fileExtensionSuffix, oldExtensionVersion, newExtensionVersion)
+	message = fmt.Sprintf("Migrated %d '%s' files from extension version '%s' to '%s'", numberOfFilesMigrated, fileExtensionSuffix, upgradeFromVersionDirectory, upgradeToVersionDirectory)
 	ctx.Log("message", message)
 	extensionEvents.LogInformationalEvent("copyfiles", message)
 
@@ -867,7 +969,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 	defer pid.DeleteCurrentPidAndStartTime(metadata.PidFilePath)
 
 	begin := time.Now()
-	err, exitCode = exec.ExecCmdInDir(ctx, scriptFilePath, dir, cfg)
+	err, exitCode = ExecCmdInDir(ctx, scriptFilePath, dir, cfg)
 	elapsed := time.Since(begin)
 	isSuccess := err == nil
 

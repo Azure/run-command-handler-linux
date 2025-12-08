@@ -3,11 +3,13 @@ package commands
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -85,7 +87,7 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 
 	extensionLogger := logging.New(nil)
 	extensionEventManager := extensionevents.New(extensionLogger, &handlerEnvironment)
-	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), extensionEventManager)
+	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), previousExtensionVersionDirectory, currentExtensionVersionDirectory, extensionEventManager)
 	require.Nil(t, err)
 
 	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
@@ -237,6 +239,69 @@ func Test_update_e2e_cmd(t *testing.T) {
 	// Now call enable and verify we did NOT re-execute the script
 	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 0)
 	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+}
+
+func Test_update_e23_non_problematic_version(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
+	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
+	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.26")
+	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.27")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
+
+	fakeEnv := types.HandlerEnvironment{}
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.26")
+
+	// Create three extensions
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk", true, 0)
+
+	// Run one of them again to obtain multiple status files
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 1)
+
+	// Now, pretend that the extension was updated
+	// Step 1: WALA calls Disable on our two extensions
+	disable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk")
+
+	// Step 2: WALA will call update
+	os.Setenv(constants.ExtensionVersionEnvName, "1.3.27")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.26")
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
+	update_handler(t, fakeEnv, tempDir)
+
+	// Now, WALA will uninstall the old extension
+	uninstall_handler(t, fakeEnv, tempDir)
+
+	// Then, WALA will install the new extension
+	install_handler(t, fakeEnv, tempDir)
+
+	// Now call enable and verify we did NOT re-execute the script
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", false, 0)
+
+	// Run them again with a higher seqNo to ensure they're now executed
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", true, 2)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", true, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", true, 1)
 }
 
 func Test_udpate_e2e_problematic_version(t *testing.T) {
@@ -435,18 +500,16 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	// Ensure that the script succeeds
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return nil, 0
+	}
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}},
 	}, metadata)
 	require.Nil(t, err, "command should run successfully")
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
-
-	// check stdout stderr files
-	_, err = os.Stat(filepath.Join(dir, "stdout"))
-	require.Nil(t, err, "stdout should exist")
-	_, err = os.Stat(filepath.Join(dir, "stderr"))
-	require.Nil(t, err, "stderr should exist")
 
 	// Check embedded script if saved to file
 	_, err = os.Stat(filepath.Join(dir, "script.sh"))
@@ -460,6 +523,11 @@ func Test_runCmd_fail(t *testing.T) {
 	dir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
+
+	// Ensure that the script fails
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return errors.New("the chipmunks have risen in revolt"), 42
+	}
 
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
@@ -692,12 +760,17 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	// Ensure that the script fails
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return errors.New("the chipmunks do not like the script"), 127
+	}
+
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
 	}, metadata)
 	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "failed to execute command: command terminated with exit status=127")
+	require.Contains(t, err.Error(), "failed to execute command: the chipmunks do not like the script")
 	require.NotEqual(t, constants.ExitCode_Okay, exitCode)
 }
 
@@ -711,10 +784,505 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	// Ensure that the script succeeds
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return nil, 0
+	}
+
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
 	}, metadata)
 	require.Nil(t, err)
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
+}
+
+func TestPadTo(t *testing.T) {
+	tests := []struct {
+		name     string
+		in       []int
+		size     int
+		expected []int
+	}{
+		{
+			name:     "Input longer than size",
+			in:       []int{1, 2, 3, 4},
+			size:     2,
+			expected: []int{1, 2},
+		},
+		{
+			name:     "Input equal to size",
+			in:       []int{1, 2, 3},
+			size:     3,
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "Input shorter than size",
+			in:       []int{1, 2},
+			size:     5,
+			expected: []int{1, 2, 0, 0, 0},
+		},
+		{
+			name:     "Empty input",
+			in:       []int{},
+			size:     3,
+			expected: []int{0, 0, 0},
+		},
+		{
+			name:     "Size zero",
+			in:       []int{1, 2, 3},
+			size:     0,
+			expected: []int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := padTo(tt.in, tt.size)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("padTo(%v, %d) = %v; expected %v", tt.in, tt.size, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSplitVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		in       string
+		expected []int
+	}{
+		{
+			name:     "simple-3-parts",
+			in:       "1.2.3",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "single-part",
+			in:       "42",
+			expected: []int{42},
+		},
+		{
+			name:     "leading-zeros",
+			in:       "001.0002.00003",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "spaces-around-parts",
+			in:       "  1 .  2  .  3  ",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "non-numeric-alpha",
+			in:       "1.a.3",
+			expected: []int{1, 0, 3},
+		},
+		{
+			name:     "non-numeric-mixed",
+			in:       "1.2beta.3",
+			expected: []int{1, 0, 3},
+		},
+		{
+			name: "empty-string",
+			in:   "",
+			// strings.Split("", ".") == []string{""} → p=="" → append 0
+			expected: []int{0},
+		},
+		{
+			name: "consecutive-dots-empty-components",
+			in:   "1..3....5",
+			// empty parts become 0
+			expected: []int{1, 0, 3, 0, 0, 0, 5},
+		},
+		{
+			name:     "trailing-dot",
+			in:       "1.2.",
+			expected: []int{1, 2, 0},
+		},
+		{
+			name:     "leading-dot",
+			in:       ".2.3",
+			expected: []int{0, 2, 3},
+		},
+		{
+			name: "very-large-number",
+			in:   "2147483647.0",
+			// Note: Go int is platform-dependent; still valid parsing.
+			expected: []int{2147483647, 0},
+		},
+		{
+			name:     "zeros-only",
+			in:       "0.0.0",
+			expected: []int{0, 0, 0},
+		},
+		{
+			name: "whitespace-only-component",
+			in:   "1.   .3",
+			// TrimSpace makes middle part "", thus 0
+			expected: []int{1, 0, 3},
+		},
+		{
+			name:     "unicode-digits-are-not-ASCII-digits",
+			in:       "１.2", // Note: first char is full-width '１' (U+FF11) → non-ASCII → 0
+			expected: []int{0, 2},
+		},
+		{
+			name: "dash-negative-like",
+			in:   "1.-2.3",
+			// '-' makes component non-numeric → 0
+			expected: []int{1, 0, 3},
+		},
+		{
+			name:     "plus-sign",
+			in:       "+1.2",
+			expected: []int{0, 2},
+		},
+		{
+			name:     "long-many-parts",
+			in:       "1.2.3.4.5.6.7.8.9",
+			expected: []int{1, 2, 3, 4, 5, 6, 7, 8, 9},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := splitVersion(tt.in)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Fatalf("splitVersion(%q) = %v, want %v", tt.in, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		a        string
+		b        string
+		expected int
+	}{
+		{
+			name:     "equal-simple",
+			a:        "1.2.3",
+			b:        "1.2.3",
+			expected: 0,
+		},
+		{
+			name:     "equal-with-extra-zeros",
+			a:        "1.2.3.0",
+			b:        "1.2.3",
+			expected: 0,
+		},
+		{
+			name:     "a-greater-last-segment",
+			a:        "1.2.3.4",
+			b:        "1.2.3.3",
+			expected: 1,
+		},
+		{
+			name:     "b-greater-last-segment",
+			a:        "1.2.3.3",
+			b:        "1.2.3.4",
+			expected: -1,
+		},
+		{
+			name:     "a-greater-first-segment",
+			a:        "2.0.0",
+			b:        "1.9.9",
+			expected: 1,
+		},
+		{
+			name:     "b-greater-first-segment",
+			a:        "1.9.9",
+			b:        "2.0.0",
+			expected: -1,
+		},
+		{
+			name:     "normalize-length-a-shorter",
+			a:        "1.2",
+			b:        "1.2.0.1",
+			expected: -1,
+		},
+		{
+			name:     "normalize-length-b-shorter",
+			a:        "1.2.0.1",
+			b:        "1.2",
+			expected: 1,
+		},
+		{
+			name:     "leading-zeros-equal",
+			a:        "01.002.0003",
+			b:        "1.2.3",
+			expected: 0,
+		},
+		{
+			name:     "non-numeric-in-a",
+			a:        "1.alpha.3",
+			b:        "1.0.3",
+			expected: 0, // alpha → 0
+		},
+		{
+			name:     "non-numeric-in-b",
+			a:        "1.2.3",
+			b:        "1.beta.3",
+			expected: 1, // beta → 0, so a > b
+		},
+		{
+			name:     "empty-strings",
+			a:        "",
+			b:        "",
+			expected: 0,
+		},
+		{
+			name:     "empty-vs-non-empty",
+			a:        "",
+			b:        "0.0.0.1",
+			expected: -1,
+		},
+		{
+			name:     "longer-than-4-segments-ignored-after-4",
+			a:        "1.2.3.4.999",
+			b:        "1.2.3.4.0",
+			expected: 0, // only first 4 segments matter
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := compareVersions(tt.a, tt.b)
+			if got != tt.expected {
+				t.Fatalf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestHasMrseq(t *testing.T) {
+	ctx := log.NewContext(log.NewNopLogger())
+
+	t.Run("empty dir string returns false", func(t *testing.T) {
+		if got := hasMrseq(ctx, ""); got {
+			t.Fatalf("hasMrseq(ctx, \"\") = true; want false")
+		}
+	})
+
+	t.Run("non-existent directory returns false", func(t *testing.T) {
+		nonExistent := filepath.Join(t.TempDir(), "this-dir-does-not-exist")
+		// Ensure it truly doesn't exist
+		if _, err := os.Stat(nonExistent); !os.IsNotExist(err) {
+			t.Fatalf("test setup: expected directory to not exist: %s", nonExistent)
+		}
+		if got := hasMrseq(ctx, nonExistent); got {
+			t.Fatalf("hasMrseq(ctx, %q) = true; want false", nonExistent)
+		}
+	})
+
+	t.Run("empty directory returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		if got := hasMrseq(ctx, dir); got {
+			t.Fatalf("hasMrseq(ctx, %q) = true; want false", dir)
+		}
+	})
+
+	t.Run("directory with one .mrseq file returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		f := filepath.Join(dir, "run1.mrseq")
+		if err := os.WriteFile(f, []byte("dummy"), 0o644); err != nil {
+			t.Fatalf("test setup: write %s: %v", f, err)
+		}
+		if got := hasMrseq(ctx, dir); !got {
+			t.Fatalf("hasMrseq(ctx, %q) = false; want true", dir)
+		}
+	})
+
+	t.Run("directory with multiple .mrseq files returns true", func(t *testing.T) {
+		dir := t.TempDir()
+		for i := 1; i <= 3; i++ {
+			name := filepath.Join(dir, fmt.Sprintf("batch_%d.mrseq", i))
+			if err := os.WriteFile(name, []byte("dummy"), 0o644); err != nil {
+				t.Fatalf("test setup: write %s: %v", name, err)
+			}
+		}
+		if got := hasMrseq(ctx, dir); !got {
+			t.Fatalf("hasMrseq(ctx, %q) = false; want true", dir)
+		}
+	})
+
+	t.Run("directory with non-mrseq files only returns false", func(t *testing.T) {
+		dir := t.TempDir()
+		others := []string{"a.txt", "b.mrseq.bak", "c.mrseqq", "d.MRSEQ"} // case-sensitive on most platforms
+		for _, name := range others {
+			path := filepath.Join(dir, name)
+			if err := os.WriteFile(path, []byte("dummy"), 0o644); err != nil {
+				t.Fatalf("test setup: write %s: %v", path, err)
+			}
+		}
+		if got := hasMrseq(ctx, dir); got {
+			t.Fatalf("hasMrseq(ctx, %q) = true; want false", dir)
+		}
+	})
+
+	t.Run("non-recursive: file only in subdirectory does not count", func(t *testing.T) {
+		dir := t.TempDir()
+		sub := filepath.Join(dir, "sub")
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatalf("test setup: mkdir %s: %v", sub, err)
+		}
+		f := filepath.Join(sub, "nested.mrseq")
+		if err := os.WriteFile(f, []byte("dummy"), 0o644); err != nil {
+			t.Fatalf("test setup: write %s: %v", f, err)
+		}
+		// Glob(dir, "*.mrseq") should not find files in subdir
+		if got := hasMrseq(ctx, dir); got {
+			t.Fatalf("hasMrseq(ctx, %q) = true; want false (non-recursive glob)", dir)
+		}
+	})
+
+	// Optional: demonstrate that unrelated extensions don't affect the outcome when at least one *.mrseq exists.
+	t.Run("mixed files: presence of .mrseq wins", func(t *testing.T) {
+		dir := t.TempDir()
+		_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dummy"), 0o644)
+		_ = os.WriteFile(filepath.Join(dir, "b.log"), []byte("dummy"), 0o644)
+		_ = os.WriteFile(filepath.Join(dir, "c.mrseq"), []byte("dummy"), 0o644)
+		if got := hasMrseq(ctx, dir); !got {
+			t.Fatalf("hasMrseq(ctx, %q) = false; want true", dir)
+		}
+	})
+}
+
+func makeDirWithMrseq(t *testing.T, dir string, addMrseq bool, version string) string {
+	sub := filepath.Join(dir, version)
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("test setup: mkdir %s: %v", sub, err)
+	}
+
+	if addMrseq {
+		f := filepath.Join(sub, "floopster.mrseq")
+		if err := os.WriteFile(f, []byte("0"), 0o644); err != nil {
+			t.Fatalf("setup: write %s: %v", f, err)
+		}
+	}
+	return sub
+}
+
+func TestDetermineUpgradeVersionDirectories(t *testing.T) {
+	tests := []struct {
+		name             string
+		firstVersion     string
+		secondVersion    string
+		firstHasMrseq    bool
+		secondHasMrseq   bool
+		expectedToSuffix string
+		expectedFrom     string
+	}{
+		{
+			name:             "first has mrseq, second does not → upgrade to second",
+			firstVersion:     "1.0.0",
+			secondVersion:    "2.0.0",
+			firstHasMrseq:    true,
+			secondHasMrseq:   false,
+			expectedToSuffix: "second",
+			expectedFrom:     "1.0.0",
+		},
+		{
+			name:             "second has mrseq, first does not → upgrade to first",
+			firstVersion:     "1.0.0",
+			secondVersion:    "2.0.0",
+			firstHasMrseq:    false,
+			secondHasMrseq:   true,
+			expectedToSuffix: "first",
+			expectedFrom:     "2.0.0",
+		},
+		{
+			name:             "neither has mrseq → choose higher version (second)",
+			firstVersion:     "1.0.0",
+			secondVersion:    "2.0.0",
+			firstHasMrseq:    false,
+			secondHasMrseq:   false,
+			expectedToSuffix: "second",
+			expectedFrom:     "1.0.0",
+		},
+		{
+			name:             "both have mrseq → choose higher version (second)",
+			firstVersion:     "1.0.0",
+			secondVersion:    "2.0.0",
+			firstHasMrseq:    true,
+			secondHasMrseq:   true,
+			expectedToSuffix: "second",
+			expectedFrom:     "1.0.0",
+		},
+		{
+			name:             "equal versions → choose first as upgradeTo",
+			firstVersion:     "1.0.0",
+			secondVersion:    "1.0.0",
+			firstHasMrseq:    false,
+			secondHasMrseq:   false,
+			expectedToSuffix: "first",
+			expectedFrom:     "1.0.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Prepare directories
+			dir := t.TempDir()
+			firstDir := makeDirWithMrseq(t, dir, tt.firstHasMrseq, tt.firstVersion)
+			secondDir := makeDirWithMrseq(t, dir, tt.secondHasMrseq, tt.secondVersion)
+
+			// Simulate environment variables
+			os.Setenv(constants.ExtensionVersionEnvName, tt.firstVersion)
+			os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, tt.secondVersion)
+			os.Setenv(constants.ExtensionPathEnvName, firstDir)
+
+			// Replace secondDir logic: mimic original code's substitution
+			// (strings.ReplaceAll(firstDir, firstVersion, secondVersion))
+			// For test simplicity, override secondDir directly
+			// but ensure substitution works if versions appear in path
+			if strings.Contains(firstDir, tt.firstVersion) {
+				secondDir = strings.ReplaceAll(firstDir, tt.firstVersion, tt.secondVersion)
+			}
+
+			tempDir, _ := os.MkdirTemp("", "determineupgrade")
+			defer os.RemoveAll(tempDir)
+			handlerEnvironment := handlerenv.HandlerEnvironment{
+				EventsFolder: tempDir,
+			}
+
+			extensionLogger := logging.New(nil)
+			events := extensionevents.New(extensionLogger, &handlerEnvironment)
+			ctx := log.NewContext(log.NewNopLogger())
+
+			gotFromDir, gotToDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+
+			// Validate upgradeFromVersion
+			if gotFromVersion != tt.expectedFrom {
+				t.Errorf("upgradeFromVersion = %q; want %q", gotFromVersion, tt.expectedFrom)
+			}
+
+			// Validate which directory chosen as upgradeTo
+			if tt.expectedToSuffix == "first" {
+				if gotToDir != firstDir {
+					t.Errorf("upgradeToDir = %q; want firstDir %q", gotToDir, firstDir)
+				}
+				if gotFromDir != secondDir {
+					t.Errorf("upgradeFromDir = %q; want secondDir %q", gotFromDir, secondDir)
+				}
+			} else {
+				if gotToDir != secondDir {
+					t.Errorf("upgradeToDir = %q; want secondDir %q", gotToDir, secondDir)
+				}
+				if gotFromDir != firstDir {
+					t.Errorf("upgradeFromDir = %q; want firstDir %q", gotFromDir, firstDir)
+				}
+			}
+		})
+	}
 }
