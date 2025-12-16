@@ -13,49 +13,41 @@ fi
 # in multiconfig case $ConfigExtensionName and $ConfigSequenceNumber should be set by the agent
 readonly EXTENSION_NAME=$ConfigExtensionName
 readonly SEQNO=$ConfigSequenceNumber
+readonly LOCKFILE="./run-command-handler.lock"
 echo "ConfigExtensionName: $EXTENSION_NAME"
 echo "ConfigSequenceNumber: $SEQNO"
 echo Architecture: $ARCHITECTURE
 echo Binary: $HANDLER_BIN
+LOCK_ACQUIRED=0
 
-check_binary_write_lock() {
+get_lock() {
     set +e # disable exit on non-zero return code
     local retry_attempts=0
-    while (( retry_attempts < 10 )); do
-        lsof_result="$(lsof -F ac ${bin})"
-        lsof_return_code=$?
-        if [ "$lsof_return_code" -eq 0 ]; then
-            #"lsof -F" outputs results in more parse-able format, "-F ac" option prints access mode and command name for process
-            #access mode and command names are prepended with a and c
-            file_mode="$(echo "$lsof_result" | awk 'match($0, /^a(.*)$/) {print $0}')"
-            process_name="$(echo "$lsof_result" | awk 'match($0, /^c(.*)$/) {print substr($0, RSTART+1, RLENGTH-1)}')"
 
-            found_write_lock=0
-            file_mode_array=($file_mode)
-            i=0
-            for name in $process_name
-            do
-                file_handle_mode=${file_mode_array[$i]}
-                echo "$name has access mode '$file_handle_mode' file handle on ${HANDLER_BIN}"
-                ## w and u are file descriptor modes for write and read/write access
-                if [[ $file_handle_mode == "aw" ]] || [[ $file_handle_mode == "au" ]]; then
-                    found_write_lock=1
-                fi
-                ((++i))
-            done
-            if [ "$found_write_lock" -eq 0 ]; then
-                # did not find write lock on any file no need to wait or retry
-                break
-            fi
+    # Create lock file if it does not exist
+    if [ ! -f "$LOCKFILE" ]; then
+        touch "$LOCKFILE"
+        echo "Lock file '$LOCKFILE' has been created."
+    fi
+ 
+    while (( retry_attempts < 10 )); do
+        # Acquire the exclusive (-x) and non-blocking (-n) lock on the lock file (side note: flock is part of util-linux package and is available by default on most Linux distros)
+        if ! flock -x -n $LOCKFILE; then
+            echo "Lock already held by another process. Retrying..."
             ((++retry_attempts))
-            echo "waiting for process(es) with write handle on ${HANDLER_BIN}"
             echo "sleeping for 3 seconds before retry, attempt ${retry_attempts} of 10"
             sleep 3
+            continue
         else
+            echo "Lock acquired on file '$LOCKFILE'"
+            LOCK_ACQUIRED=1
             break
         fi
     done
-    # do not return error if file descriptor is open after retries expire, make a best effort attempt to start custom-script-extension
+    # Do not return error if lock not acquired even after retries expire, make a best effort attempt to start run-command-handler
+    if [ "$LOCK_ACQUIRED" -eq 0 ]; then
+        echo "Lock was not acquired on '$LOCKFILE' after retries. Making best-effort attempt to start run-command-handler..."
+    fi
     set -e
     return 0
 }
@@ -78,13 +70,14 @@ if [[ "$cmd" == "enable" ]]; then
     # for 'enable' command, double fork
     # to detach from the handler process tree to avoid getting terminated 
     # after the 15-minute extension enabling timeout.
-    check_binary_write_lock
+    get_lock
     set -x
     # & will execute the binary on the backgraound and will not block current shell execution
     nohup "$bin" "$cmd" &
 else
     # execute the handler process as a child process
-    check_binary_write_lock
+    get_lock
     set -x
     "$bin" "$cmd"
 fi
+# Exiting the script releases the lock on $LOCKFILE by closing the file descriptor associated with the lock.
