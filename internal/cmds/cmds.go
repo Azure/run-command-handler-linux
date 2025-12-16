@@ -459,7 +459,7 @@ func determineUpgradeVersionDirectories(ctx *log.Context, extensionEvents *exten
 	// The higher version isn't necessarily the one we're upgrading to, since we may be downgrading
 	// If one has at least one .mrseq file, and the other has none, then we're upgrading to the one that has none
 	// If neither has a .mrseq file, then just choose the higher version number
-	// If both have .mrseq files, then this shouldn't happen, but for the sake of sanity choose the highe version number
+	// If both have .mrseq files, then this shouldn't happen, but for the sake of sanity choose the higher version number
 	firstExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
 	secondExtensionDirectory := strings.ReplaceAll(firstExtensionDirectory, firstExtensionVersion, secondExtensionVersion)
 
