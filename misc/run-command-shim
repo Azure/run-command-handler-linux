@@ -20,38 +20,6 @@ echo Architecture: $ARCHITECTURE
 echo Binary: $HANDLER_BIN
 LOCK_ACQUIRED=0
 
-get_lock() {
-    set +e # disable exit on non-zero return code
-    local retry_attempts=0
-
-    # Create lock file if it does not exist
-    if [ ! -f "$LOCKFILE" ]; then
-        touch "$LOCKFILE"
-        echo "Lock file '$LOCKFILE' has been created."
-    fi
- 
-    while (( retry_attempts < 10 )); do
-        # Acquire the exclusive (-x) and non-blocking (-n) lock on the lock file (side note: flock is part of util-linux package and is available by default on most Linux distros)
-        if ! flock -x -n $LOCKFILE; then
-            echo "Lock already held by another process. Retrying..."
-            ((++retry_attempts))
-            echo "sleeping for 3 seconds before retry, attempt ${retry_attempts} of 10"
-            sleep 3
-            continue
-        else
-            echo "Lock acquired on file '$LOCKFILE'"
-            LOCK_ACQUIRED=1
-            break
-        fi
-    done
-    # Do not return error if lock not acquired even after retries expire, make a best effort attempt to start run-command-handler
-    if [ "$LOCK_ACQUIRED" -eq 0 ]; then
-        echo "Lock was not acquired on '$LOCKFILE' after retries. Making best-effort attempt to start run-command-handler..."
-    fi
-    set -e
-    return 0
-}
-
 if [ "$#" -ne 1 ]; then
     echo "Incorrect usage."
     echo "Usage: $0 <command>"
@@ -66,18 +34,58 @@ exec &> >(tee -ia "$LOG_DIR/$LOG_FILE")
 bin="$(readlink -f "$SCRIPT_DIR/$HANDLER_BIN")"
 cmd="$1"
 
+# For commands other than 'enable', execute the handler process as a child process
+commandToExecute = "$bin $cmd"
+
 if [[ "$cmd" == "enable" ]]; then
     # for 'enable' command, double fork
     # to detach from the handler process tree to avoid getting terminated 
     # after the 15-minute extension enabling timeout.
-    get_lock
-    set -x
-    # & will execute the binary on the backgraound and will not block current shell execution
-    nohup "$bin" "$cmd" &
-else
-    # execute the handler process as a child process
-    get_lock
-    set -x
-    "$bin" "$cmd"
+    # & will execute the binary on the background and will not block current shell execution
+    commandToExecute = "nohup $bin $cmd &"
 fi
+
+### Retry logic to acquire lock and execute the command
+set +e # disable exit on non-zero return code
+local retry_attempts=0
+
+# Create lock file if it does not exist
+if [ ! -f "$LOCKFILE" ]; then
+    touch "$LOCKFILE"
+    echo "Lock file '$LOCKFILE' has been created."
+fi
+
+while (( retry_attempts < 10 )); do
+    set -x
+    # Acquire the exclusive (-x) and non-blocking (-n) lock on the lock file and execute $commandToExecute(side note: flock is part of util-linux package and is available by default on most Linux distros)
+    flock -x -n "$LOCKFILE" -c "$commandToExecute"
+    flock_status=$? # Capture the exit status of the flock command
+    set +x
+    
+    if [ $flock_status -eq 1 ]; then
+        echo "Lock already held by another process. Retrying..."
+        ((++retry_attempts))
+        echo "sleeping for 3 seconds before retry, attempt ${retry_attempts} of 10"
+        sleep 3
+        continue
+    elif [ $flock_status -eq 0 ]; then
+        LOCK_ACQUIRED=1
+        echo "Lock acquired on file '$LOCKFILE' and executed command '$commandToExecute' successfully. Exiting."
+        break
+    else
+        echo "Failed to execute command '$commandToExecute' with flock on file '$LOCKFILE'. Exiting with exit code $flock_status"         
+        break
+    fi
+done
+### End of retry logic
+
+# Do not return error if lock not acquired even after retries expire, make a best effort attempt to start run-command-handler
+if [ "$LOCK_ACQUIRED" -eq 0 ]; then
+    echo "Lock was not acquired on '$LOCKFILE' after retries. Making best-effort attempt to start run-command-handler..."
+    set -x
+    $commandToExecute
+    set +x
+fi
+set -e
+
 # Exiting the script releases the lock on $LOCKFILE by closing the file descriptor associated with the lock.
