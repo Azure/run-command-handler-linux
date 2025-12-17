@@ -47,7 +47,7 @@ fi
 
 ### Retry logic to acquire lock and execute the command
 set +e # disable exit on non-zero return code
-local retry_attempts=0
+retry_attempts=0
 
 # Create lock file if it does not exist
 if [ ! -f "$LOCKFILE" ]; then
@@ -55,13 +55,12 @@ if [ ! -f "$LOCKFILE" ]; then
     echo "Lock file $LOCKFILE has been created."
 fi
 
+set -x
 while (( retry_attempts < 10 )); do
-    set -x
     # Acquire the exclusive (-x) and non-blocking (-n) lock on the lock file and execute $commandToExecute(side note: flock is part of util-linux package and is available by default on most Linux distros)
     flock -x -n "$LOCKFILE" -c "$commandToExecute"
     flock_status=$? # Capture the exit status of the flock command
-    set +x
-    
+
     if [ $flock_status -eq 1 ]; then
         echo "Lock already held by another process. Retrying..."
         ((++retry_attempts))
@@ -77,6 +76,7 @@ while (( retry_attempts < 10 )); do
         break
     fi
 done
+set +x
 ### End of retry logic
 
 # Do not return error if lock not acquired even after retries expire, make a best effort attempt to start run-command-handler
