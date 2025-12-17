@@ -35,14 +35,14 @@ bin="$(readlink -f "$SCRIPT_DIR/$HANDLER_BIN")"
 cmd="$1"
 
 # For commands other than 'enable', execute the handler process as a child process
-commandToExecute = "$bin $cmd"
+commandToExecute = "${bin} ${cmd}"
 
 if [[ "$cmd" == "enable" ]]; then
     # for 'enable' command, double fork
     # to detach from the handler process tree to avoid getting terminated 
     # after the 15-minute extension enabling timeout.
     # & will execute the binary on the background and will not block current shell execution
-    commandToExecute = "nohup $bin $cmd &"
+    commandToExecute = "nohup ${bin} ${cmd} &"
 fi
 
 ### Retry logic to acquire lock and execute the command
@@ -52,7 +52,7 @@ local retry_attempts=0
 # Create lock file if it does not exist
 if [ ! -f "$LOCKFILE" ]; then
     touch "$LOCKFILE"
-    echo "Lock file '$LOCKFILE' has been created."
+    echo "Lock file $LOCKFILE has been created."
 fi
 
 while (( retry_attempts < 10 )); do
@@ -70,10 +70,10 @@ while (( retry_attempts < 10 )); do
         continue
     elif [ $flock_status -eq 0 ]; then
         LOCK_ACQUIRED=1
-        echo "Lock acquired on file '$LOCKFILE' and executed command '$commandToExecute' successfully. Exiting."
+        echo "Lock acquired on file $LOCKFILE and executed command $commandToExecute successfully. Exiting."
         break
     else
-        echo "Failed to execute command '$commandToExecute' with flock on file '$LOCKFILE'. Exiting with exit code $flock_status"         
+        echo "Failed to execute command $commandToExecute with flock on file $LOCKFILE. Exiting with exit code $flock_status"         
         break
     fi
 done
@@ -81,7 +81,7 @@ done
 
 # Do not return error if lock not acquired even after retries expire, make a best effort attempt to start run-command-handler
 if [ "$LOCK_ACQUIRED" -eq 0 ]; then
-    echo "Lock was not acquired on '$LOCKFILE' after retries. Making best-effort attempt to start run-command-handler..."
+    echo "Lock was not acquired on $LOCKFILE after retries. Making best-effort attempt to start run-command-handler..."
     set -x
     $commandToExecute
     set +x
