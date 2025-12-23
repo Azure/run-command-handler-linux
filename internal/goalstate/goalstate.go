@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
 	commands "github.com/Azure/run-command-handler-linux/internal/cmds"
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
@@ -46,7 +47,7 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 		return constants.ExitCode_Okay, nil
 	case <-time.After(time.Minute * time.Duration(maxExecutionTimeInMinutes)):
 		ctx.Log("message", "timeout when trying to execute goal state")
-		return constants.ImmediateRC_TaskTimeout, errors.New("timeout when trying to execute goal state")
+		return constants.ImmediateRC_TaskTimeout, vmextension.NewErrorWithClarification(constants.ImmediateRC_TaskTimeout, errors.New("timeout when trying to execute goal state"))
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/pkg/errors"
 )
 
@@ -30,13 +32,13 @@ func IsTextFile(path string) (bool, error) {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to open file")
+		return false, vmextension.NewErrorWithClarification(constants.Internal_FailedToOpenFileForReading, errors.Wrap(err, "failed to open file"))
 	}
 	defer f.Close()
 	b := make([]byte, peekLen)
 	_, err = f.Read(b)
 	if err != nil && err != io.EOF {
-		return false, errors.Wrap(err, "failed to read file")
+		return false, vmextension.NewErrorWithClarification(constants.Internal_FailedToReadFile, errors.Wrap(err, "failed to read file"))
 	}
 	return hasShebang(b), nil
 }

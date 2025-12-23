@@ -49,10 +49,10 @@ func ReadSettings(configFilePath string) (public, protected map[string]interface
 // (of struct types that contain structured fields for settings).
 func UnmarshalHandlerSettings(publicSettings, protectedSettings map[string]interface{}, publicV, protectedV interface{}) error {
 	if err := unmarshalSettings(publicSettings, &publicV); err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to unmarshal public settings: %v", err))
+		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalPublicSettingsFailed, fmt.Errorf("failed to unmarshal public settings: %v", err))
 	}
 	if err := unmarshalSettings(protectedSettings, &protectedV); err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to unmarshal protected settings: %v", err))
+		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalProtectedSettingsFailed, fmt.Errorf("failed to unmarshal protected settings: %v", err))
 	}
 	return nil
 }
@@ -62,10 +62,10 @@ func UnmarshalHandlerSettings(publicSettings, protectedSettings map[string]inter
 func unmarshalSettings(in interface{}, v interface{}) error {
 	s, err := json.Marshal(in)
 	if err != nil {
-		return fmt.Errorf("failed to marshal into json: %v", err)
+		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to marshal into json: %v", err))
 	}
 	if err := json.Unmarshal(s, &v); err != nil {
-		return fmt.Errorf("failed to unmarshal json: %v", err)
+		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to unmarshal json: %v", err))
 	}
 	return nil
 }

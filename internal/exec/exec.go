@@ -148,7 +148,8 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		}
 	}
 
-	return exitCode, errors.Wrapf(err, "failed to execute command")
+	// The command succeeded
+	return exitCode, nil
 }
 
 func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, error) {

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/servicehandler"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
@@ -36,8 +37,9 @@ WantedBy=multi-user.target`
 
 func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if !isSystemdSupported(ctx) {
-		extensionEvents.LogErrorEvent("register", "Systemd not supported. Failed to register service")
-		return errors.New("Systemd not supported. Failed to register service")
+		errorMsg := "Systemd not supported. Failed to register servcice"
+		extensionEvents.LogErrorEvent("register", errorMsg)
+		return vmextension.NewErrorWithClarification(constants.Immediate_Systemd_NotSupported, errors.New(errorMsg))
 	}
 	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	ctx.Log("message", "trying to register extension with version: "+targetVersion)
@@ -48,14 +50,14 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 
 	isInstalled, err := IsInstalled(ctx)
 	if err != nil {
-		return err
+		return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotDetermineServiceInstalled, err)
 	}
 
 	// If the service is installed, check if it needs to be upgraded.
 	if isInstalled {
 		installedVersion, err := serviceHandler.GetInstalledVersion(ctx)
 		if err != nil {
-			return err
+			return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotDetermineInstalledVersion, err)
 		}
 
 		if installedVersion == targetVersion {
@@ -72,7 +74,7 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 	if err != nil {
 		errMessage := fmt.Sprintf("Error while marking the immediate run command binary as executable: %v", err)
 		extensionEvents.LogErrorEvent("register", errMessage)
-		return errors.Wrap(err, "error while marking the immediate run command binary as executable")
+		return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotMarkBinaryAsExecutable, errors.Wrap(err, errMessage))
 	}
 
 	err = serviceHandler.Register(ctx, systemdUnitContent)
@@ -82,7 +84,7 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 
 	err = Start(ctx, extensionEvents)
 	if err != nil {
-		return err
+		return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotStartService, err)
 	}
 
 	extensionEvents.LogInformationalEvent("register", "Service registration complete")

@@ -76,7 +76,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 			const mode = 0500 // we assume users download scripts to execute
 			_, err = download.SaveTo(ctx, downloaders, targetFilePath, mode)
 		} else {
-			return "", getDownloadersError
+			return "", vmextension.NewErrorWithClarification(constants.Msi_GenericRetrievalError, getDownloadersError)
 		}
 	}
 
@@ -86,7 +86,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 
 	err = PostProcessFile(targetFilePath)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to post-process '%s'", fileName)
+		return "", err
 	}
 
 	return targetFilePath, nil
@@ -164,7 +164,7 @@ func UrlToFileName(fileURL string) (string, error) {
 func PostProcessFile(path string) error {
 	ok, err := preprocess.IsTextFile(path)
 	if err != nil {
-		return errors.Wrapf(err, "error determining if script is a text file")
+		return err
 	}
 	if !ok {
 		return nil
@@ -172,22 +172,31 @@ func PostProcessFile(path string) error {
 
 	b, err := ioutil.ReadFile(path) // read the file into memory for processing
 	if err != nil {
-		return errors.Wrapf(err, "error reading file")
+		return vmextension.NewErrorWithClarification(constants.Internal_FailedToReadFile, errors.Wrapf(err, "error reading file"))
 	}
 	b = preprocess.RemoveBOM(b)
 	b = preprocess.Dos2Unix(b)
 
 	err = ioutil.WriteFile(path, b, 0)
-	return errors.Wrap(os.Rename(path, path), "error writing file")
+
+	if err != nil {
+		return vmextension.NewErrorWithClarification(constants.FileDownload_WriteFileError, errors.Wrap(os.Rename(path, path), "error writing file"))
+	}
+	return nil
 }
 
 func SaveScriptFile(filePath string, content string) error {
 	const mode = 0500 // scripts should have execute permissions
 	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return errors.Wrap(err, "failed to open file for writing: "+filePath)
+		return vmextension.NewErrorWithClarification(constants.Internal_CouldNotOpenFileForWriting, errors.Wrap(err, "failed to open file for writing: "+filePath))
 	}
 	_, err = file.WriteString(content)
 	file.Close()
-	return errors.Wrap(err, "failed to write to the file: "+filePath)
+
+	if err != nil {
+		return vmextension.NewErrorWithClarification(constants.FileDownload_WriteFileError, errors.Wrap(err, "failed to write to the file: "+filePath))
+	}
+
+	return nil
 }

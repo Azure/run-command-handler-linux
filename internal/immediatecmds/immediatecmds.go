@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/service"
@@ -106,14 +107,14 @@ func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 			if err3 != nil {
 				errMessage := fmt.Sprintf("Failed to install RunCommand as a service: %v", err3)
 				extensionEvents.LogErrorEvent("immediateenable", errMessage)
-				return constants.ExitCode_InstallServiceFailed, errors.Wrap(err3, "failed to install RunCommand as a service")
+				return constants.Immediate_CouldNotStartService, err3
 			}
 		} else {
 			isEnabled, err3 := service.IsEnabled(ctx)
 			if err3 != nil {
 				errMessage := fmt.Sprintf("Failed to check if service is already enabled: %v", err3)
 				extensionEvents.LogErrorEvent("immediateenable", errMessage)
-				return constants.ExitCode_InstallServiceFailed, errors.Wrap(err3, "failed to check if service is already enabled")
+				return constants.Immediate_CouldNotCheckServiceAlreadyEnabled, vmextension.NewErrorWithClarification(constants.Immediate_CouldNotCheckServiceAlreadyEnabled, errors.Wrap(err3, errMessage))
 			}
 
 			if !isEnabled {
@@ -122,7 +123,7 @@ func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 				if err4 != nil {
 					errMessage := fmt.Sprintf("Failed to enable service: %v", err4)
 					extensionEvents.LogErrorEvent("immediateenable", errMessage)
-					return constants.ExitCode_InstallServiceFailed, errors.Wrap(err4, "failed to enable service")
+					return constants.Immediate_EnableServiceFailed, vmextension.NewErrorWithClarification(constants.Immediate_EnableServiceFailed, errors.Wrap(err4, errMessage))
 				}
 
 				err5 := service.Start(ctx, extensionEvents)
@@ -130,7 +131,7 @@ func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 				if err5 != nil {
 					errMessage := fmt.Sprintf("Failed to start service: %v", err5)
 					extensionEvents.LogErrorEvent("immediateenable", errMessage)
-					return constants.ExitCode_InstallServiceFailed, errors.Wrap(err5, "failed to start service")
+					return constants.Immediate_CouldNotStartService, vmextension.NewErrorWithClarification(constants.Immediate_CouldNotStartService, errors.Wrap(err5, errMessage))
 				}
 			}
 		}

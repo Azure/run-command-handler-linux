@@ -208,7 +208,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "",
 			"",
-			errors.Wrap(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
+			handlersettings.InternalWrapErrorWithClarification(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
 			constants.FileDownload_GenericError
 	}
 
@@ -217,7 +217,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		errMessage := fmt.Sprintf("Failed to download artifacts: %v", err)
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "", "",
-			errors.Wrap(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
+			handlersettings.InternalWrapErrorWithClarification(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
 			constants.ArtifactDownload_GenericError
 	}
 
@@ -236,7 +236,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		if outputBlobAppendCreateOrReplaceError != nil {
 			return "",
 				"",
-				errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
+				handlersettings.InternalWrapErrorWithClarification(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
 				constants.AppendBlobCreation_Other
 		}
 	}
@@ -254,7 +254,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		if errorBlobAppendCreateOrReplaceError != nil {
 			return "",
 				"",
-				errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
+				handlersettings.InternalWrapErrorWithClarification(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
 				constants.AppendBlobCreation_Other
 		}
 	}
@@ -788,7 +788,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 	// - create the directory if missing
 	ctx.Log("event", "creating output directory", "path", dir)
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", errors.Wrap(err, "failed to prepare output directory")
+		return "", vmextension.NewErrorWithClarification(constants.FileDownload_CreateDirectoryFailure, err)
 	}
 	ctx.Log("event", "created output directory")
 
@@ -804,7 +804,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 		file, err := files.DownloadAndProcessScript(ctx, scriptURI, dir, cfg)
 		if err != nil {
 			ctx.Log("event", "download failed", "error", err)
-			return "", errors.Wrapf(err, "failed to download file %s. ", scriptURI)
+			return "", err
 		}
 		scriptFilePath = file
 		ctx.Log("event", "download complete", "output", dir)
@@ -828,7 +828,7 @@ func downloadArtifacts(ctx *log.Context, dir string, cfg *handlersettings.Handle
 		filePath, err := files.DownloadAndProcessArtifact(ctx, dir, &artifacts[i])
 		if err != nil {
 			ctx.Log("events", "Failed to download artifact", err, "artifact", artifacts[i].ArtifactUri)
-			return errors.Wrapf(err, "failed to download artifact %s", artifacts[i].ArtifactUri)
+			return err
 		}
 
 		ctx.Log("event", "Downloaded artifact complete", "file", filePath)
@@ -850,7 +850,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 		err := files.SaveScriptFile(scriptFilePath, cfg.Script())
 		if err != nil {
 			ctx.Log("event", "failed to save script to file", "error", err, "file", scriptFilePath)
-			return errors.Wrap(err, "failed to save script to file"), constants.FileDownload_UnableToWriteFile
+			return err, constants.FileDownload_UnableToWriteFile
 		}
 	} else if cfg.ScriptURI() != "" {
 		// If scriptUri is specified then cmd should start it
@@ -876,7 +876,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 
 	if err != nil {
 		ctx.Log("event", "failed to execute command", "error", err, "output", dir)
-		return errors.Wrap(err, "failed to execute command"), exitCode
+		return err, exitCode
 	}
 	ctx.Log("event", "executed command", "output", dir)
 	return nil, constants.ExitCode_Okay
@@ -887,7 +887,7 @@ func decodeScript(script string) (string, string, error) {
 	// scripts must be base64 encoded
 	s, err := base64.StdEncoding.DecodeString(script)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to decode script")
+		return "", "", vmextension.NewErrorWithClarification(constants.Script_FailedToDecode, errors.Wrap(err, "failed to decode script"))
 	}
 
 	// scripts may be gzip'ed
@@ -901,7 +901,7 @@ func decodeScript(script string) (string, string, error) {
 
 	n, err := io.Copy(w, r)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to decompress script")
+		return "", "", vmextension.NewErrorWithClarification(constants.Script_FailedToDecompress, errors.Wrap(err, "failed to decompress script"))
 	}
 
 	w.Flush()
@@ -917,7 +917,7 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 		if managedIdentity.ClientId != "" {
 			ID = managedIdentity.ClientId
 		} else if managedIdentity.ObjectId != "" { //ObjectId is not supported by azidentity.NewManagedIdentityCredential
-			return nil, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead")
+			return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_ObjectIdNotSupported, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead"))
 		}
 	}
 
@@ -933,16 +933,16 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 	if miCredError == nil {
 		appendBlobClient, appendBlobNewClientError = appendblob.NewClient(blobUri, miCred, nil)
 		if appendBlobNewClientError != nil {
-			return nil, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
+			return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_ClientError, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
 		} else {
 			// Create or Replace Append blob. If AppendBlob already exists, blob gets cleared.
 			_, createAppendBlobError := appendBlobClient.Create(context.Background(), nil)
 			if createAppendBlobError != nil {
-				return nil, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
+				return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_Other, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
 			}
 		}
 	} else {
-		return nil, errors.Wrap(miCredError, "Error while retrieving managed identity credential")
+		return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_InvalidMsi, errors.Wrap(miCredError, "Error while retrieving managed identity credential"))
 	}
 
 	return appendBlobClient, nil
@@ -966,7 +966,6 @@ func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity 
 
 		// Try to create or replace output blob using managed identity.
 		if sasToken == "" || blobSASTokenError != nil {
-
 			blobAppendClient, blobAppendClientError = createOrReplaceAppendBlobUsingManagedIdentity(blobUri, managedIdentity)
 		}
 
@@ -979,7 +978,7 @@ func createOrReplaceAppendBlob(blobUri string, sasToken string, managedIdentity 
 			} else {
 				er = blobAppendClientError
 			}
-			return nil, nil, errors.Wrap(er, "Creating or Replacing append blob failed.")
+			return nil, nil, er
 		}
 	}
 	return blobSASRef, blobAppendClient, nil

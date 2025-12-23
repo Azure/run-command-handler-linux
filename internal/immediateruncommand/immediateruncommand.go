@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/observer"
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
@@ -15,7 +16,6 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/counterutil"
 	"github.com/go-kit/kit/log"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -47,7 +47,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 		newProcessedETag, err := processImmediateRunCommandGoalStates(ctx, communicator, lastProcessedETag)
 
 		if err != nil {
-			ctx.Log("error", errors.Wrapf(err, "could not process new immediate run command states because of an unexpected error"))
+			ctx.Log("error", handlersettings.InternalWrapErrorWithClarification(err, "could not process new immediate run command states because of an unexpected error"))
 			ctx.Log("message", "sleep for 5 seconds before retrying")
 			time.Sleep(time.Second * time.Duration(5))
 		} else {
@@ -76,7 +76,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 
 	goalStates, newEtag, err := goalstate.GetImmediateRunCommandGoalStates(ctx, &communicator, lastProcessedETag)
 	if err != nil {
-		return newEtag, errors.Wrapf(err, "could not retrieve goal states for immediate run command")
+		return newEtag, handlersettings.InternalWrapErrorWithClarification(err, "could not retrieve goal states for immediate run command")
 	}
 
 	// VM Settings have not changed and we should not process any new goal states
@@ -95,7 +95,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 	goalStateEventObserver.RemoveProcessedGoalStates(goalStateKeys)
 	newGoalStates, skippedGoalStates, err := getGoalStatesToProcess(goalStates, maxTasksToFetch)
 	if err != nil {
-		return newEtag, errors.Wrap(err, "could not get goal states to process")
+		return newEtag, handlersettings.InternalWrapErrorWithClarification(err, "could not get goal states to process")
 	}
 
 	if len(newGoalStates) > 0 {
@@ -177,7 +177,7 @@ func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGo
 	for _, el := range goalStates {
 		validSignature, err := el.ValidateSignature()
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to validate goal state signature")
+			return nil, nil, err
 		}
 
 		if validSignature {

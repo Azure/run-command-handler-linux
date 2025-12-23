@@ -1,11 +1,14 @@
 package handlersettings
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/go-kit/kit/log"
 )
 
@@ -50,4 +53,21 @@ func GetConfigFilePath(configFolder string, sequenceNumber int, extensionName st
 	}
 	configPath := filepath.Join(configFolder, configFile)
 	return configPath
+}
+
+func InternalWrapErrorWithClarification(err error, msg string) vmextension.ErrorWithClarification {
+	if err == nil {
+		return vmextension.NewErrorWithClarification(constants.Internal_UnknownError, errors.New(msg))
+	}
+
+	var ewc *vmextension.ErrorWithClarification
+	if errors.As(err, &ewc) && ewc != nil {
+		// Preserve existing ErrorCode, replace/wrap underlying Err.
+		if ewc.Err == nil {
+			return vmextension.NewErrorWithClarification(ewc.ErrorCode, errors.New(msg))
+		}
+		return vmextension.NewErrorWithClarification(ewc.ErrorCode, fmt.Errorf("%s: %w", msg, ewc.Err))
+	}
+
+	return vmextension.NewErrorWithClarification(constants.Internal_UnknownError, fmt.Errorf("%s: %w", msg, err))
 }

@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -45,12 +47,12 @@ type IVMSettingsRequestManager interface {
 func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*ResponseData, error) {
 	requestManager, err := c.vmRequestManager.GetVMSettingsRequestManager(ctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not create the request manager to get immediate VMsettings")
+		return nil, handlersettings.InternalWrapErrorWithClarification(err, "could not create the request manager to get immediate VMsettings")
 	}
 
 	resp, err := requesthelper.WithRetries(ctx, requestManager, requesthelper.ActualSleep, eTag)
 	if err != nil {
-		return nil, errors.Wrapf(err, "request to retrieve VMSettings failed with retries.")
+		return nil, handlersettings.InternalWrapErrorWithClarification(err, "request to retrieve VMSettings failed with retries.")
 	}
 
 	// If the response is 304 Not Modified or 404 Not Found, return nil VMSettings as there are not new goal states to process
@@ -66,12 +68,12 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 
 	var vmSettings VMImmediateExtensionsGoalState
 	if err := json.Unmarshal(body, &vmSettings); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse immediate VMSettings json")
+		return nil, vmextension.NewErrorWithClarification(constants.Hgap_FailedToParseImmediateSettings, errors.Wrapf(err, "failed to parse immediate VMSettings json"))
 	}
 
 	newETag := resp.Header.Get(constants.ETagHeaderName)
 	if newETag == "" {
-		return nil, errors.New("ETag not found in response header when retrieving immediate VMSettings")
+		return nil, vmextension.NewErrorWithClarification(constants.Hgap_EtagNotFound, errors.New("ETag not found in response header when retrieving immediate VMSettings"))
 	}
 
 	return &ResponseData{VMSettings: &vmSettings, ETag: newETag, Modified: eTag != newETag}, nil
@@ -83,7 +85,7 @@ func getOperationUri(ctx *log.Context, operationName string) (string, error) {
 	// and decide if we want to add that wire protocol address as a potential endpoint to use when provided
 	uri, err := url.Parse(WireServerFallbackAddress)
 	if err != nil {
-		return "", errors.Wrap(err, "could not parse address "+WireServerFallbackAddress)
+		return "", vmextension.NewErrorWithClarification(constants.Hgap_FailedToParseAddress, errors.Wrap(err, "could not parse address "+WireServerFallbackAddress))
 	}
 	uri.Path = operationName
 	return uri.String(), nil

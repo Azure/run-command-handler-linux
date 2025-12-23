@@ -6,6 +6,11 @@ const (
 	FileDownload_StorageError                = -42
 	FileDownload_UnhandledError              = -43
 	FileDownload_StorageClientInitialization = -44
+	FileDownload_CreateDirectoryFailure      = -45
+	FileDownload_OpenFileForWriteFailure     = -46
+	FileDownload_CouldNotCreateRequest       = -47
+	FileDownload_InternalServerError         = -48
+	FileDownload_WriteFileError              = -49
 
 	Internal_CouldNotFindCertificate                      = -20
 	Internal_CouldNotDecrypt                              = -22
@@ -27,14 +32,52 @@ const (
 	Internal_DecryptingProtectedSettingsFailed = -37
 	Internal_UnmarshalProtectedSettingsFailed  = -38
 	Internal_UnmarshalSettingsFailed           = -39
+	Internal_UnmarshalPublicSettingsFailed     = -40
+	Internal_InvalidArtifactSpecification      = -41
 
-	Internal_CouldNotCreateStatusDirectory = -50
-	Internal_ExtensionDirectoryNameEmpty   = -51
-	Internal_CouldNotOpenSubdirectory      = -52
-	Internal_CouldNotReadDirectoryEntries  = -53
-	Internal_FailedToOpenFileForReading    = -54
-	Internal_FailedToCreateFile            = -55
-	Internal_FailedToCopyFile              = -56
+	Internal_CouldNotCreateStatusDirectory = -60
+	Internal_ExtensionDirectoryNameEmpty   = -61
+	Internal_CouldNotOpenSubdirectory      = -62
+	Internal_CouldNotReadDirectoryEntries  = -63
+	Internal_FailedToOpenFileForReading    = -64
+	Internal_FailedToCreateFile            = -65
+	Internal_FailedToCopyFile              = -66
+	Internal_FailedToReadFile              = -67
+	Internal_CouldNotOpenFileForWriting    = -68
+
+	Immediate_CouldNotDetermineServiceInstalled  = -70
+	Immediate_CouldNotDetermineInstalledVersion  = -71
+	Immediate_CouldNotMarkBinaryAsExecutable     = -72
+	Immediate_CouldNotRemoveOldUnitConfigFile    = -73
+	Immediate_ErrorCreatingUnitConfig            = -74
+	Immediate_ErrorReloadingDaemonWorker         = -75
+	Immediate_ErrorEnablingUnit                  = -76
+	Immediate_CouldNotStartService               = -77
+	Immediate_CouldNotCheckServiceAlreadyEnabled = -78
+	Immediate_EnableServiceFailed                = -79
+
+	Script_FailedToDecode     = -101
+	Script_FailedToDecompress = -102
+
+	Hgap_FailedCreateRequest             = -120
+	Hgap_CertificateMissingFromGoalState = -121
+	Hgap_NoCertThumbprint                = -122
+	Hgap_FailedToCreateRequestFactory    = -123
+	Hgap_FailedToParseAddress            = -124
+	Hgap_EtagNotFound                    = -125
+	Hgap_FailedToParseImmediateSettings  = -126
+	Hgap_CouldNotCreateRequestManager    = -127
+	Hgap_InternalArgumentError           = -128
+
+	HandlerEnv_CouldNotFindBaseDirectory = -140
+	HandlerEnv_HandlingError             = -141
+	HandlerEnv_NotFound                  = -142
+	HandlerEnv_UnmarshalFailed           = -143
+	HandlerEnv_InvalidConfigCount        = -144
+
+	Msi_CouldNotDeserializeResponse = -90
+
+	Internal_UnknownError = -200
 
 	SystemError = -1 // CRP will interpret anything > 0 as a user error
 
@@ -68,11 +111,13 @@ const (
 	Msi_DoesNotHaveRightPermissions = 71
 	Msi_GenericRetrievalError       = 72
 
-	AppendBlobCreation_DoesNotExist     = 90
-	AppendBlobCreation_PermissionsIssue = 91
-	AppendBlobCreation_Other            = 92
-	AppendBlobCreation_InvalidUri       = 93
-	AppendBlobCreation_InvalidMsi       = 94
+	AppendBlobCreation_DoesNotExist         = 90
+	AppendBlobCreation_PermissionsIssue     = 91
+	AppendBlobCreation_Other                = 92
+	AppendBlobCreation_InvalidUri           = 93
+	AppendBlobCreation_InvalidMsi           = 94
+	AppendBlobCreation_ObjectIdNotSupported = 95
+	AppendBlobCreation_ClientError          = 96
 
 	ImmediateRC_ExceededConcurrentLimit = 100
 	ImmediateRC_TaskCanceled            = 101
@@ -85,4 +130,6 @@ const (
 	FileSystem_RemoveDataDirectoryFailed = 121
 	FileSystem_OpenStandardOutFailed     = 122
 	FileSystem_OpenStandardErrorFailed   = 123
+
+	Immediate_Systemd_NotSupported = 140
 )
