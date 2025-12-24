@@ -1,10 +1,12 @@
 package immediateruncommand
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
@@ -20,6 +22,24 @@ import (
 
 const (
 	maxConcurrentTasks int32 = 5
+)
+
+// ---- test seams (override in *_test.go) ----
+var (
+	getImmediateGoalStatesFn   = goalstate.GetImmediateRunCommandGoalStates
+	handleImmediateGoalStateFn = goalstate.HandleImmediateGoalState
+	reportFinalStatusFn        = goalstate.ReportFinalStatusForImmediateGoalState
+
+	// signature validation seam (lets tests bypass crypto fields on ImmediateExtensionGoalState)
+	validateSignatureFn = func(el hostgacommunicator.ImmediateExtensionGoalState) (bool, error) {
+		return el.ValidateSignature()
+	}
+
+	// goroutine seam (lets tests run synchronously)
+	spawnFn = func(f func()) { go f() }
+
+	// time seam
+	nowFn = func() time.Time { return time.Now().UTC() }
 )
 
 var executingTasks counterutil.AtomicCount
@@ -74,7 +94,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		return lastProcessedETag, nil
 	}
 
-	goalStates, newEtag, err := goalstate.GetImmediateRunCommandGoalStates(ctx, &communicator, lastProcessedETag)
+	goalStates, newEtag, err := getImmediateGoalStatesFn(ctx, &communicator, lastProcessedETag)
 	if err != nil {
 		return newEtag, handlersettings.InternalWrapErrorWithClarification(err, "could not retrieve goal states for immediate run command")
 	}
@@ -102,7 +122,9 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		ctx.Log("message", fmt.Sprintf("trying to launch %v goal states concurrently", len(newGoalStates)))
 
 		for idx := range newGoalStates {
-			go func(state settings.SettingsCommon) {
+			st := newGoalStates[idx]
+			spawnFn(func() {
+				state := st
 				ctx.Log("message", "launching new goal state. Incrementing executing tasks counter")
 				executingTasks.Increment()
 
@@ -114,8 +136,8 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				notifier := &observer.Notifier{}
 				notifier.Register(&goalStateEventObserver)
 				notifier.Notify(status)
-				startTime := time.Now().UTC().Format(time.RFC3339)
-				exitCode, err := goalstate.HandleImmediateGoalState(ctx, state, notifier)
+				startTime := nowFn().Format(time.RFC3339)
+				exitCode, err := handleImmediateGoalStateFn(ctx, state, notifier)
 
 				ctx.Log("message", "goal state has exited. Decrementing executing tasks counter")
 				executingTasks.Decrement()
@@ -124,19 +146,27 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				// For successful goal states, the status is reported by the usual workflow
 				if err != nil {
 					ctx.Log("error", "failed to execute goal state", "message", err)
-					instView := types.RunCommandInstanceView{
-						ExecutionState:   types.Failed,
-						ExecutionMessage: "Execution failed",
-						ExitCode:         exitCode,
-						Output:           "",
-						Error:            err.Error(),
-						StartTime:        startTime,
-						EndTime:          time.Now().UTC().Format(time.RFC3339),
-					}
-					goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView)
 
+					var ewc *vmextension.ErrorWithClarification
+					errorCode := 0
+					if errors.As(err, &ewc) && ewc != nil {
+						errorCode = ewc.ErrorCode
+					}
+
+					instView := types.RunCommandInstanceView{
+						ExecutionState:          types.Failed,
+						ExecutionMessage:        "Execution failed",
+						ExitCode:                exitCode,
+						Output:                  "",
+						Error:                   err.Error(),
+						StartTime:               startTime,
+						EndTime:                 nowFn().Format(time.RFC3339),
+						ErrorClarificationValue: errorCode,
+					}
+
+					reportFinalStatusFn(ctx, notifier, statusKey, types.StatusError, &instView)
 				}
-			}(newGoalStates[idx])
+			})
 		}
 
 		ctx.Log("message", "finished launching goal states")
@@ -161,7 +191,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				StartTime:        time.Now().UTC().Format(time.RFC3339),
 				EndTime:          time.Now().UTC().Format(time.RFC3339),
 			}
-			goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusSkipped, &instView)
+			reportFinalStatusFn(ctx, notifier, statusKey, types.StatusSkipped, &instView)
 		}
 	} else {
 		ctx.Log("message", "no goal states were skipped")
@@ -175,7 +205,7 @@ func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGo
 	var newGoalStates []settings.SettingsCommon
 	var skippedGoalStates []settings.SettingsCommon
 	for _, el := range goalStates {
-		validSignature, err := el.ValidateSignature()
+		validSignature, err := validateSignatureFn(el)
 		if err != nil {
 			return nil, nil, err
 		}

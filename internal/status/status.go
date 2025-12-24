@@ -87,6 +87,10 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 	newExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
 	immediateStatusFolder := filepath.Join(newExtensionDirectory, constants.ImmediateStatusFileDirectory)
 
+	if err := os.MkdirAll(immediateStatusFolder, 0755); err != nil {
+		return fmt.Errorf("status: failed to create directory %q: %v", immediateStatusFolder, err)
+	}
+
 	ctx.Log("message", "saving goal states in terminal state to file")
 	statusFile := filepath.Join(immediateStatusFolder, constants.ImmediateGoalStatesInTerminalStatusFileName)
 	tempStatusFile := statusFile + ".tmp"
@@ -208,6 +212,7 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 
 	return b, nil
 }
+
 func getRootStatusJsonWithErrorClarification(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string, errorcode int) ([]byte, error) {
 	ctx.Log("message", "creating json to report status")
 	statusReport := types.NewStatusReportWithErrorClarification(statusType, c.Name, msg, extName, errorcode)

@@ -44,16 +44,23 @@ type StatusObserver struct {
 
 	// Reporter is the status Reporter
 	Reporter statusreporter.IGuestInformationServiceClient
+
+	ReportImmediateStatusFn func(s ImmediateTopLevelStatus) error
 }
 
 func (o *StatusObserver) Initialize(ctx *log.Context) {
 	o.goalStateEventMap = sync.Map{}
 	o.ctx = ctx
 	o.Reporter = statusreporter.NewGuestInformationServiceClient(hostgacommunicator.WireServerFallbackAddress)
+
+	o.ReportImmediateStatusFn = func(s ImmediateTopLevelStatus) error {
+		return o.reportImmediateStatus(s)
+	}
 }
 
 func (o *StatusObserver) OnDemandNotify() error {
-	return o.reportImmediateStatus(o.getImmediateTopLevelStatusToReport())
+	status := o.getImmediateTopLevelStatusToReport()
+	return o.ReportImmediateStatusFn(status)
 }
 
 func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
@@ -151,10 +158,11 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
 	response, err := o.Reporter.ReportStatus(o.ctx, string(rootStatusJson))
 
-	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 	if err != nil {
 		return errors.Wrap(err, "failed to report status to HGAP")
 	}
+
+	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 
 	if response.StatusCode != 200 {
 		return errors.New("failed to report status with error code " + response.Status)
