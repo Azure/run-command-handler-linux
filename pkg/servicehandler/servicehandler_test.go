@@ -1,13 +1,16 @@
 package servicehandler
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
 	"github.com/go-kit/kit/log"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -225,10 +228,7 @@ func TestHandlerRegisterFailsOnUnitConfigurationFileDeletion(t *testing.T) {
 
 	// assert that the register call returns an error
 	err := handler.Register(ctx, "")
-
-	if err == nil {
-		t.Errorf("unexpected successful registration call")
-	}
+	VerifyErrorClarification(t, constants.Immediate_CouldNotRemoveOldUnitConfigFile, err)
 }
 
 func TestHandlerRegisterFailsOnUnitConfigurationFileCreation(t *testing.T) {
@@ -246,10 +246,7 @@ func TestHandlerRegisterFailsOnUnitConfigurationFileCreation(t *testing.T) {
 
 	// assert that the register call returns an error
 	err := handler.Register(ctx, "")
-
-	if err == nil {
-		t.Errorf("unexpected successful registration call")
-	}
+	VerifyErrorClarification(t, constants.Immediate_ErrorCreatingUnitConfig, err)
 }
 
 func TestHandlerRegisterFailsOnDaemonReload(t *testing.T) {
@@ -268,9 +265,7 @@ func TestHandlerRegisterFailsOnDaemonReload(t *testing.T) {
 
 	// assert that the register call returns an error
 	err := handler.Register(ctx, "")
-	if err == nil {
-		t.Errorf("unexpected successful registration call")
-	}
+	VerifyErrorClarification(t, constants.Immediate_ErrorReloadingDaemonWorker, err)
 }
 
 func TestHandlerRegisterFailsOnEnable(t *testing.T) {
@@ -289,9 +284,7 @@ func TestHandlerRegisterFailsOnEnable(t *testing.T) {
 
 	// assert that the register call returns an error
 	err := handler.Register(ctx, "")
-	if err == nil {
-		t.Errorf("unexpected successful registration call")
-	}
+	VerifyErrorClarification(t, constants.Immediate_ErrorEnablingUnit, err)
 }
 
 func TestHandlerSuccessfulDeRegister(t *testing.T) {
@@ -770,4 +763,11 @@ func TestGetUnitConfigurationPathSystemD(t *testing.T) {
 	if path != systemdUnitPath && path != systemdUnitPath_alternative {
 		t.Errorf("unexpected unit configuration path\nreturned path was %s", path)
 	}
+}
+
+func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
+	require.NotNil(t, err, "No error returned when one was expected")
+	var ewc vmextension.ErrorWithClarification
+	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

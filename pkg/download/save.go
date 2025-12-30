@@ -32,5 +32,9 @@ func SaveTo(ctx *log.Context, downloaders []Downloader, dst string, mode os.File
 	defer body.Close()
 
 	n, err := io.CopyBuffer(f, body, make([]byte, writeBufSize))
-	return n, vmextension.NewErrorWithClarification(constants.FileDownload_WriteFileError, errors.Wrapf(err, "failed to write to file: %s", dst))
+	if err != nil {
+		return n, vmextension.NewErrorWithClarification(constants.FileDownload_WriteFileError, errors.Wrapf(err, "failed to write to file: %s", dst))
+	}
+
+	return n, nil
 }

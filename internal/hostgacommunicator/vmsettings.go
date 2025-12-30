@@ -24,6 +24,10 @@ const (
 	vmSettingsRequestTimeout = 30 * time.Second
 )
 
+var (
+	getHandlerEnvFn = handlersettings.GetHandlerEnv
+)
+
 type VMImmediateExtensionsGoalState struct {
 	ImmediateExtensionGoalStates []ImmediateExtensionGoalState `json:"immediateExtensionsGoalStates"`
 }
@@ -52,7 +56,7 @@ func GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManage
 func newVMSettingsRequestFactory(ctx *log.Context) (*requestFactory, error) {
 	url, err := getOperationUri(ctx, vmSettingsOperation)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to obtain VMSettingsURI")
+		return nil, handlersettings.InternalWrapErrorWithClarification(err, "failed to obtain VMSettingsURI")
 	}
 
 	return &requestFactory{url}, nil
@@ -73,7 +77,7 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 }
 
 func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) {
-	he, err := handlersettings.GetHandlerEnv()
+	he, err := getHandlerEnvFn()
 	if err != nil {
 		return false, err
 	}

@@ -147,9 +147,9 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				if err != nil {
 					ctx.Log("error", "failed to execute goal state", "message", err)
 
-					var ewc *vmextension.ErrorWithClarification
+					var ewc vmextension.ErrorWithClarification
 					errorCode := 0
-					if errors.As(err, &ewc) && ewc != nil {
+					if errors.As(err, &ewc) {
 						errorCode = ewc.ErrorCode
 					}
 

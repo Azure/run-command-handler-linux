@@ -1,6 +1,7 @@
 package download_test
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http/httptest"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/stretchr/testify/require"
@@ -21,6 +24,7 @@ func TestSaveTo_invalidDir(t *testing.T) {
 
 	_, err := download.SaveTo(nopLog(), []download.Downloader{d}, "/nonexistent-dir/dst", 0600)
 	require.Contains(t, err.Error(), "failed to open file for writing")
+	VerifyErrorClarification(t, constants.FileDownload_OpenFileForWriteFailure, err)
 }
 
 func TestSave(t *testing.T) {
@@ -81,4 +85,11 @@ func TestSave_largeFile(t *testing.T) {
 	fi, err := os.Stat(path)
 	require.Nil(t, err)
 	require.EqualValues(t, size, fi.Size())
+}
+
+func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
+	require.NotNil(t, err, "No error returned when one was expected")
+	var ewc vmextension.ErrorWithClarification
+	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

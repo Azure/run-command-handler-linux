@@ -15,9 +15,15 @@ import (
 )
 
 const (
-	hostGaPluginPort          = "32526"
+	hostGaPluginPort = "32526"
+)
+
+var (
 	WireServerFallbackAddress = "http://168.63.129.16:32526"
 )
+
+// test seam
+var withRetriesFn = requesthelper.WithRetries
 
 type ResponseData struct {
 	VMSettings *VMImmediateExtensionsGoalState
@@ -50,7 +56,7 @@ func (c *HostGACommunicator) GetImmediateVMSettings(ctx *log.Context, eTag strin
 		return nil, handlersettings.InternalWrapErrorWithClarification(err, "could not create the request manager to get immediate VMsettings")
 	}
 
-	resp, err := requesthelper.WithRetries(ctx, requestManager, requesthelper.ActualSleep, eTag)
+	resp, err := withRetriesFn(ctx, requestManager, requesthelper.ActualSleep, eTag)
 	if err != nil {
 		return nil, handlersettings.InternalWrapErrorWithClarification(err, "request to retrieve VMSettings failed with retries.")
 	}
