@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
@@ -189,4 +190,44 @@ func Test_GetSeqNumFromFailedToFind(t *testing.T) {
 	actualSeqNum, err := getSeqNum(&ctx, fakeEnv, extName)
 	require.Nil(t, err)
 	require.Equal(t, 0, actualSeqNum)
+}
+
+func Test_ProcessHandlerCommandWithDetails_Failure_WithClarification(t *testing.T) {
+	var last types.RunCommandInstanceView
+
+	origReportInstanceView := fnReportInstanceView
+	defer func() { fnReportInstanceView = origReportInstanceView }()
+	fnReportInstanceView = func(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, t types.StatusType, c types.Cmd, instanceview *types.RunCommandInstanceView) error {
+		last = *instanceview
+		return nil
+	}
+
+	ewc := vmextension.ErrorWithClarification{
+		ErrorCode: 1234,
+		Err:       errors.New("the chipmunks are upset"),
+	}
+
+	mockFunc := types.CmdFunctions{
+		Invoke: func(_ *log.Context, _ types.HandlerEnvironment, iv *types.RunCommandInstanceView, _ types.RCMetadata, _ types.Cmd) (string, string, error, int) {
+			return "x", "y", ewc, 3
+		},
+	}
+
+	orig := fnGetHandlerSettings
+	defer func() { fnGetHandlerSettings = orig }()
+	fnGetHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
+		return handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				TreatFailureAsDeploymentFailure: false,
+			},
+		}, nil
+	}
+
+	cmd := types.Cmd{Name: "run", FailExitCode: 3, Functions: mockFunc}
+	hEnv := types.HandlerEnvironment{}
+	ctx := log.NewContext(log.NewNopLogger())
+
+	err := ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, "x", 1, "/tmp")
+	require.Nil(t, err, "expected no error because TreatFailureAsDeploymentFailure is false")
+	require.Equal(t, 1234, last.ErrorClarificationValue, "expected clarification 1234 but got %d", last.ErrorClarificationValue)
 }

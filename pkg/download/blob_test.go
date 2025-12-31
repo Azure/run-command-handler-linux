@@ -1,15 +1,21 @@
 package download
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/blobutil"
 	"github.com/go-kit/kit/log"
 	"github.com/google/uuid"
@@ -30,6 +36,7 @@ func Test_blobDownload_validateInputs(t *testing.T) {
 	errorMessage := err.Error()
 	require.Contains(t, errorMessage, "failed to initialize azure storage client")
 	require.Contains(t, errorMessage, "azure: account name is not valid")
+	VerifyErrorClarification(t, constants.FileDownload_StorageClientInitialization, err)
 
 	_, err = NewBlobDownload("account", "", blobutil.AzureBlobRef{}).GetRequest()
 	require.NotNil(t, err)
@@ -71,6 +78,24 @@ func Test_blobDownload_getURL(t *testing.T) {
 	}
 }
 
+func Test_blobDownload_getURL_cannotGenerateSas(t *testing.T) {
+	type sas interface {
+		getURL() (string, error)
+	}
+
+	d := NewBlobDownload("account", "Zm9vCg==", blobutil.AzureBlobRef{
+		StorageBase: "!@#$%^&*()(_+)",
+		Container:   "",
+		Blob:        "blob.txt",
+	})
+
+	v, ok := d.(blobDownload)
+	require.True(t, ok)
+
+	_, err := v.getURL()
+	VerifyErrorClarification(t, constants.FileDownload_CannotGenerateSasKey, err)
+}
+
 func Test_blobDownload_fails_badCreds(t *testing.T) {
 	d := NewBlobDownload("example", "Zm9vCg==", blobutil.AzureBlobRef{
 		StorageBase: storage.DefaultBaseURL,
@@ -95,6 +120,7 @@ func Test_blobDownload_fails_badCreds(t *testing.T) {
 	require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
 	require.Contains(t, err.Error(), "403")
 	require.Equal(t, status, http.StatusForbidden)
+	VerifyErrorClarification(t, constants.FileDownload_NetworkingError, err)
 }
 
 // Tests that a common error message will be uniquely formatted
@@ -123,6 +149,85 @@ func Test_blobDownload_fails_badRequest(t *testing.T) {
 	require.Contains(t, err.Error(), "parts of the request were incorrectly formatted, missing, and/or invalid")
 	require.Contains(t, err.Error(), "400")
 	require.Equal(t, status, http.StatusBadRequest)
+	VerifyErrorClarification(t, constants.FileDownload_BadRequest, err)
+}
+
+func TestGetSASBlob_StatusNotOK_ReturnsFailedStatusCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	tmp := t.TempDir()
+	blobURI := srv.URL + "/container/file.txt"
+	blobSas := "?sig=dummy"
+
+	_, err := GetSASBlob(blobURI, blobSas, tmp)
+	VerifyErrorClarification(t, constants.FileDownload_FailedStatusCode, err)
+}
+
+func TestGetSASBlob_CannotExtractFileName_ReturnsCannotExtract(t *testing.T) {
+	// Return 200 so we get past the status-code check, then fail on filename extraction
+	// by giving a URL that has ONLY the container and no blob suffix.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "x")
+	}))
+	defer srv.Close()
+
+	tmp := t.TempDir()
+	blobURI := srv.URL + "/container" // <- no "/file"
+	blobSas := "?sig=dummy"
+
+	_, err := GetSASBlob(blobURI, blobSas, tmp)
+	VerifyErrorClarification(t, constants.FileDownload_CannotExtractFileNameFromUrl, err)
+}
+
+func TestGetSASBlob_TargetDirMissing_ReturnsUnableToWriteFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "content")
+	}))
+	defer srv.Close()
+
+	// Intentionally DO NOT create this directory.
+	tmp := t.TempDir()
+	missingDir := filepath.Join(tmp, "does-not-exist")
+
+	blobURI := srv.URL + "/container/file.txt"
+	blobSas := "?sig=dummy"
+
+	_, err := GetSASBlob(blobURI, blobSas, missingDir)
+	VerifyErrorClarification(t, constants.FileDownload_UnableToWriteFile, err)
+}
+
+func TestGetSASBlob_HttpGetFails_ReturnsGenericError(t *testing.T) {
+	// invalid URL => http.Get fails
+	tmp := t.TempDir()
+	blobURI := "http://[::1" // invalid (unclosed bracket)
+	blobSas := "?sig=dummy"
+
+	_, err := GetSASBlob(blobURI, blobSas, tmp)
+	VerifyErrorClarification(t, constants.FileDownload_GenericError, err)
+}
+
+func TestCreateOrReplaceAppendBlob_InvalidUri_ReturnsInvalidUri(t *testing.T) {
+	_, err := CreateOrReplaceAppendBlob("http://[::1", "?sig=x")
+	VerifyErrorClarification(t, constants.AppendBlobCreation_InvalidUri, err)
+}
+
+func TestCreateOrReplaceAppendBlob_MissingBlobName_ReturnsInvalidUri(t *testing.T) {
+	// Server never called; extraction should fail because there's no blob path after container.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("server should not have been called")
+	}))
+	defer srv.Close()
+
+	blobURI := srv.URL + "/container" // no blob name
+	blobSas := "?sig=dummy"
+
+	_, err := CreateOrReplaceAppendBlob(blobURI, blobSas)
+	VerifyErrorClarification(t, constants.AppendBlobCreation_InvalidUri, err)
 }
 
 func Test_blobDownload_fails_urlNotFound(t *testing.T) {
@@ -235,4 +340,11 @@ func (b badRequestBlobDownload) GetRequest() (*http.Request, error) {
 		req.Header.Set("x-ms-version", "bad value")
 	}
 	return req, error
+}
+
+func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
+	require.NotNil(t, err, "No error returned when one was expected")
+	var ewc vmextension.ErrorWithClarification
+	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

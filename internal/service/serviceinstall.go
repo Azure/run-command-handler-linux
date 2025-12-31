@@ -35,6 +35,12 @@ StandardError=append:%run_command_output_directory%
 WantedBy=multi-user.target`
 )
 
+var (
+	fnIsSystemDPresent = systemd.IsSystemDPresent
+	fnGetUnitManager   = createUnitManager
+	fnChmod            = os.Chmod
+)
+
 func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if !isSystemdSupported(ctx) {
 		errorMsg := "Systemd not supported. Failed to register servcice"
@@ -70,7 +76,7 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 
 	ctx.Log("message", "Making immediate-run-command-handler executable")
 	execDirectory := os.Getenv(constants.ExtensionPathEnvName) + "/bin/immediate-run-command-handler"
-	err = os.Chmod(execDirectory, 0744)
+	err = fnChmod(execDirectory, 0744)
 	if err != nil {
 		errMessage := fmt.Sprintf("Error while marking the immediate run command binary as executable: %v", err)
 		extensionEvents.LogErrorEvent("register", errMessage)
@@ -227,7 +233,7 @@ func IsInstalled(ctx *log.Context) (bool, error) {
 func getSystemdHandler(ctx *log.Context) *servicehandler.Handler {
 	ctx.Log("message", "Getting service handler for "+systemdUnitName)
 	config := servicehandler.NewConfiguration(systemdUnitName)
-	handler := servicehandler.NewHandler(systemd.NewUnitManager(), config, ctx)
+	handler := servicehandler.NewHandler(fnGetUnitManager(), config, ctx)
 	return &handler
 }
 
@@ -241,7 +247,7 @@ func generateServiceConfigurationContent(ctx *log.Context) string {
 
 func isSystemdSupported(ctx *log.Context) bool {
 	ctx.Log("message", "Check if systemd is present on the system before applying next operation")
-	result := systemd.IsSystemDPresent()
+	result := fnIsSystemDPresent()
 
 	if result {
 		ctx.Log("message", "systemd was found on the system")
@@ -250,4 +256,8 @@ func isSystemdSupported(ctx *log.Context) bool {
 	}
 
 	return result
+}
+
+func createUnitManager() servicehandler.UnitManager {
+	return systemd.NewUnitManager()
 }

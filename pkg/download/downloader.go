@@ -9,6 +9,7 @@ import (
 
 	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/urlutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -57,7 +58,7 @@ func HttpClientDo(request *http.Request) (*http.Response, error) {
 func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, error) {
 	request, err := downloader.GetRequest()
 	if err != nil {
-		return -1, nil, vmextension.NewErrorWithClarification(constants.FileDownload_CouldNotCreateRequest, err)
+		return -1, nil, handlersettings.InternalWrapErrorWithClarification(err, "failed to create http request")
 	}
 	requestID := request.Header.Get(xMsClientRequestIdHeaderName)
 	if len(requestID) > 0 {
@@ -67,7 +68,7 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 	response, err := MakeHttpRequest(request)
 	if err != nil {
 		err = urlutil.RemoveUrlFromErr(err)
-		return -1, nil, vmextension.NewErrorWithClarification(constants.FileDownload_FailedStatusCode, err)
+		return -1, nil, handlersettings.InternalWrapErrorWithClarification(err, "http request failed")
 	}
 
 	if response.StatusCode == http.StatusOK {

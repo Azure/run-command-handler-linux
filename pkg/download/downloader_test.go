@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-extension-foundation/msi"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
@@ -57,14 +58,19 @@ func TestDownload_wrapsCommonErrorCodes(t *testing.T) {
 		switch respCode {
 		case http.StatusNotFound:
 			require.Contains(t, err.Error(), "because it does not exist")
+			VerifyErrorClarification(t, constants.FileDownload_DoesNotExist, err)
 		case http.StatusForbidden:
 			require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
+			VerifyErrorClarification(t, constants.FileDownload_NetworkingError, err)
 		case http.StatusInternalServerError:
 			require.Contains(t, err.Error(), "due to an issue with storage")
+			VerifyErrorClarification(t, constants.FileDownload_InternalServerError, err)
 		case http.StatusBadRequest:
 			require.Contains(t, err.Error(), "because parts of the request were incorrectly formatted, missing, and/or invalid")
+			VerifyErrorClarification(t, constants.FileDownload_BadRequest, err)
 		case http.StatusUnauthorized:
 			require.Contains(t, err.Error(), "because access was denied")
+			VerifyErrorClarification(t, constants.FileDownload_AccessDenied, err)
 		}
 	}
 }
@@ -93,6 +99,7 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
 	require.Equal(t, 404, returnCode, "return code was not 404")
+	VerifyErrorClarification(t, constants.FileDownload_DoesNotExist, err)
 
 	msiDownloader403 := download.NewBlobWithMsiDownload(srv.URL+"/status/403", mockMsiProvider)
 	returnCode, body, err = download.Download(testctx, msiDownloader403)
@@ -100,6 +107,7 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
 	require.Equal(t, 403, returnCode, "return code was not 403")
+	VerifyErrorClarification(t, constants.FileDownload_AccessDenied, err)
 
 	// Should use default error message for any error code other than 400, 401, 403, 404, and 409
 	msiDownloader500 := download.NewBlobWithMsiDownload(srv.URL+"/status/500", mockMsiProvider)
@@ -109,6 +117,7 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
 	require.Equal(t, 500, returnCode, "return code was not 500")
+	VerifyErrorClarification(t, constants.FileDownload_FailedStatusCode, err)
 
 }
 
