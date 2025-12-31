@@ -20,6 +20,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	fnIoCopy     = io.Copy
+	fnOsChMod    = os.Chmod
+	fnOsChown    = os.Chown
+	fnOsCreate   = os.Create
+	fnOsMkDirAll = os.MkdirAll
+	fnOsOpenFile = os.OpenFile
+	fnOsSetEnv   = os.Setenv
+	fnRunCommand = runCommand
+	fnUserLookup = user.Lookup
+)
+
 // Exec runs the given cmd in /bin/sh, saves its stdout/stderr streams to
 // the specified files. It waits until the execution terminates.
 //
@@ -54,24 +66,24 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		runAsScriptDirectoryPath := filepath.Dir(runAsScriptFilePath) // Get directory of runAsScript that doesn't exist yet
 
 		// Create runAsScriptDirectoryPath and its intermediate directories if they do not exist
-		os.MkdirAll(runAsScriptDirectoryPath, 0777)
+		fnOsMkDirAll(runAsScriptDirectoryPath, 0777)
 
 		/// Copy source script at scriptPath to runAsScriptDirectoryPath
 		// Get reference to source script by opening it
-		sourceScriptFile, sourceScriptFileOpenError := os.OpenFile(scriptPath, os.O_RDONLY, 0400)
+		sourceScriptFile, sourceScriptFileOpenError := fnOsOpenFile(scriptPath, os.O_RDONLY, 0400)
 		if sourceScriptFileOpenError != nil {
 			errMessage := fmt.Sprintf("Failed to open source script. Contact ICM team AzureRT\\Extensions for this service error. Source script file is '%s'", scriptPath)
 			ctx.Log("message", errMessage)
 			return constants.Internal_RunAsOpenSourceScriptFileFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsOpenSourceScriptFileFailed, sourceScriptFileOpenError)
 		}
 
-		destScriptFile, destScriptCreateError := os.Create(runAsScriptFilePath)
+		destScriptFile, destScriptCreateError := fnOsCreate(runAsScriptFilePath)
 		if destScriptCreateError != nil {
 			errMessage := fmt.Sprintf("Failed to create script for Run As in Run As directory. Contact ICM team AzureRT\\Extensions for this service error. Destination runAs script file is '%s'", runAsScriptFilePath)
 			ctx.Log("message", errMessage)
 			return constants.Internal_RunAsOpenSourceScriptFileFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsOpenSourceScriptFileFailed, destScriptCreateError)
 		}
-		_, runAsScriptCopyError := io.Copy(destScriptFile, sourceScriptFile)
+		_, runAsScriptCopyError := fnIoCopy(destScriptFile, sourceScriptFile)
 		if runAsScriptCopyError != nil {
 			errMessage := fmt.Sprintf("Failed to copy script file '%s' to Run As path '%s'. Contact ICM team AzureRT\\Extensions for this service error.", scriptPath, runAsScriptFilePath)
 			ctx.Log("message", errMessage)
@@ -81,7 +93,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		destScriptFile.Close()
 
 		// Provide read and execute permissions to RunAsUser on .sh file at runAsScriptFilePath
-		lookedUpUser, lookupUserError := user.Lookup(cfg.PublicSettings.RunAsUser)
+		lookedUpUser, lookupUserError := fnUserLookup(cfg.PublicSettings.RunAsUser)
 		if lookupUserError != nil {
 			errMessage := fmt.Sprintf("Failed to lookup RunAs user '%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
@@ -95,14 +107,14 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 			return constants.Internal_RunAsLookupUserUidFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsLookupUserUidFailed, lookedUpUserUidErr)
 		}
 
-		runAsScriptChownError := os.Chown(runAsScriptFilePath, lookedUpUserUid, os.Getegid())
+		runAsScriptChownError := fnOsChown(runAsScriptFilePath, lookedUpUserUid, os.Getegid())
 		if runAsScriptChownError != nil {
 			errMessage := fmt.Sprintf("Failed to change owner of file '%s' to RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
 			return constants.Internal_RunAsScriptFileChangeOwnerFailed, vmextension.NewErrorWithClarification(constants.Internal_RunAsScriptFileChangeOwnerFailed, runAsScriptChownError)
 		}
 
-		runAsScriptChmodError := os.Chmod(runAsScriptFilePath, 0550)
+		runAsScriptChmodError := fnOsChMod(runAsScriptFilePath, 0550)
 		if runAsScriptChmodError != nil {
 			errMessage := fmt.Sprintf("Failed to change permissions to execute for file '%s' for RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
@@ -128,7 +140,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	command.Dir = workdir
 	command.Stdout = stdout
 	command.Stderr = stderr
-	err = command.Run()
+	err = fnRunCommand(command)
 	if err != nil {
 		exitErr, ok := err.(*exec.ExitError)
 		if ok {
@@ -152,6 +164,10 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	return exitCode, nil
 }
 
+func runCommand(command *exec.Cmd) error {
+	return command.Run()
+}
+
 func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, error) {
 	var err error
 	commandArgs := ""
@@ -168,7 +184,7 @@ func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, erro
 		value := parameters[i].Value
 		if value != "" {
 			if name != "" { // Named parameters are set as environmental setting
-				err = os.Setenv(name, value)
+				err = fnOsSetEnv(name, value)
 			} else { // Unnamed parameters go to command args
 				commandArgs += " " + value
 			}
@@ -188,11 +204,11 @@ func ExecCmdInDir(ctx *log.Context, scriptFilePath, workdir string, cfg *handler
 
 	stdoutFileName, stderrFileName := LogPaths(workdir)
 
-	outF, err := os.OpenFile(stdoutFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	outF, err := fnOsOpenFile(stdoutFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
 		return vmextension.NewErrorWithClarification(constants.FileSystem_OpenStandardOutFailed, fmt.Errorf("failed to open stdout file: %v", err)), constants.FileSystem_OpenStandardOutFailed
 	}
-	errF, err := os.OpenFile(stderrFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	errF, err := fnOsOpenFile(stderrFileName, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if err != nil {
 		return vmextension.NewErrorWithClarification(constants.FileSystem_OpenStandardErrorFailed, fmt.Errorf("failed to open stderr file: %v", err)), constants.FileSystem_OpenStandardErrorFailed
 	}

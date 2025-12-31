@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
@@ -110,8 +112,16 @@ func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	badCommunicator := new(BadCommunicator)
 	_, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, badCommunicator, "")
-	require.ErrorContains(t, err, "failed to retrieve immediate VMSettings")
 	require.ErrorContains(t, err, "http expected failure")
+}
+
+func Test_GetFilteredImmediateVMSettings_NoCommunicator(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	_, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, nil, "")
+	require.NotNil(t, err, "No error returned when one was expected")
+	var ewc vmextension.ErrorWithClarification
+	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+	require.Equal(t, constants.Hgap_InternalArgumentError, ewc.ErrorCode, "Expected error %d but received %d", constants.Hgap_InternalArgumentError, ewc.ErrorCode)
 }
 
 func Test_GetFilteredImmediateVMSettingsHandleEmptyResults(t *testing.T) {

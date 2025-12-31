@@ -828,7 +828,7 @@ func downloadArtifacts(ctx *log.Context, dir string, cfg *handlersettings.Handle
 		filePath, err := files.DownloadAndProcessArtifact(ctx, dir, &artifacts[i])
 		if err != nil {
 			ctx.Log("events", "Failed to download artifact", err, "artifact", artifacts[i].ArtifactUri)
-			return err
+			return handlersettings.InternalWrapErrorWithClarification(err, "Failed to download artifact")
 		}
 
 		ctx.Log("event", "Downloaded artifact complete", "file", filePath)

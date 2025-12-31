@@ -582,7 +582,7 @@ func Test_downloadArtifactsFail(t *testing.T) {
 		})
 
 	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "failed to download artifact")
+	require.Contains(t, err.Error(), "Failed to download artifact")
 }
 
 func Test_downloadArtifacts(t *testing.T) {

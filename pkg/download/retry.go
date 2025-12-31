@@ -36,11 +36,12 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 	for _, d := range downloaders {
 		for n := 0; n < expRetryN; n++ {
 			ctx := ctx.With("retry", n)
-			status, out, downloadError := Download(ctx, d)
-			if downloadError == nil {
+			status, out, err := Download(ctx, d)
+			if err == nil {
 				return out, nil
 			}
 
+			downloadError = err
 			ctx.Log(fmt.Sprintf("Attempt %d: %s ", n+1, downloadError.Error()))
 
 			if out != nil { // we are not going to read this response body
