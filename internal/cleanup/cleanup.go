@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/!azure/azure-extension-platform/pkg/utils"
+	"github.com/Azure/azure-extension-platform/pkg/utils"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/linuxutils"
