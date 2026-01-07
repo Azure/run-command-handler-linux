@@ -11,9 +11,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, *vmextension.ErrorWithClarification) {
 	if communicator == nil {
-		return nil, lastProcessedETag, vmextension.NewErrorWithClarification(constants.Hgap_InternalArgumentError, errors.New("communicator cannot be nil"))
+		return nil, lastProcessedETag, vmextension.NewErrorWithClarificationPtr(constants.Hgap_InternalArgumentError, errors.New("communicator cannot be nil"))
 	}
 
 	responseData, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)

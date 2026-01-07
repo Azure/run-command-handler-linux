@@ -34,7 +34,7 @@ type TestRequestManager struct {
 	testUrlRequest *TestUrlRequest
 }
 
-func (li *TestRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
+func (li *TestRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, *vmextension.ErrorWithClarification) {
 	return requesthelper.GetRequestManager(li.testUrlRequest, vmSettingsRequestTimeout), nil
 }
 
@@ -102,7 +102,7 @@ func TestValidateSignature_CertMissingFromGoalState(t *testing.T) {
 
 	orig := getHandlerEnvFn
 	defer func() { getHandlerEnvFn = orig }()
-	getHandlerEnvFn = func() (types.HandlerEnvironment, error) {
+	getHandlerEnvFn = func() (types.HandlerEnvironment, *vmextension.ErrorWithClarification) {
 		return he, nil
 	}
 
@@ -133,7 +133,7 @@ func TestValidateSignature_NoCertThumbprint(t *testing.T) {
 
 	orig := getHandlerEnvFn
 	defer func() { getHandlerEnvFn = orig }()
-	getHandlerEnvFn = func() (types.HandlerEnvironment, error) {
+	getHandlerEnvFn = func() (types.HandlerEnvironment, *vmextension.ErrorWithClarification) {
 		return he, nil
 	}
 

@@ -9,7 +9,6 @@ import (
 
 	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
-	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/urlutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -55,10 +54,10 @@ func HttpClientDo(request *http.Request) (*http.Response, error) {
 // Download retrieves a response body and checks the response status code to see
 // if it is 200 OK and then returns the response body. It issues a new request
 // every time called. It is caller's responsibility to close the response body.
-func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, error) {
+func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, *vmextension.ErrorWithClarification) {
 	request, err := downloader.GetRequest()
 	if err != nil {
-		return -1, nil, handlersettings.InternalWrapErrorWithClarification(err, "failed to create http request")
+		return -1, nil, vmextension.CreateWrappedErrorWithClarification(err, "failed to create http request")
 	}
 	requestID := request.Header.Get(xMsClientRequestIdHeaderName)
 	if len(requestID) > 0 {
@@ -68,7 +67,7 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 	response, err := MakeHttpRequest(request)
 	if err != nil {
 		err = urlutil.RemoveUrlFromErr(err)
-		return -1, nil, handlersettings.InternalWrapErrorWithClarification(err, "http request failed")
+		return -1, nil, vmextension.CreateWrappedErrorWithClarification(err, "http request failed")
 	}
 
 	if response.StatusCode == http.StatusOK {
@@ -132,5 +131,5 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 	if len(requestId) > 0 {
 		errString += fmt.Sprintf(" (Service request ID: %s)", requestId)
 	}
-	return response.StatusCode, nil, vmextension.NewErrorWithClarification(errCode, errors.New(errString))
+	return response.StatusCode, nil, vmextension.NewErrorWithClarificationPtr(errCode, errors.New(errString))
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
 	"github.com/go-kit/kit/log"
@@ -25,10 +26,10 @@ func Test_GetOperationUri(t *testing.T) {
 
 type fakeVMSettingsRequestManager struct {
 	rm  *requesthelper.RequestManager
-	err error
+	err *vmextension.ErrorWithClarification
 }
 
-func (f fakeVMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
+func (f fakeVMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, *vmextension.ErrorWithClarification) {
 	return f.rm, f.err
 }
 
@@ -42,7 +43,7 @@ func TestGetImmediateVMSettings_RequestManagerError(t *testing.T) {
 		return nil, nil
 	}
 
-	rmErr := errors.New("the chipmunks have new management")
+	rmErr := vmextension.NewErrorWithClarificationPtr(42, errors.New("the chipmunks have new management"))
 	c := NewHostGACommunicator(fakeVMSettingsRequestManager{rm: nil, err: rmErr})
 
 	_, err := c.GetImmediateVMSettings(nil, "etag0")

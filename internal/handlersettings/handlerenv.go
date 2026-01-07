@@ -19,10 +19,10 @@ const HandlerEnvFileName = "HandlerEnvironment.json"
 // GetHandlerEnv locates the HandlerEnvironment.json file by assuming it lives
 // next to or one level above the extension handler (read: this) executable,
 // reads, parses and returns it.
-func GetHandlerEnv() (he types.HandlerEnvironment, _ error) {
+func GetHandlerEnv() (he types.HandlerEnvironment, _ *vmextension.ErrorWithClarification) {
 	dir, err := scriptDir()
 	if err != nil {
-		return he, vmextension.NewErrorWithClarification(constants.HandlerEnv_CouldNotFindBaseDirectory, fmt.Errorf("vmextension: cannot find base directory of the running process: %v", err))
+		return he, vmextension.NewErrorWithClarificationPtr(constants.HandlerEnv_CouldNotFindBaseDirectory, fmt.Errorf("vmextension: cannot find base directory of the running process: %v", err))
 	}
 	paths := []string{
 		filepath.Join(dir, HandlerEnvFileName),       // this level (i.e. executable is in [EXT_NAME]/.)
@@ -32,14 +32,14 @@ func GetHandlerEnv() (he types.HandlerEnvironment, _ error) {
 	for _, p := range paths {
 		o, err := os.ReadFile(p)
 		if err != nil && !os.IsNotExist(err) {
-			return he, vmextension.NewErrorWithClarification(constants.HandlerEnv_HandlingError, fmt.Errorf("vmextension: error examining HandlerEnvironment at '%s': %v", p, err))
+			return he, vmextension.NewErrorWithClarificationPtr(constants.HandlerEnv_HandlingError, fmt.Errorf("vmextension: error examining HandlerEnvironment at '%s': %v", p, err))
 		} else if err == nil {
 			b = o
 			break
 		}
 	}
 	if b == nil {
-		return he, vmextension.NewErrorWithClarification(constants.HandlerEnv_NotFound, fmt.Errorf("vmextension: Cannot find HandlerEnvironment at paths: %s", strings.Join(paths, ", ")))
+		return he, vmextension.NewErrorWithClarificationPtr(constants.HandlerEnv_NotFound, fmt.Errorf("vmextension: Cannot find HandlerEnvironment at paths: %s", strings.Join(paths, ", ")))
 	}
 	return ParseHandlerEnv(b)
 }
@@ -55,14 +55,14 @@ func scriptDir() (string, error) {
 
 // ParseHandlerEnv parses the
 // /var/lib/waagent/[extension]/HandlerEnvironment.json format.
-func ParseHandlerEnv(b []byte) (he types.HandlerEnvironment, _ error) {
+func ParseHandlerEnv(b []byte) (he types.HandlerEnvironment, _ *vmextension.ErrorWithClarification) {
 	var hf []types.HandlerEnvironment
 
 	if err := json.Unmarshal(b, &hf); err != nil {
-		return he, vmextension.NewErrorWithClarification(constants.HandlerEnv_UnmarshalFailed, fmt.Errorf("vmextension: failed to parse handler env: %v", err))
+		return he, vmextension.NewErrorWithClarificationPtr(constants.HandlerEnv_UnmarshalFailed, fmt.Errorf("vmextension: failed to parse handler env: %v", err))
 	}
 	if len(hf) != 1 {
-		return he, vmextension.NewErrorWithClarification(constants.HandlerEnv_InvalidConfigCount, fmt.Errorf("vmextension: expected 1 config in parsed HandlerEnvironment, found: %v", len(hf)))
+		return he, vmextension.NewErrorWithClarificationPtr(constants.HandlerEnv_InvalidConfigCount, fmt.Errorf("vmextension: expected 1 config in parsed HandlerEnvironment, found: %v", len(hf)))
 	}
 	return hf[0], nil
 }

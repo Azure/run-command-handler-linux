@@ -124,7 +124,7 @@ func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 			if err3 != nil {
 				errMessage := fmt.Sprintf("Failed to check if service is already enabled: %v", err3)
 				extensionEvents.LogErrorEvent("immediateenable", errMessage)
-				return constants.Immediate_CouldNotCheckServiceAlreadyEnabled, vmextension.NewErrorWithClarification(constants.Immediate_CouldNotCheckServiceAlreadyEnabled, errors.Wrap(err3, errMessage))
+				return constants.Immediate_CouldNotCheckServiceAlreadyEnabled, vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotCheckServiceAlreadyEnabled, errors.Wrap(err3, errMessage))
 			}
 
 			if !isEnabled {
@@ -133,7 +133,7 @@ func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 				if err4 != nil {
 					errMessage := fmt.Sprintf("Failed to enable service: %v", err4)
 					extensionEvents.LogErrorEvent("immediateenable", errMessage)
-					return constants.Immediate_EnableServiceFailed, vmextension.NewErrorWithClarification(constants.Immediate_EnableServiceFailed, errors.Wrap(err4, errMessage))
+					return constants.Immediate_EnableServiceFailed, vmextension.NewErrorWithClarificationPtr(constants.Immediate_EnableServiceFailed, errors.Wrap(err4, errMessage))
 				}
 
 				err5 := fnServiceStart(ctx, extensionEvents)
@@ -141,7 +141,7 @@ func Enable(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 				if err5 != nil {
 					errMessage := fmt.Sprintf("Failed to start service: %v", err5)
 					extensionEvents.LogErrorEvent("immediateenable", errMessage)
-					return constants.Immediate_CouldNotStartService, vmextension.NewErrorWithClarification(constants.Immediate_CouldNotStartService, errors.Wrap(err5, errMessage))
+					return constants.Immediate_CouldNotStartService, vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotStartService, errors.Wrap(err5, errMessage))
 				}
 			}
 		}

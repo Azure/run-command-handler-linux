@@ -208,7 +208,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "",
 			"",
-			handlersettings.InternalWrapErrorWithClarification(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
+			vmextension.CreateWrappedErrorWithClarification(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
 			constants.FileDownload_GenericError
 	}
 
@@ -217,7 +217,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		errMessage := fmt.Sprintf("Failed to download artifacts: %v", err)
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "", "",
-			handlersettings.InternalWrapErrorWithClarification(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
+			vmextension.CreateWrappedErrorWithClarification(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
 			constants.ArtifactDownload_GenericError
 	}
 
@@ -236,7 +236,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		if outputBlobAppendCreateOrReplaceError != nil {
 			return "",
 				"",
-				handlersettings.InternalWrapErrorWithClarification(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
+				vmextension.CreateWrappedErrorWithClarification(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
 				constants.AppendBlobCreation_Other
 		}
 	}
@@ -254,7 +254,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		if errorBlobAppendCreateOrReplaceError != nil {
 			return "",
 				"",
-				handlersettings.InternalWrapErrorWithClarification(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
+				vmextension.CreateWrappedErrorWithClarification(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
 				constants.AppendBlobCreation_Other
 		}
 	}
@@ -564,7 +564,7 @@ func doRehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, oldExtensionD
 }
 
 // Copy files like *.mrseq (Most Recently executed Sequence number), .status files from old extension version to new extension version during update.
-func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory string, extensionEvents *extensionevents.ExtensionEventManager) (*list.List, error) {
+func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory string, extensionEvents *extensionevents.ExtensionEventManager) (*list.List, *vmextension.ErrorWithClarification) {
 
 	newExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	oldExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
@@ -588,7 +588,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 			if errr != nil {
 				errMessage := fmt.Sprintf("Failed to create directory '%s'", newExtensionDirectory)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return nil, vmextension.NewErrorWithClarification(constants.Internal_CouldNotCreateStatusDirectory, fmt.Errorf("Failed to create directory '%s': %v", newExtensionDirectory, err))
+				return nil, vmextension.NewErrorWithClarificationPtr(constants.Internal_CouldNotCreateStatusDirectory, fmt.Errorf("Failed to create directory '%s': %v", newExtensionDirectory, err))
 			}
 		}
 	}
@@ -596,7 +596,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 	if oldExtensionDirectory == "" || newExtensionDirectory == "" {
 		errMessage := "oldExtesionDirectory or newExtensionDirectory is empty"
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, vmextension.NewErrorWithClarification(constants.Internal_ExtensionDirectoryNameEmpty, errors.New(errMessage))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.Internal_ExtensionDirectoryNameEmpty, errors.New(errMessage))
 	}
 
 	// Check if the directory exists
@@ -605,7 +605,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		errMessage := fmt.Sprintf("could not open sourceDirectory %s", oldExtensionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, vmextension.NewErrorWithClarification(constants.Internal_CouldNotOpenSubdirectory, fmt.Errorf("%s: %v", errMessage, err))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.Internal_CouldNotOpenSubdirectory, fmt.Errorf("%s: %v", errMessage, err))
 	}
 
 	directoryEntries, err := sourceDirectoryFDRef.ReadDir(0)
@@ -613,7 +613,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		errMessage := fmt.Sprintf("could not read directory entries from sourceDirectory %s", oldExtensionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, vmextension.NewErrorWithClarification(constants.Internal_CouldNotReadDirectoryEntries, fmt.Errorf("%s: %v", errMessage, err))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.Internal_CouldNotReadDirectoryEntries, fmt.Errorf("%s: %v", errMessage, err))
 	}
 
 	numberOfFilesMigrated := 0
@@ -631,7 +631,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 				errMessage := "Failed to open '%s' file '%s' for reading. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, sourceFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, vmextension.NewErrorWithClarification(constants.Internal_FailedToOpenFileForReading, fmt.Errorf("%s: %v", errMessage, sourceFileOpenError))
+				return fileNamesMigrated, vmextension.NewErrorWithClarificationPtr(constants.Internal_FailedToOpenFileForReading, fmt.Errorf("%s: %v", errMessage, sourceFileOpenError))
 			}
 			defer sourceFile.Close()
 
@@ -640,7 +640,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 				errMessage := "Failed to create '%s' file '%s'. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, destinationFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, vmextension.NewErrorWithClarification(constants.Internal_FailedToCreateFile, fmt.Errorf("%s: %v", errMessage, destFileCreateError))
+				return fileNamesMigrated, vmextension.NewErrorWithClarificationPtr(constants.Internal_FailedToCreateFile, fmt.Errorf("%s: %v", errMessage, destFileCreateError))
 			}
 			defer destFile.Close()
 
@@ -650,7 +650,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 					fileExtensionSuffix, sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", errMessage)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, vmextension.NewErrorWithClarification(constants.Internal_FailedToCopyFile, fmt.Errorf("%s: %v", errMessage, copyError))
+				return fileNamesMigrated, vmextension.NewErrorWithClarificationPtr(constants.Internal_FailedToCopyFile, fmt.Errorf("%s: %v", errMessage, copyError))
 			} else {
 				message := fmt.Sprintf("File '%s' was copied successfully to '%s'", sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", message)
@@ -783,12 +783,12 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 
 // downloadScript downloads the script file specified in cfg into dir (creates if does
 // not exist) and takes storage credentials specified in cfg into account.
-func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings) (string, error) {
+func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings) (string, *vmextension.ErrorWithClarification) {
 	// - prepare the output directory for files and the command output
 	// - create the directory if missing
 	ctx.Log("event", "creating output directory", "path", dir)
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", vmextension.NewErrorWithClarification(constants.FileDownload_CreateDirectoryFailure, err)
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_CreateDirectoryFailure, err)
 	}
 	ctx.Log("event", "created output directory")
 
@@ -812,7 +812,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 	return scriptFilePath, nil
 }
 
-func downloadArtifacts(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings) error {
+func downloadArtifacts(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings) *vmextension.ErrorWithClarification {
 	artifacts, err := cfg.ReadArtifacts()
 	if err != nil {
 		return err
@@ -828,7 +828,7 @@ func downloadArtifacts(ctx *log.Context, dir string, cfg *handlersettings.Handle
 		filePath, err := files.DownloadAndProcessArtifact(ctx, dir, &artifacts[i])
 		if err != nil {
 			ctx.Log("events", "Failed to download artifact", err, "artifact", artifacts[i].ArtifactUri)
-			return handlersettings.InternalWrapErrorWithClarification(err, "Failed to download artifact")
+			return vmextension.CreateWrappedErrorWithClarification(err, "Failed to download artifact")
 		}
 
 		ctx.Log("event", "Downloaded artifact complete", "file", filePath)
@@ -838,7 +838,7 @@ func downloadArtifacts(ctx *log.Context, dir string, cfg *handlersettings.Handle
 }
 
 // runCmd runs the command (extracted from cfg) in the given dir (assumed to exist).
-func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (err error, exitCode int) {
+func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (err *vmextension.ErrorWithClarification, exitCode int) {
 	ctx.Log("event", "executing command", "output", dir)
 	var scenario string
 
@@ -883,11 +883,11 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 }
 
 // base64 decode and optionally GZip decompress a script
-func decodeScript(script string) (string, string, error) {
+func decodeScript(script string) (string, string, *vmextension.ErrorWithClarification) {
 	// scripts must be base64 encoded
 	s, err := base64.StdEncoding.DecodeString(script)
 	if err != nil {
-		return "", "", vmextension.NewErrorWithClarification(constants.Script_FailedToDecode, errors.Wrap(err, "failed to decode script"))
+		return "", "", vmextension.NewErrorWithClarificationPtr(constants.Script_FailedToDecode, errors.Wrap(err, "failed to decode script"))
 	}
 
 	// scripts may be gzip'ed
@@ -901,14 +901,14 @@ func decodeScript(script string) (string, string, error) {
 
 	n, err := io.Copy(w, r)
 	if err != nil {
-		return "", "", vmextension.NewErrorWithClarification(constants.Script_FailedToDecompress, errors.Wrap(err, "failed to decompress script"))
+		return "", "", vmextension.NewErrorWithClarificationPtr(constants.Script_FailedToDecompress, errors.Wrap(err, "failed to decompress script"))
 	}
 
 	w.Flush()
 	return buf.String(), fmt.Sprintf("%d;%d;gzip=1", len(script), n), nil
 }
 
-func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdentity *handlersettings.RunCommandManagedIdentity) (*appendblob.Client, error) {
+func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdentity *handlersettings.RunCommandManagedIdentity) (*appendblob.Client, *vmextension.ErrorWithClarification) {
 	var ID string = ""
 	var miCred *azidentity.ManagedIdentityCredential = nil
 	var miCredError error = nil
@@ -917,7 +917,7 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 		if managedIdentity.ClientId != "" {
 			ID = managedIdentity.ClientId
 		} else if managedIdentity.ObjectId != "" { //ObjectId is not supported by azidentity.NewManagedIdentityCredential
-			return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_ObjectIdNotSupported, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead"))
+			return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_ObjectIdNotSupported, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead"))
 		}
 	}
 
@@ -933,16 +933,16 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 	if miCredError == nil {
 		appendBlobClient, appendBlobNewClientError = appendblob.NewClient(blobUri, miCred, nil)
 		if appendBlobNewClientError != nil {
-			return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_ClientError, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
+			return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_ClientError, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
 		} else {
 			// Create or Replace Append blob. If AppendBlob already exists, blob gets cleared.
 			_, createAppendBlobError := appendBlobClient.Create(context.Background(), nil)
 			if createAppendBlobError != nil {
-				return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_Other, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
+				return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_Other, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
 			}
 		}
 	} else {
-		return nil, vmextension.NewErrorWithClarification(constants.AppendBlobCreation_InvalidMsi, errors.Wrap(miCredError, "Error while retrieving managed identity credential"))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_InvalidMsi, errors.Wrap(miCredError, "Error while retrieving managed identity credential"))
 	}
 
 	return appendBlobClient, nil

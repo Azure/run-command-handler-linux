@@ -41,11 +41,11 @@ var (
 	fnChmod            = os.Chmod
 )
 
-func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
+func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) *vmextension.ErrorWithClarification {
 	if !isSystemdSupported(ctx) {
 		errorMsg := "Systemd not supported. Failed to register servcice"
 		extensionEvents.LogErrorEvent("register", errorMsg)
-		return vmextension.NewErrorWithClarification(constants.Immediate_Systemd_NotSupported, errors.New(errorMsg))
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_Systemd_NotSupported, errors.New(errorMsg))
 	}
 	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	ctx.Log("message", "trying to register extension with version: "+targetVersion)
@@ -56,14 +56,14 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 
 	isInstalled, err := IsInstalled(ctx)
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotDetermineServiceInstalled, err)
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotDetermineServiceInstalled, err)
 	}
 
 	// If the service is installed, check if it needs to be upgraded.
 	if isInstalled {
 		installedVersion, err := serviceHandler.GetInstalledVersion(ctx)
 		if err != nil {
-			return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotDetermineInstalledVersion, err)
+			return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotDetermineInstalledVersion, err)
 		}
 
 		if installedVersion == targetVersion {
@@ -80,17 +80,17 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 	if err != nil {
 		errMessage := fmt.Sprintf("Error while marking the immediate run command binary as executable: %v", err)
 		extensionEvents.LogErrorEvent("register", errMessage)
-		return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotMarkBinaryAsExecutable, errors.Wrap(err, errMessage))
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotMarkBinaryAsExecutable, errors.Wrap(err, errMessage))
 	}
 
-	err = serviceHandler.Register(ctx, systemdUnitContent)
-	if err != nil {
-		return err
+	ewc := serviceHandler.Register(ctx, systemdUnitContent)
+	if ewc != nil {
+		return ewc
 	}
 
 	err = Start(ctx, extensionEvents)
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.Immediate_CouldNotStartService, err)
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotStartService, err)
 	}
 
 	extensionEvents.LogInformationalEvent("register", "Service registration complete")

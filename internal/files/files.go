@@ -21,7 +21,7 @@ import (
 
 var UseMockSASDownloadFailure bool = false
 
-func DownloadAndProcessArtifact(ctx *log.Context, downloadDir string, artifact *handlersettings.UnifiedArtifact) (string, error) {
+func DownloadAndProcessArtifact(ctx *log.Context, downloadDir string, artifact *handlersettings.UnifiedArtifact) (string, *vmextension.ErrorWithClarification) {
 	fileName := artifact.FileName
 	if fileName == "" {
 		fileName = fmt.Sprintf("%s%d", "Artifact", artifact.ArtifactId)
@@ -31,7 +31,7 @@ func DownloadAndProcessArtifact(ctx *log.Context, downloadDir string, artifact *
 	return targetFilePath, err
 }
 
-func DownloadAndProcessScript(ctx *log.Context, url, downloadDir string, cfg *handlersettings.HandlerSettings) (string, error) {
+func DownloadAndProcessScript(ctx *log.Context, url, downloadDir string, cfg *handlersettings.HandlerSettings) (string, *vmextension.ErrorWithClarification) {
 	fileName, err := UrlToFileName(url)
 	if err != nil {
 		return "", err
@@ -47,10 +47,10 @@ func DownloadAndProcessScript(ctx *log.Context, url, downloadDir string, cfg *ha
 // downloadAndProcessURL downloads using the specified downloader and saves it to the
 // specified existing directory, which must be the path to the saved file. Then
 // it post-processes file based on heuristics.
-func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName string, scriptSAS string, sourceManagedIdentity *handlersettings.RunCommandManagedIdentity) (string, error) {
-	var err error
+func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName string, scriptSAS string, sourceManagedIdentity *handlersettings.RunCommandManagedIdentity) (string, *vmextension.ErrorWithClarification) {
+	var err *vmextension.ErrorWithClarification
 	if !urlutil.IsValidUrl(url) {
-		return "", vmextension.NewErrorWithClarification(constants.FileDownload_CannotExtractFileNameFromUrl, fmt.Errorf(url+" is not a valid url"))
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_CannotExtractFileNameFromUrl, fmt.Errorf(url+" is not a valid url"))
 	}
 
 	targetFilePath := filepath.Join(downloadDir, fileName)
@@ -76,7 +76,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 			const mode = 0500 // we assume users download scripts to execute
 			_, err = download.SaveTo(ctx, downloaders, targetFilePath, mode)
 		} else {
-			return "", vmextension.NewErrorWithClarification(constants.Msi_GenericRetrievalError, getDownloadersError)
+			return "", vmextension.NewErrorWithClarificationPtr(constants.Msi_GenericRetrievalError, getDownloadersError)
 		}
 	}
 
@@ -95,10 +95,10 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 // getDownloaders returns one or two downloaders (two if it is an Azure storage blob):
 // 1. Downloader for script using public URI.
 // 2. Downloader for script using managed identity.
-func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, error) {
+func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, *vmextension.ErrorWithClarification) {
 
 	if fileURL == "" {
-		return nil, vmextension.NewErrorWithClarification(constants.FileDownload_Empty, fmt.Errorf("fileURL is empty"))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.FileDownload_Empty, fmt.Errorf("fileURL is empty"))
 	}
 
 	if download.IsAzureStorageBlobUri(fileURL) {
@@ -117,7 +117,7 @@ func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandM
 			// uses user-managed identity
 			msiProvider = msiDownloader.GetMsiProviderByObjectId(fileURL, managedIdentity.ObjectId)
 		default:
-			return nil, vmextension.NewErrorWithClarification(constants.CustomerInput_ClientIdObjectIdBothSpecified, fmt.Errorf("use either ClientId or ObjectId for managed identity. Not both"))
+			return nil, vmextension.NewErrorWithClarificationPtr(constants.CustomerInput_ClientIdObjectIdBothSpecified, fmt.Errorf("use either ClientId or ObjectId for managed identity. Not both"))
 		}
 
 		_, msiError := msiProvider()
@@ -142,10 +142,10 @@ func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandM
 // UrlToFileName parses given URL and returns the section after the last slash
 // character of the path segment to be used as a file name. If a value is not
 // found, an error is returned.
-func UrlToFileName(fileURL string) (string, error) {
+func UrlToFileName(fileURL string) (string, *vmextension.ErrorWithClarification) {
 	u, err := url.Parse(fileURL)
 	if err != nil {
-		return "", vmextension.NewErrorWithClarification(constants.FileDownload_UnableToParseFileName, errors.Wrapf(err, "unable to parse URL: %q", fileURL))
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_UnableToParseFileName, errors.Wrapf(err, "unable to parse URL: %q", fileURL))
 	}
 
 	s := strings.Split(u.Path, "/")
@@ -155,16 +155,16 @@ func UrlToFileName(fileURL string) (string, error) {
 			return fn, nil
 		}
 	}
-	return "", vmextension.NewErrorWithClarification(constants.FileDownload_CannotExtractFileNameFromUrl, fmt.Errorf("cannot extract file name from URL: %q", fileURL))
+	return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_CannotExtractFileNameFromUrl, fmt.Errorf("cannot extract file name from URL: %q", fileURL))
 }
 
 // postProcessFile determines if path is a script file based on heuristics
 // and makes in-place changes to the file with some post-processing such as BOM
 // and DOS-line endings fixes to make the script POSIX-friendly.
-func PostProcessFile(path string) error {
-	ok, err := preprocess.IsTextFile(path)
-	if err != nil {
-		return err
+func PostProcessFile(path string) *vmextension.ErrorWithClarification {
+	ok, ewc := preprocess.IsTextFile(path)
+	if ewc != nil {
+		return ewc
 	}
 	if !ok {
 		return nil
@@ -172,7 +172,7 @@ func PostProcessFile(path string) error {
 
 	b, err := ioutil.ReadFile(path) // read the file into memory for processing
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_FailedToReadFile, errors.Wrapf(err, "error reading file"))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_FailedToReadFile, errors.Wrapf(err, "error reading file"))
 	}
 	b = preprocess.RemoveBOM(b)
 	b = preprocess.Dos2Unix(b)
@@ -180,22 +180,22 @@ func PostProcessFile(path string) error {
 	err = ioutil.WriteFile(path, b, 0)
 
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.FileDownload_WriteFileError, errors.Wrap(os.Rename(path, path), "error writing file"))
+		return vmextension.NewErrorWithClarificationPtr(constants.FileDownload_WriteFileError, errors.Wrap(os.Rename(path, path), "error writing file"))
 	}
 	return nil
 }
 
-func SaveScriptFile(filePath string, content string) error {
+func SaveScriptFile(filePath string, content string) *vmextension.ErrorWithClarification {
 	const mode = 0500 // scripts should have execute permissions
 	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_CouldNotOpenFileForWriting, errors.Wrap(err, "failed to open file for writing: "+filePath))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_CouldNotOpenFileForWriting, errors.Wrap(err, "failed to open file for writing: "+filePath))
 	}
 	_, err = file.WriteString(content)
 	file.Close()
 
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.FileDownload_WriteFileError, errors.Wrap(err, "failed to write to the file: "+filePath))
+		return vmextension.NewErrorWithClarificationPtr(constants.FileDownload_WriteFileError, errors.Wrap(err, "failed to write to the file: "+filePath))
 	}
 
 	return nil

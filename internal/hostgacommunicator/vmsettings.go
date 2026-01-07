@@ -43,10 +43,10 @@ type requestFactory struct {
 }
 
 // Returns a new RequestManager object useful to make GET Requests
-func GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
+func GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, *vmextension.ErrorWithClarification) {
 	factory, err := newVMSettingsRequestFactory(ctx)
 	if err != nil {
-		return nil, vmextension.NewErrorWithClarification(constants.Hgap_FailedToCreateRequestFactory, errors.Wrapf(err, "failed to create request factory"))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.Hgap_FailedToCreateRequestFactory, errors.Wrapf(err, "failed to create request factory"))
 	}
 
 	return requesthelper.GetRequestManager(factory, vmSettingsRequestTimeout), nil
@@ -56,7 +56,7 @@ func GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManage
 func newVMSettingsRequestFactory(ctx *log.Context) (*requestFactory, error) {
 	url, err := getOperationUri(ctx, vmSettingsOperation)
 	if err != nil {
-		return nil, handlersettings.InternalWrapErrorWithClarification(err, "failed to obtain VMSettingsURI")
+		return nil, vmextension.CreateWrappedErrorWithClarification(err, "failed to obtain VMSettingsURI")
 	}
 
 	return &requestFactory{url}, nil
@@ -67,7 +67,7 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 	request, err := http.NewRequest("GET", u.url, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create request to %v", u.url)
-		return nil, vmextension.NewErrorWithClarification(constants.Hgap_FailedCreateRequest, errors.Wrap(err, errMsg))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.Hgap_FailedCreateRequest, errors.Wrap(err, errMsg))
 	}
 
 	if eTag != "" {
@@ -76,7 +76,7 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 	return request, nil
 }
 
-func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) {
+func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, *vmextension.ErrorWithClarification) {
 	he, err := getHandlerEnvFn()
 	if err != nil {
 		return false, err
@@ -91,7 +91,7 @@ func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) 
 		}
 
 		if s.SettingsCertThumbprint == "" {
-			return false, vmextension.NewErrorWithClarification(constants.Hgap_NoCertThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
+			return false, vmextension.NewErrorWithClarificationPtr(constants.Hgap_NoCertThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
 		}
 
 		// go two levels up where certs are placed (/var/lib/waagent)
@@ -100,7 +100,7 @@ func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) 
 
 		if !fileExists(crt) || !fileExists(prv) {
 			message := fmt.Sprintf("Certificate %v needed by %v is missing from the goal state", s.SettingsCertThumbprint, s.ExtensionName)
-			return false, vmextension.NewErrorWithClarification(constants.Hgap_CertificateMissingFromGoalState, errors.New(message))
+			return false, vmextension.NewErrorWithClarificationPtr(constants.Hgap_CertificateMissingFromGoalState, errors.New(message))
 		}
 	}
 

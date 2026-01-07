@@ -9,7 +9,6 @@ import (
 	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
-	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/observer"
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
@@ -51,11 +50,11 @@ var goalStateEventObserver = status.StatusObserver{}
 
 type VMSettingsRequestManager struct{}
 
-func (*VMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
+func (*VMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, *vmextension.ErrorWithClarification) {
 	return hostgacommunicator.GetVMSettingsRequestManager(ctx)
 }
 
-func StartImmediateRunCommand(ctx *log.Context) error {
+func StartImmediateRunCommand(ctx *log.Context) *vmextension.ErrorWithClarification {
 	ctx.Log("message", "starting immediate run command service")
 	var vmRequestManager = new(VMSettingsRequestManager)
 	var lastProcessedETag string = ""
@@ -67,7 +66,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 		newProcessedETag, err := processImmediateRunCommandGoalStates(ctx, communicator, lastProcessedETag)
 
 		if err != nil {
-			ctx.Log("error", handlersettings.InternalWrapErrorWithClarification(err, "could not process new immediate run command states because of an unexpected error"))
+			ctx.Log("error", vmextension.CreateWrappedErrorWithClarification(err, "could not process new immediate run command states because of an unexpected error"))
 			ctx.Log("message", "sleep for 5 seconds before retrying")
 			time.Sleep(time.Second * time.Duration(5))
 		} else {
@@ -81,7 +80,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 	}
 }
 
-func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.HostGACommunicator, lastProcessedETag string) (string, error) {
+func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.HostGACommunicator, lastProcessedETag string) (string, *vmextension.ErrorWithClarification) {
 	executingTaskCount := executingTasks.Get()
 	maxTasksToFetch := int(math.Max(float64(maxConcurrentTasks-executingTaskCount), 0))
 
@@ -96,7 +95,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 
 	goalStates, newEtag, err := getImmediateGoalStatesFn(ctx, &communicator, lastProcessedETag)
 	if err != nil {
-		return newEtag, handlersettings.InternalWrapErrorWithClarification(err, "could not retrieve goal states for immediate run command")
+		return newEtag, vmextension.CreateWrappedErrorWithClarification(err, "could not retrieve goal states for immediate run command")
 	}
 
 	// VM Settings have not changed and we should not process any new goal states
@@ -113,9 +112,9 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		}
 	}
 	goalStateEventObserver.RemoveProcessedGoalStates(goalStateKeys)
-	newGoalStates, skippedGoalStates, err := getGoalStatesToProcess(goalStates, maxTasksToFetch)
-	if err != nil {
-		return newEtag, handlersettings.InternalWrapErrorWithClarification(err, "could not get goal states to process")
+	newGoalStates, skippedGoalStates, ewc := getGoalStatesToProcess(goalStates, maxTasksToFetch)
+	if ewc != nil {
+		return newEtag, vmextension.CreateWrappedErrorWithClarification(err, "could not get goal states to process")
 	}
 
 	if len(newGoalStates) > 0 {

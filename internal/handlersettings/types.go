@@ -29,13 +29,13 @@ func (s HandlerSettings) ScriptSAS() string {
 	return s.ProtectedSettings.SourceSASToken
 }
 
-func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, error) {
+func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, *vmextension.ErrorWithClarification) {
 	if s.ProtectedSettings.Artifacts == nil && s.PublicSettings.Artifacts == nil {
 		return nil, nil
 	}
 
 	if len(s.ProtectedSettings.Artifacts) != len(s.PublicSettings.Artifacts) {
-		return nil, vmextension.NewErrorWithClarification(constants.Internal_ArtifactCountMismatch, errors.New(("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.Internal_ArtifactCountMismatch, errors.New(("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")))
 	}
 
 	artifacts := make([]UnifiedArtifact, len(s.PublicSettings.Artifacts))
@@ -59,7 +59,7 @@ func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, error) {
 		}
 
 		if !found {
-			return nil, vmextension.NewErrorWithClarification(constants.Internal_InvalidArtifactSpecification, errors.New(("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")))
+			return nil, vmextension.NewErrorWithClarificationPtr(constants.Internal_InvalidArtifactSpecification, errors.New(("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")))
 		}
 	}
 
@@ -68,11 +68,11 @@ func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, error) {
 
 // validate makes logical validation on the handlerSettings which already passed
 // the schema validation.
-func (s HandlerSettings) validate() error {
+func (s HandlerSettings) validate() *vmextension.ErrorWithClarification {
 	// If installAsService is false, then the source has to be specified
 	if !s.PublicSettings.InstallAsService {
 		if s.PublicSettings.Source == nil || (s.PublicSettings.Source.Script == "") == (s.PublicSettings.Source.ScriptURI == "") {
-			return vmextension.NewErrorWithClarification(constants.CustomerInput_NoScriptSpecified, errSourceNotSpecified)
+			return vmextension.NewErrorWithClarificationPtr(constants.CustomerInput_NoScriptSpecified, errSourceNotSpecified)
 		}
 	}
 	return nil

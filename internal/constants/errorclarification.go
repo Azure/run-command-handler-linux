@@ -132,4 +132,7 @@ const (
 	FileSystem_OpenStandardErrorFailed   = 123
 
 	Immediate_Systemd_NotSupported = 140
+
+	Http_RequestFailure   = 150
+	Http_FailedStatusCode = 151
 )

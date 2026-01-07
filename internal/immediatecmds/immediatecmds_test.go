@@ -65,8 +65,8 @@ func TestUpdate_Installed_RegisterFails(t *testing.T) {
 	defer restoreServiceFns()
 
 	fnServiceIsInstalled = func(ctx *log.Context) (bool, error) { return true, nil }
-	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) error {
-		return errors.New("register failure")
+	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) *vmextension.ErrorWithClarification {
+		return vmextension.NewErrorWithClarificationPtr(42, errors.New("register failure"))
 	}
 
 	ctx := log.NewContext(log.NewNopLogger())
@@ -108,7 +108,9 @@ func TestUpdate_Success_UpgradeService(t *testing.T) {
 	defer restoreServiceFns()
 
 	fnServiceIsInstalled = func(ctx *log.Context) (bool, error) { return true, nil }
-	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) error { return nil }
+	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) *vmextension.ErrorWithClarification {
+		return nil
+	}
 
 	ctx := log.NewContext(log.NewNopLogger())
 	tempDir, _ := os.MkdirTemp("", "UpgradeService")
@@ -345,7 +347,9 @@ func TestEnable_Install_CheckInstalledFails(t *testing.T) {
 	cfg := getInstallAsServiceCfg()
 
 	fnServiceIsInstalled = func(ctx *log.Context) (bool, error) { return false, errors.New("check failed") }
-	fnServiceRegister = func(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error { return nil }
+	fnServiceRegister = func(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) *vmextension.ErrorWithClarification {
+		return nil
+	}
 
 	ctx := log.NewContext(log.NewNopLogger())
 	tempDir, _ := os.MkdirTemp("", "checkinstallfails")
@@ -367,8 +371,8 @@ func TestEnable_Install_NotInstalled_RegisterFails(t *testing.T) {
 
 	cfg := getInstallAsServiceCfg()
 	fnServiceIsInstalled = func(ctx *log.Context) (bool, error) { return false, nil }
-	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) error {
-		return errors.New("reg fail")
+	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) *vmextension.ErrorWithClarification {
+		return vmextension.NewErrorWithClarificationPtr(42, errors.New("reg fail"))
 	}
 
 	ctx := log.NewContext(log.NewNopLogger())
@@ -391,7 +395,9 @@ func TestEnable_Install_NotInstalled_RegisterSuccess(t *testing.T) {
 
 	cfg := getInstallAsServiceCfg()
 	fnServiceIsInstalled = func(ctx *log.Context) (bool, error) { return false, nil }
-	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) error { return nil }
+	fnServiceRegister = func(ctx *log.Context, ev *extensionevents.ExtensionEventManager) *vmextension.ErrorWithClarification {
+		return nil
+	}
 
 	ctx := log.NewContext(log.NewNopLogger())
 	tempDir, _ := os.MkdirTemp("", "registersuccess")

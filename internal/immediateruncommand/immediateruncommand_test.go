@@ -109,7 +109,7 @@ func TestProcessImmediateRunCommandGoalStates_WhenAtCapacity_DoesNotFetch(t *tes
 
 	origGet := getImmediateGoalStatesFn
 	defer func() { getImmediateGoalStatesFn = origGet }()
-	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, _ string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, _ string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, *vmextension.ErrorWithClarification) {
 		t.Fatalf("should not be called when at capacity")
 		return nil, "", nil
 	}
@@ -130,7 +130,7 @@ func TestProcessImmediateRunCommandGoalStates_WhenEtagUnchanged_NoWork(t *testin
 
 	origGet := getImmediateGoalStatesFn
 	defer func() { getImmediateGoalStatesFn = origGet }()
-	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, last string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, last string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, *vmextension.ErrorWithClarification) {
 		return nil, last, nil // unchanged
 	}
 
@@ -167,7 +167,7 @@ func TestProcessImmediateRunCommandGoalStates_GoalStateFailed(t *testing.T) {
 
 	origGet := getImmediateGoalStatesFn
 	defer func() { getImmediateGoalStatesFn = origGet }()
-	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, _ string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, _ string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, *vmextension.ErrorWithClarification) {
 		return gs, "etag-new", nil
 	}
 
@@ -176,9 +176,9 @@ func TestProcessImmediateRunCommandGoalStates_GoalStateFailed(t *testing.T) {
 	handleCalls := 0
 	origHandle := handleImmediateGoalStateFn
 	defer func() { handleImmediateGoalStateFn = origHandle }()
-	handleImmediateGoalStateFn = func(_ *log.Context, _ settings.SettingsCommon, _ *observer.Notifier) (int, error) {
+	handleImmediateGoalStateFn = func(_ *log.Context, _ settings.SettingsCommon, _ *observer.Notifier) (int, *vmextension.ErrorWithClarification) {
 		handleCalls++
-		return 0, vmextension.NewErrorWithClarification(constants.Hgap_InternalArgumentError, errors.New("the chipmunks do not see your argument"))
+		return 0, vmextension.NewErrorWithClarificationPtr(constants.Hgap_InternalArgumentError, errors.New("the chipmunks do not see your argument"))
 	}
 
 	// ReportFinalStatus called for the failed item
@@ -251,7 +251,7 @@ func TestProcessImmediateRunCommandGoalStates_LaunchesAndReportsSkipped(t *testi
 
 	origGet := getImmediateGoalStatesFn
 	defer func() { getImmediateGoalStatesFn = origGet }()
-	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, _ string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+	getImmediateGoalStatesFn = func(_ *log.Context, _ hostgacommunicator.IHostGACommunicator, _ string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, *vmextension.ErrorWithClarification) {
 		return gs, "etag-new", nil
 	}
 
@@ -260,7 +260,7 @@ func TestProcessImmediateRunCommandGoalStates_LaunchesAndReportsSkipped(t *testi
 	handleCalls := 0
 	origHandle := handleImmediateGoalStateFn
 	defer func() { handleImmediateGoalStateFn = origHandle }()
-	handleImmediateGoalStateFn = func(_ *log.Context, _ settings.SettingsCommon, _ *observer.Notifier) (int, error) {
+	handleImmediateGoalStateFn = func(_ *log.Context, _ settings.SettingsCommon, _ *observer.Notifier) (int, *vmextension.ErrorWithClarification) {
 		handleCalls++
 		return 0, nil
 	}

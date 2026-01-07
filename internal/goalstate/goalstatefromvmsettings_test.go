@@ -16,7 +16,7 @@ import (
 
 type TestCommunicator struct{}
 
-func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
 	extName, seqNum := "testExtension", 5
 	immediateGoalState := hostgacommunicator.ImmediateExtensionGoalState{
 		Name: "Microsoft.CPlat.Core.RunCommandHandlerLinux",
@@ -84,19 +84,19 @@ func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string)
 
 type BadCommunicator struct{}
 
-func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
-	return nil, errors.New("http expected failure")
+func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
+	return nil, vmextension.NewErrorWithClarificationPtr(42, errors.New("http expected failure"))
 }
 
 type NilCommunicator struct{}
 
-func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
 	return nil, nil
 }
 
 type EmptyCommunicator struct{}
 
-func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
 	return &hostgacommunicator.ResponseData{VMSettings: &hostgacommunicator.VMImmediateExtensionsGoalState{}, ETag: "123456", Modified: true}, nil
 }
 

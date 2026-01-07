@@ -1,13 +1,10 @@
 package handlersettings
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/Azure/azure-extension-platform/vmextension"
-	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,51 +67,4 @@ func TestGetConfigFilePath_WithExtensionName(t *testing.T) {
 func TestGetConfigFilePath_WithoutExtensionName(t *testing.T) {
 	got := GetConfigFilePath("/var/lib/waagent/ext/config", 2, "")
 	require.Equal(t, filepath.Join("/var/lib/waagent/ext/config", "2.settings"), got)
-}
-
-func TestInternalWrapErrorWithClarification_NilErr_UsesUnknownErrorAndMsg(t *testing.T) {
-	msg := "something happened"
-	ewc := InternalWrapErrorWithClarification(nil, msg)
-
-	require.Equal(t, constants.Internal_UnknownError, ewc.ErrorCode)
-	require.NotNil(t, ewc.Err)
-	require.Equal(t, msg, ewc.Err.Error())
-}
-
-func TestInternalWrapErrorWithClarification_EWCWithNilUnderlyingErr_PreservesErrorCode_UsesMsg(t *testing.T) {
-	msg := "replace message"
-	orig := vmextension.NewErrorWithClarification(12345, nil)
-
-	ewc := InternalWrapErrorWithClarification(&orig, msg)
-
-	require.Equal(t, 12345, ewc.ErrorCode)
-	require.NotNil(t, ewc.Err)
-	require.Equal(t, msg, ewc.Err.Error())
-}
-
-func TestInternalWrapErrorWithClarification_EWCWithUnderlyingErr_PreservesErrorCode_WrapsUnderlying(t *testing.T) {
-	msg := "wrap message"
-	under := errors.New("root cause")
-	orig := vmextension.NewErrorWithClarification(777, under)
-
-	ewc := InternalWrapErrorWithClarification(&orig, msg)
-
-	require.Equal(t, 777, ewc.ErrorCode)
-	require.NotNil(t, ewc.Err)
-	require.Contains(t, ewc.Err.Error(), msg)
-	require.Contains(t, ewc.Err.Error(), "root cause")
-	require.True(t, errors.Is(ewc.Err, under), "expected returned error to wrap underlying error")
-}
-
-func TestInternalWrapErrorWithClarification_NonEWCError_UsesUnknownError_WrapsErr(t *testing.T) {
-	msg := "top"
-	under := errors.New("unknown chipmunk")
-
-	ewc := InternalWrapErrorWithClarification(under, msg)
-
-	require.Equal(t, constants.Internal_UnknownError, ewc.ErrorCode)
-	require.NotNil(t, ewc.Err)
-	require.Contains(t, ewc.Err.Error(), msg)
-	require.Contains(t, ewc.Err.Error(), "unknown chipmunk")
-	require.True(t, errors.Is(ewc.Err, under), "expected returned error to wrap input error")
 }

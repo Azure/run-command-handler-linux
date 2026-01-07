@@ -15,6 +15,7 @@ import (
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
@@ -377,7 +378,7 @@ func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir st
 	err = encoder.Encode(handlerSettings)
 	require.Nil(t, err, "Could not serialze settings file")
 
-	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (*vmextension.ErrorWithClarification, int) {
 		wasCalled = true
 		return nil, 0 // mock behavior
 	}

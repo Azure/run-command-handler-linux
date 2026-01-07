@@ -47,35 +47,35 @@ func ReadSettings(configFilePath string) (public, protected map[string]interface
 // UnmarshalHandlerSettings unmarshals given publicSettings/protectedSettings types
 // assumed underlying values are JSON into references publicV/protectedV respectively
 // (of struct types that contain structured fields for settings).
-func UnmarshalHandlerSettings(publicSettings, protectedSettings map[string]interface{}, publicV, protectedV interface{}) error {
+func UnmarshalHandlerSettings(publicSettings, protectedSettings map[string]interface{}, publicV, protectedV interface{}) *vmextension.ErrorWithClarification {
 	if err := unmarshalSettings(publicSettings, &publicV); err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalPublicSettingsFailed, fmt.Errorf("failed to unmarshal public settings: %v", err))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_UnmarshalPublicSettingsFailed, fmt.Errorf("failed to unmarshal public settings: %v", err))
 	}
 	if err := unmarshalSettings(protectedSettings, &protectedV); err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalProtectedSettingsFailed, fmt.Errorf("failed to unmarshal protected settings: %v", err))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_UnmarshalProtectedSettingsFailed, fmt.Errorf("failed to unmarshal protected settings: %v", err))
 	}
 	return nil
 }
 
 // unmarshalSettings makes a round-trip JSON marshaling and unmarshaling
 // from in (assumed map[interface]{}) to v (actual settings type).
-func unmarshalSettings(in interface{}, v interface{}) error {
+func unmarshalSettings(in interface{}, v interface{}) *vmextension.ErrorWithClarification {
 	s, err := json.Marshal(in)
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to marshal into json: %v", err))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to marshal into json: %v", err))
 	}
 	if err := json.Unmarshal(s, &v); err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to unmarshal json: %v", err))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_UnmarshalSettingsFailed, fmt.Errorf("failed to unmarshal json: %v", err))
 	}
 	return nil
 }
 
 // parseHandlerSettings parses a handler settings file (e.g. 0.settings) and
 // returns it as a structured object.
-func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) {
+func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ *vmextension.ErrorWithClarification) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return h, vmextension.NewErrorWithClarification(constants.Internal_CouldNotParseSettings, fmt.Errorf("error reading %s: %v", path, err))
+		return h, vmextension.NewErrorWithClarificationPtr(constants.Internal_CouldNotParseSettings, fmt.Errorf("error reading %s: %v", path, err))
 	}
 	if len(b) == 0 { // if no config is specified, we get an empty file
 		return h, nil
@@ -83,10 +83,10 @@ func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) 
 
 	var f HandlerSettingsFile
 	if err := json.Unmarshal(b, &f); err != nil {
-		return h, vmextension.NewErrorWithClarification(constants.Internal_InvalidHandlerSettingsJson, fmt.Errorf("error parsing json: %v", err))
+		return h, vmextension.NewErrorWithClarificationPtr(constants.Internal_InvalidHandlerSettingsJson, fmt.Errorf("error parsing json: %v", err))
 	}
 	if len(f.RuntimeSettings) != 1 {
-		return h, vmextension.NewErrorWithClarification(constants.Internal_InvalidHandlerSettingsCount, fmt.Errorf("wrong runtimeSettings count. expected:1, got:%d", len(f.RuntimeSettings)))
+		return h, vmextension.NewErrorWithClarificationPtr(constants.Internal_InvalidHandlerSettingsCount, fmt.Errorf("wrong runtimeSettings count. expected:1, got:%d", len(f.RuntimeSettings)))
 	}
 	return f.RuntimeSettings[0].HandlerSettings, nil
 }
@@ -94,17 +94,17 @@ func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) 
 // unmarshalProtectedSettings decodes the protected settings from handler
 // runtime settings JSON file, decrypts it using the certificates and unmarshals
 // into the given struct v.
-func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon, v interface{}) error {
+func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon, v interface{}) *vmextension.ErrorWithClarification {
 	if hs.ProtectedSettingsBase64 == "" {
 		return nil
 	}
 	if hs.SettingsCertThumbprint == "" {
-		return vmextension.NewErrorWithClarification(constants.Internal_NoHandlerSettingsThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_NoHandlerSettingsThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(hs.ProtectedSettingsBase64)
 	if err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_HandlerSettingsFailedToDecode, fmt.Errorf("failed to decode base64: %v", err))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_HandlerSettingsFailedToDecode, fmt.Errorf("failed to decode base64: %v", err))
 	}
 
 	// go two levels up where certs are placed (/var/lib/waagent)
@@ -133,13 +133,13 @@ func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon,
 		cmd.Stdout = &bOut
 		cmd.Stderr = &bErr
 		if err := cmd.Run(); err != nil {
-			return vmextension.NewErrorWithClarification(constants.Internal_DecryptingProtectedSettingsFailed, errors.Wrapf(errMsg, "decrypting protected settings with smime command failed: error=%v stderr=%s", err, bErr.String()))
+			return vmextension.NewErrorWithClarificationPtr(constants.Internal_DecryptingProtectedSettingsFailed, errors.Wrapf(errMsg, "decrypting protected settings with smime command failed: error=%v stderr=%s", err, bErr.String()))
 		}
 	}
 
 	// decrypted: json object for protected settings
 	if err := json.Unmarshal(bOut.Bytes(), &v); err != nil {
-		return vmextension.NewErrorWithClarification(constants.Internal_UnmarshalProtectedSettingsFailed, fmt.Errorf("failed to unmarshal decrypted settings json: %v", err))
+		return vmextension.NewErrorWithClarificationPtr(constants.Internal_UnmarshalProtectedSettingsFailed, fmt.Errorf("failed to unmarshal decrypted settings json: %v", err))
 	}
 	return nil
 }

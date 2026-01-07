@@ -26,19 +26,19 @@ var textExtensions = []string{
 // IsTextFile is a best effort to determine if a file
 // is a script file (with a known file extension) or a
 // file that starts with a shebang (!#)
-func IsTextFile(path string) (bool, error) {
+func IsTextFile(path string) (bool, *vmextension.ErrorWithClarification) {
 	if hasTextExtension(path) {
 		return true, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return false, vmextension.NewErrorWithClarification(constants.Internal_FailedToOpenFileForReading, errors.Wrap(err, "failed to open file"))
+		return false, vmextension.NewErrorWithClarificationPtr(constants.Internal_FailedToOpenFileForReading, errors.Wrap(err, "failed to open file"))
 	}
 	defer f.Close()
 	b := make([]byte, peekLen)
 	_, err = f.Read(b)
 	if err != nil && err != io.EOF {
-		return false, vmextension.NewErrorWithClarification(constants.Internal_FailedToReadFile, errors.Wrap(err, "failed to read file"))
+		return false, vmextension.NewErrorWithClarificationPtr(constants.Internal_FailedToReadFile, errors.Wrap(err, "failed to read file"))
 	}
 	return hasShebang(b), nil
 }

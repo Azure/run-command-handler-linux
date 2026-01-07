@@ -125,8 +125,8 @@ func TestDownload_retrievesBody(t *testing.T) {
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
 
-	_, body, err := download.Download(testctx, download.NewURLDownload(srv.URL+"/bytes/65536"))
-	require.Nil(t, err)
+	_, body, ewc := download.Download(testctx, download.NewURLDownload(srv.URL+"/bytes/65536"))
+	require.Nil(t, ewc)
 	defer body.Close()
 	b, err := ioutil.ReadAll(body)
 	require.Nil(t, err)
