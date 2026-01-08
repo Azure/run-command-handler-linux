@@ -33,7 +33,7 @@ func TestExec_SuccessExitCodeOkay(t *testing.T) {
 	errw := newCloseRecorder()
 
 	exitCode, err := Exec(newCtx(), "echo hi", t.TempDir(), out, errw, cfg)
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
 	require.Contains(t, out.String(), "hi")
 }
@@ -584,9 +584,7 @@ func fileExists(t *testing.T, path string) bool {
 	return false
 }
 
-func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

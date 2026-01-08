@@ -117,10 +117,8 @@ func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
 
 func Test_GetFilteredImmediateVMSettings_NoCommunicator(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
-	_, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, nil, "")
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+	_, _, ewc := goalstate.GetImmediateRunCommandGoalStates(ctx, nil, "")
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, constants.Hgap_InternalArgumentError, ewc.ErrorCode, "Expected error %d but received %d", constants.Hgap_InternalArgumentError, ewc.ErrorCode)
 }
 

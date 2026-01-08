@@ -44,7 +44,7 @@ func TestIsTextFile(t *testing.T) {
 
 	for f, exp := range files {
 		out, err := IsTextFile(filepath.Join(testDataDir, f))
-		require.NoError(t, err)
+		require.Nil(t, err)
 		require.Equal(t, exp, out, "IsTextFile(%s)", f)
 	}
 }

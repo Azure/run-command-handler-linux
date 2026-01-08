@@ -521,7 +521,7 @@ func getInstallAsServiceCfg() handlersettings.HandlerSettings {
 
 func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
 	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
+	var ewc *vmextension.ErrorWithClarification
 	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

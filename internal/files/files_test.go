@@ -1,7 +1,6 @@
 package files
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http/httptest"
@@ -241,7 +240,7 @@ func TestGetDownloaders_NonBlobURL_ReturnsPublicOnly(t *testing.T) {
 	mock := &mockMsiDownloader{providerToReturn: providerSuccess()}
 	downloaders, err := getDownloaders(publicURL, nil, mock)
 
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Len(t, downloaders, 1, "non-blob URL must return only public downloader")
 	require.Equal(t, 0, mock.calledGet+mock.calledByClientID+mock.calledByObjectID,
 		"msi downloader must not be used for non-blob URL")
@@ -253,10 +252,8 @@ func TestGetDownloaders_EmptyURL_ReturnsClarification(t *testing.T) {
 	VerifyErrorClarification(t, constants.FileDownload_Empty, err)
 }
 
-func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }
 

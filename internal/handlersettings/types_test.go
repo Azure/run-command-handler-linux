@@ -1,7 +1,6 @@
 package handlersettings
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/Azure/azure-extension-platform/vmextension"
@@ -15,7 +14,7 @@ func TestReadArtifacts_BothNil_ReturnsNilNil(t *testing.T) {
 	s.ProtectedSettings.Artifacts = nil
 
 	got, err := s.ReadArtifacts()
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Nil(t, got)
 }
 
@@ -59,7 +58,7 @@ func TestReadArtifacts_HappyPath_MatchesById_AndPreservesPublicOrder(t *testing.
 	}
 
 	got, err := s.ReadArtifacts()
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Len(t, got, 2)
 
 	// Must be in the same order as PublicSettings.Artifacts.
@@ -96,9 +95,7 @@ func TestReadArtifacts_MissingProtectedMatch_ReturnsInvalidArtifactSpecification
 	VerifyErrorClarification(t, constants.Internal_InvalidArtifactSpecification, err)
 }
 
-func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

@@ -26,7 +26,7 @@ type RunTimeSettingsFile struct {
 // ReadSettings locates the .settings file and returns public settings
 // JSON, and protected settings JSON (by decrypting it with the keys in
 // configFolder).
-func ReadSettings(configFilePath string) (public, protected map[string]interface{}, _ error) {
+func ReadSettings(configFilePath string) (public, protected map[string]interface{}, _ *vmextension.ErrorWithClarification) {
 	// cf, err := settingsPath(configFolder)
 	// if err != nil {
 	// 	return nil, nil, fmt.Errorf("canot locate settings file: %v", err)

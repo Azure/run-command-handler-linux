@@ -129,7 +129,7 @@ func TestParseHandlerSettingsFile_EmptyFile_OK(t *testing.T) {
 	writeFile(t, p, []byte{}, 0o644)
 
 	got, err := parseHandlerSettingsFile(p)
-	require.NoError(t, err)
+	require.Nil(t, err)
 	// empty settings file -> zero-value SettingsCommon
 	require.Equal(t, settings.SettingsCommon{}, got)
 }
@@ -154,8 +154,8 @@ func TestParseHandlerSettingsFile_WrongRuntimeSettingsCount(t *testing.T) {
 	require.NoError(t, err)
 	writeFile(t, p, b, 0o644)
 
-	_, err = parseHandlerSettingsFile(p)
-	VerifyErrorClarification(t, constants.Internal_InvalidHandlerSettingsCount, err)
+	_, ewc := parseHandlerSettingsFile(p)
+	VerifyErrorClarification(t, constants.Internal_InvalidHandlerSettingsCount, ewc)
 }
 
 func TestParseHandlerSettingsFile_Success(t *testing.T) {
@@ -167,7 +167,7 @@ func TestParseHandlerSettingsFile_Success(t *testing.T) {
 	makeSettingsFile(t, p, hs)
 
 	got, err := parseHandlerSettingsFile(p)
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, hs.PublicSettings, got.PublicSettings)
 }
 
@@ -183,14 +183,14 @@ func TestReadSettings_NoProtected_ReturnsPublicAndNilProtected(t *testing.T) {
 	makeSettingsFile(t, p, hs)
 
 	pub, prot, err := ReadSettings(p)
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, hs.PublicSettings, pub)
 	require.Nil(t, prot) // nothing set
 }
 
 func TestReadSettings_PropagatesParseError(t *testing.T) {
-	_, _, err := ReadSettings(filepath.Join(t.TempDir(), "missing.settings"))
-	VerifyErrorClarification(t, constants.Internal_CouldNotParseSettings, err)
+	_, _, ewc := ReadSettings(filepath.Join(t.TempDir(), "missing.settings"))
+	VerifyErrorClarification(t, constants.Internal_CouldNotParseSettings, ewc)
 }
 
 /* -------------------- unmarshalSettings + UnmarshalHandlerSettings -------------------- */
@@ -237,7 +237,7 @@ func TestUnmarshalHandlerSettings_Success_PopulatesStructs(t *testing.T) {
 	var prot Prot
 
 	err := UnmarshalHandlerSettings(public, protected, &pub, &prot)
-	require.NoError(t, err)
+	require.Nil(t, err)
 
 	require.Equal(t, "hello", pub.A)
 	require.Equal(t, 42, prot.B)
@@ -253,7 +253,7 @@ func TestUnmarshalProtectedSettings_NoProtectedSettings_ReturnsNil(t *testing.T)
 	}
 	var out map[string]interface{}
 	err := unmarshalProtectedSettings(cfg, hs, &out)
-	require.NoError(t, err)
+	require.Nil(t, err)
 }
 
 func TestUnmarshalProtectedSettings_ProtectedButNoThumbprint(t *testing.T) {
@@ -290,7 +290,7 @@ func TestUnmarshalProtectedSettings_CmsFails_SmimeSucceeds(t *testing.T) {
 
 	var out map[string]interface{}
 	err := unmarshalProtectedSettings(cfg, hs, &out)
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, "ok", out["p"])
 }
 

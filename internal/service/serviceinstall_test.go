@@ -165,7 +165,7 @@ func TestRegister_SameVersion_NoOp(t *testing.T) {
 	ctx := log.NewContext(log.NewNopLogger())
 
 	err := Register(ctx, evt)
-	require.NoError(t, err)
+	require.Nil(t, err)
 }
 
 func TestRegister_ChmodFailure(t *testing.T) {
@@ -335,7 +335,7 @@ func TestRegister_Success(t *testing.T) {
 	ctx := log.NewContext(log.NewNopLogger())
 
 	err := Register(ctx, evt)
-	require.NoError(t, err)
+	require.Nil(t, err)
 }
 
 func TestDeRegister_Success(t *testing.T) {
@@ -561,9 +561,7 @@ func TestIsEnabled_Error(t *testing.T) {
 	require.Error(t, err)
 }
 
-func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

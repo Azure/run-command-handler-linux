@@ -47,7 +47,7 @@ func TestGetImmediateVMSettings_RequestManagerError(t *testing.T) {
 	c := NewHostGACommunicator(fakeVMSettingsRequestManager{rm: nil, err: rmErr})
 
 	_, err := c.GetImmediateVMSettings(nil, "etag0")
-	VerifyErrorClarification(t, constants.Internal_UnknownError, err)
+	VerifyErrorClarification(t, 42, err)
 }
 
 func TestGetImmediateVMSettings_WithRetriesError_WrappedWithClarification(t *testing.T) {
@@ -61,7 +61,7 @@ func TestGetImmediateVMSettings_WithRetriesError_WrappedWithClarification(t *tes
 	c := NewHostGACommunicator(fakeVMSettingsRequestManager{rm: &requesthelper.RequestManager{}, err: nil})
 
 	_, err := c.GetImmediateVMSettings(nil, "etag0")
-	VerifyErrorClarification(t, constants.Internal_UnknownError, err)
+	VerifyErrorClarification(t, vmextension.Internal_UnknownError, err)
 }
 
 func TestGetImmediateVMSettings_NotModified304_ReturnsUnmodifiedResponse(t *testing.T) {

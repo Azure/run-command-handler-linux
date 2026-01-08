@@ -28,8 +28,8 @@ func TestParseHandlerEnv_InvalidConfigCount_Zero(t *testing.T) {
 	b, err := json.Marshal([]types.HandlerEnvironment{})
 	require.NoError(t, err)
 
-	_, err = ParseHandlerEnv(b)
-	VerifyErrorClarification(t, constants.HandlerEnv_InvalidConfigCount, err)
+	_, ewc := ParseHandlerEnv(b)
+	VerifyErrorClarification(t, constants.HandlerEnv_InvalidConfigCount, ewc)
 }
 
 func TestParseHandlerEnv_InvalidConfigCount_Two(t *testing.T) {
@@ -39,8 +39,8 @@ func TestParseHandlerEnv_InvalidConfigCount_Two(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ParseHandlerEnv(b)
-	VerifyErrorClarification(t, constants.HandlerEnv_InvalidConfigCount, err)
+	_, ewc := ParseHandlerEnv(b)
+	VerifyErrorClarification(t, constants.HandlerEnv_InvalidConfigCount, ewc)
 }
 
 func TestParseHandlerEnv_Success(t *testing.T) {
@@ -62,8 +62,8 @@ func TestParseHandlerEnv_Success(t *testing.T) {
 	b, err := json.Marshal([]types.HandlerEnvironment{want})
 	require.NoError(t, err)
 
-	got, err := ParseHandlerEnv(b)
-	require.NoError(t, err)
+	got, ewc := ParseHandlerEnv(b)
+	require.Nil(t, ewc)
 	require.Equal(t, want, got)
 }
 
@@ -85,8 +85,8 @@ func TestGetHandlerEnv_FindsHandlerEnvironmentNextToExecutable(t *testing.T) {
 	t.Cleanup(func() { os.Args[0] = origArgs0 })
 	os.Args[0] = exePath
 
-	got, err := GetHandlerEnv()
-	require.NoError(t, err)
+	got, ewc := GetHandlerEnv()
+	require.Nil(t, ewc)
 	require.Equal(t, want, got)
 }
 
@@ -108,8 +108,8 @@ func TestGetHandlerEnv_FindsHandlerEnvironmentOneLevelAboveExecutable(t *testing
 	t.Cleanup(func() { os.Args[0] = origArgs0 })
 	os.Args[0] = exePath
 
-	got, err := GetHandlerEnv()
-	require.NoError(t, err)
+	got, ewc := GetHandlerEnv()
+	require.Nil(t, ewc)
 	require.Equal(t, want, got)
 }
 

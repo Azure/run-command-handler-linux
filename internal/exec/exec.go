@@ -157,6 +157,13 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 				commandFailedErr := fmt.Errorf("command terminated with exit status=%d", commandExitCode)
 				return exitCode, vmextension.NewErrorWithClarificationPtr(exitCode, commandFailedErr)
 			}
+		} else {
+			startErr, ok := err.(*exec.Error)
+			if ok {
+				exitCode = constants.CommandExecution_CouldNotStart
+				commandFailedErr := fmt.Errorf("Command failed to start with error=%s", startErr)
+				return exitCode, vmextension.NewErrorWithClarificationPtr(exitCode, commandFailedErr)
+			}
 		}
 	}
 

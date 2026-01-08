@@ -35,11 +35,11 @@ func Update(ctx *log.Context, h types.HandlerEnvironment, extName string, seqNum
 	}
 
 	if isInstalled {
-		err = fnServiceRegister(ctx, extensionEvents)
-		if err != nil {
-			errMessage := fmt.Sprintf("Failed to upgrade run command service: %v", err)
+		ewc := fnServiceRegister(ctx, extensionEvents)
+		if ewc != nil {
+			errMessage := fmt.Sprintf("Failed to upgrade run command service: %v", ewc)
 			extensionEvents.LogErrorEvent("immediateupdate", errMessage)
-			return constants.ExitCode_UpgradeInstalledServiceFailed, errors.Wrap(err, "failed to upgrade run command service")
+			return constants.ExitCode_UpgradeInstalledServiceFailed, vmextension.CreateWrappedErrorWithClarification(ewc, "failed to upgrade run command service")
 		}
 	}
 

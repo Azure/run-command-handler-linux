@@ -12,7 +12,7 @@ func Test_handlerSettingsValidate(t *testing.T) {
 	require.Equal(t, errSourceNotSpecified, HandlerSettings{
 		PublicSettings{Source: &ScriptSource{Script: "foo", ScriptURI: "bar"}},
 		ProtectedSettings{},
-	}.validate())
+	}.validate().Err)
 
 	// 	// commandToExecute not specified
 	// 	require.Equal(t, errCmdMissing, handlerSettings{

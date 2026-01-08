@@ -638,7 +638,7 @@ func Test_decodeScript(t *testing.T) {
 	testSubject := "bHMK"
 	s, info, err := decodeScript(testSubject)
 
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, info, "4;3;gzip=0")
 	require.Equal(t, s, "ls\n")
 }
@@ -647,7 +647,7 @@ func Test_decodeScriptGzip(t *testing.T) {
 	testSubject := "H4sIACD731kAA8sp5gIAfShLWgMAAAA="
 	s, info, err := decodeScript(testSubject)
 
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, info, "32;3;gzip=1")
 	require.Equal(t, s, "ls\n")
 }

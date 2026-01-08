@@ -1,7 +1,6 @@
 package download_test
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http/httptest"
@@ -87,9 +86,7 @@ func TestSave_largeFile(t *testing.T) {
 	require.EqualValues(t, size, fi.Size())
 }
 
-func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

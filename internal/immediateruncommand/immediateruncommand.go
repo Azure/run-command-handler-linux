@@ -1,7 +1,6 @@
 package immediateruncommand
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -136,28 +135,24 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				notifier.Register(&goalStateEventObserver)
 				notifier.Notify(status)
 				startTime := nowFn().Format(time.RFC3339)
-				exitCode, err := handleImmediateGoalStateFn(ctx, state, notifier)
+				exitCode, ewc := handleImmediateGoalStateFn(ctx, state, notifier)
 
 				ctx.Log("message", "goal state has exited. Decrementing executing tasks counter")
 				executingTasks.Decrement()
 
 				// If there was an error executing the goal state, report the final status to the HGAP
 				// For successful goal states, the status is reported by the usual workflow
-				if err != nil {
-					ctx.Log("error", "failed to execute goal state", "message", err)
+				if ewc != nil {
+					ctx.Log("error", "failed to execute goal state", "message", ewc)
 
-					var ewc vmextension.ErrorWithClarification
-					errorCode := 0
-					if errors.As(err, &ewc) {
-						errorCode = ewc.ErrorCode
-					}
+					errorCode := ewc.ErrorCode
 
 					instView := types.RunCommandInstanceView{
 						ExecutionState:          types.Failed,
 						ExecutionMessage:        "Execution failed",
 						ExitCode:                exitCode,
 						Output:                  "",
-						Error:                   err.Error(),
+						Error:                   ewc.Error(),
 						StartTime:               startTime,
 						EndTime:                 nowFn().Format(time.RFC3339),
 						ErrorClarificationValue: errorCode,

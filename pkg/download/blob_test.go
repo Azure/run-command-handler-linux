@@ -36,7 +36,9 @@ func Test_blobDownload_validateInputs(t *testing.T) {
 	errorMessage := err.Error()
 	require.Contains(t, errorMessage, "failed to initialize azure storage client")
 	require.Contains(t, errorMessage, "azure: account name is not valid")
-	VerifyErrorClarification(t, constants.FileDownload_StorageClientInitialization, err)
+	var ewc *vmextension.ErrorWithClarification
+	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+	VerifyErrorClarification(t, constants.FileDownload_StorageClientInitialization, ewc)
 
 	_, err = NewBlobDownload("account", "", blobutil.AzureBlobRef{}).GetRequest()
 	require.NotNil(t, err)
@@ -342,9 +344,7 @@ func (b badRequestBlobDownload) GetRequest() (*http.Request, error) {
 	return req, error
 }
 
-func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

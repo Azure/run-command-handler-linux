@@ -62,7 +62,9 @@ func TestRequestFactory_GetRequest_InvalidURL_ReturnsErrorWithClarification(t *t
 		t.Fatalf("expected error, got nil")
 	}
 
-	VerifyErrorClarification(t, constants.Hgap_FailedCreateRequest, err)
+	var ewc *vmextension.ErrorWithClarification
+	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+	VerifyErrorClarification(t, constants.Hgap_FailedCreateRequest, ewc)
 }
 
 func Test_GetVMSettingsRequestManager_CannotParseUri(t *testing.T) {
@@ -201,9 +203,7 @@ func TestRequestFactory_GetRequest_DoesNotSetIfNoneMatchWhenEmpty(t *testing.T) 
 	}
 }
 
-func VerifyErrorClarification(t *testing.T, expectedCode int, err error) {
-	require.NotNil(t, err, "No error returned when one was expected")
-	var ewc vmextension.ErrorWithClarification
-	require.True(t, errors.As(err, &ewc), "Error is not of type ErrorWithClarification")
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
 	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
 }

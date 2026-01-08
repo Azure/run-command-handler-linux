@@ -87,6 +87,7 @@ const (
 	CommandExecution_TimedOut                 = 4
 	CommandExecution_RunAsCreateProcessFailed = 5
 	CommandExecution_RunAsUserLogonFailed     = 6
+	CommandExecution_CouldNotStart            = 7
 
 	CustomerInput_StorageCredsAndMIBothSpecified = 26
 	CustomerInput_ClientIdObjectIdBothSpecified  = 27
