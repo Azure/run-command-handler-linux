@@ -202,22 +202,22 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}
 
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
-	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
-	if err != nil {
+	scriptFilePath, ewc := downloadScript(ctx, dir, &cfg)
+	if ewc != nil {
 		errMessage := fmt.Sprintf("Failed to download script: %v due to: %v", download.GetUriForLogging(cfg.ScriptURI()), err)
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "",
 			"",
-			vmextension.CreateWrappedErrorWithClarification(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
+			vmextension.CreateWrappedErrorWithClarification(ewc, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
 			constants.FileDownload_GenericError
 	}
 
-	err = downloadArtifacts(ctx, dir, &cfg)
-	if err != nil {
-		errMessage := fmt.Sprintf("Failed to download artifacts: %v", err)
+	ewc = downloadArtifacts(ctx, dir, &cfg)
+	if ewc != nil {
+		errMessage := fmt.Sprintf("Failed to download artifacts: %v", ewc)
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "", "",
-			vmextension.CreateWrappedErrorWithClarification(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
+			vmextension.CreateWrappedErrorWithClarification(ewc, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
 			constants.ArtifactDownload_GenericError
 	}
 

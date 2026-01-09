@@ -101,7 +101,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		statusToReport := types.StatusSuccess
 
 		// Add an error clarification if we have one
-		var ewc vmextension.ErrorWithClarification
+		var ewc *vmextension.ErrorWithClarification
 		if errors.As(cmdInvokeError, &ewc) {
 			instView.ErrorClarificationValue = ewc.ErrorCode
 		}
@@ -113,6 +113,11 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		}
 
 		fnReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView)
+
+		if err == nil {
+			return nil
+		}
+
 		return errors.Wrapf(err, "command execution failed")
 	} else { // No error. Succeeded
 		instView.ExecutionMessage = "Execution completed"

@@ -202,20 +202,15 @@ func Test_ProcessHandlerCommandWithDetails_Failure_WithClarification(t *testing.
 		return nil
 	}
 
-	ewc := vmextension.ErrorWithClarification{
-		ErrorCode: 1234,
-		Err:       errors.New("the chipmunks are upset"),
-	}
-
 	mockFunc := types.CmdFunctions{
 		Invoke: func(_ *log.Context, _ types.HandlerEnvironment, iv *types.RunCommandInstanceView, _ types.RCMetadata, _ types.Cmd) (string, string, error, int) {
-			return "x", "y", ewc, 3
+			return "x", "y", vmextension.NewErrorWithClarificationPtr(1234, errors.New("the chipmunks are upset")), 3
 		},
 	}
 
 	orig := fnGetHandlerSettings
 	defer func() { fnGetHandlerSettings = orig }()
-	fnGetHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
+	fnGetHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, *vmextension.ErrorWithClarification) {
 		return handlersettings.HandlerSettings{
 			PublicSettings: handlersettings.PublicSettings{
 				TreatFailureAsDeploymentFailure: false,

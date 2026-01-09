@@ -28,7 +28,7 @@ var (
 	fnOsMkDirAll = os.MkdirAll
 	fnOsOpenFile = os.OpenFile
 	fnOsSetEnv   = os.Setenv
-	fnRunCommand = runCommand
+	FnRunCommand = runCommand
 	fnUserLookup = user.Lookup
 )
 
@@ -140,7 +140,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	command.Dir = workdir
 	command.Stdout = stdout
 	command.Stderr = stderr
-	err = fnRunCommand(command)
+	err = FnRunCommand(command)
 	if err != nil {
 		exitErr, ok := err.(*exec.ExitError)
 		if ok {

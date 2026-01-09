@@ -12,11 +12,14 @@ import (
 	"strings"
 	"testing"
 
+	osexec "os/exec"
+
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
@@ -435,6 +438,13 @@ func Test_runCmd_success(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
+
+	orig := exec.FnRunCommand
+	defer func() { exec.FnRunCommand = orig }()
+	exec.FnRunCommand = func(_ *osexec.Cmd) error {
+		// Success
+		return nil
+	}
 
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{

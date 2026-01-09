@@ -47,7 +47,7 @@ func TestExec_AlwaysClosesStreams(t *testing.T) {
 	errw := newCloseRecorder()
 
 	// Force runCommand to return error to ensure closures happen on error path.
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		return errors.New("the chipmunks have revolted")
 	}
 
@@ -85,7 +85,7 @@ func TestExec_RunAsUser_OpenSourceScriptFails_ReturnsOpenSourceFailed(t *testing
 		return nil, errors.New("open failed")
 	}
 	// Ensure we don't accidentally reach execution
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		t.Fatalf("fnRunCommand should not be called when RunAs setup fails")
 		return nil
 	}
@@ -114,7 +114,7 @@ func TestExec_RunAsUser_CreateDestScriptFails_ReturnsOpenSourceFailed(t *testing
 	fnOsCreate = func(_ string) (*os.File, error) {
 		return nil, errors.New("create failed")
 	}
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		t.Fatalf("fnRunCommand should not be called when RunAs setup fails")
 		return nil
 	}
@@ -147,7 +147,7 @@ func TestExec_RunAsUser_CopyFails_ReturnsCopyFailed(t *testing.T) {
 	fnIoCopy = func(_ io.Writer, _ io.Reader) (int64, error) {
 		return 0, errors.New("the chipmunks do not copy")
 	}
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		t.Fatalf("fnRunCommand should not be called when RunAs setup fails")
 		return nil
 	}
@@ -179,7 +179,7 @@ func TestExec_RunAsUser_LookupUserFails_ReturnsRunAsUserLogonFailed(t *testing.T
 	fnUserLookup = func(_ string) (*user.User, error) {
 		return nil, errors.New("no such chipmunk")
 	}
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		t.Fatalf("fnRunCommand should not be called when RunAs setup fails")
 		return nil
 	}
@@ -210,7 +210,7 @@ func TestExec_RunAsUser_UidParseFails_ReturnsLookupUserUidFailed(t *testing.T) {
 	fnUserLookup = func(_ string) (*user.User, error) {
 		return &user.User{Uid: "not-an-int"}, nil
 	}
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		t.Fatalf("fnRunCommand should not be called when RunAs setup fails")
 		return nil
 	}
@@ -243,7 +243,7 @@ func TestExec_RunAsUser_ChownFails_ReturnsChangeOwnerFailed(t *testing.T) {
 	fnOsChown = func(_ string, _ int, _ int) error {
 		return errors.New("chown failed")
 	}
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		t.Fatalf("fnRunCommand should not be called when RunAs setup fails")
 		return nil
 	}
@@ -278,7 +278,7 @@ func TestExec_RunAsUser_ChmodFails_ReturnsChangePermissionsFailed(t *testing.T) 
 		return errors.New("chmod failed")
 	}
 
-	fnRunCommand = func(_ *exec.Cmd) error {
+	FnRunCommand = func(_ *exec.Cmd) error {
 		t.Fatalf("fnRunCommand should not be called when RunAs setup fails")
 		return nil
 	}
@@ -539,7 +539,7 @@ func saveAndRestoreFns() func() {
 		mkdirAll:   fnOsMkDirAll,
 		openFile:   fnOsOpenFile,
 		setEnv:     fnOsSetEnv,
-		runCommand: fnRunCommand,
+		runCommand: FnRunCommand,
 		userLookup: fnUserLookup,
 	}
 	return func() {
@@ -550,7 +550,7 @@ func saveAndRestoreFns() func() {
 		fnOsMkDirAll = s.mkdirAll
 		fnOsOpenFile = s.openFile
 		fnOsSetEnv = s.setEnv
-		fnRunCommand = s.runCommand
+		FnRunCommand = s.runCommand
 		fnUserLookup = s.userLookup
 	}
 }

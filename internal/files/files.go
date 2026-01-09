@@ -55,11 +55,11 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 
 	targetFilePath := filepath.Join(downloadDir, fileName)
 
-	var scriptSASDownloadErr error = nil
+	var scriptSASDownloadErr *vmextension.ErrorWithClarification = nil
 	var downloadedFilePath string = ""
 	if scriptSAS != "" {
 		if UseMockSASDownloadFailure {
-			scriptSASDownloadErr = errors.New("Downloading script using SAS token failed.")
+			scriptSASDownloadErr = vmextension.NewErrorWithClarificationPtr(42, errors.New("Downloading script using SAS token failed."))
 		} else {
 			downloadedFilePath, scriptSASDownloadErr = download.GetSASBlob(url, scriptSAS, downloadDir)
 		}

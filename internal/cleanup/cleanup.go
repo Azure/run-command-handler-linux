@@ -2,8 +2,11 @@ package cleanup
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
 
+	"github.com/Azure/azure-extension-platform/pkg/utils"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/linuxutils"
@@ -38,28 +41,28 @@ func deleteAllScriptsAndSettings(ctx *log.Context, metadata types.RCMetadata, h 
 }
 
 func deleteScriptsAndSettingsExceptMostRecent(ctx *log.Context, metadata types.RCMetadata, h types.HandlerEnvironment, runAsUser string) {
-	// runtimeSettingsRegexFormat := metadata.ExtName + ".\\d+.settings"
-	// runtimeSettingsLastSeqNumFormat := metadata.ExtName + ".%d.settings"
+	runtimeSettingsRegexFormat := metadata.ExtName + ".\\d+.settings"
+	runtimeSettingsLastSeqNumFormat := metadata.ExtName + ".%d.settings"
 
-	// // check if directory exists
-	// _, err := os.Open(metadata.DownloadPath)
-	// if err == nil {
-	// 	err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(metadata.DownloadPath, h.HandlerEnvironment.ConfigFolder, "",
-	// 		uint64(metadata.SeqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
-	// 	if err != nil {
-	// 		ctx.Log("event", "could not clear settings and script files", "error", err)
-	// 	}
-	// } else {
-	// 	ctx.Log("message", "directory does not exist. Skipping cleanup")
-	// }
+	// check if directory exists
+	_, err := os.Open(metadata.DownloadPath)
+	if err == nil {
+		err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(metadata.DownloadPath, h.HandlerEnvironment.ConfigFolder, "",
+			uint64(metadata.SeqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
+		if err != nil {
+			ctx.Log("event", "could not clear settings and script files", "error", err)
+		}
+	} else {
+		ctx.Log("message", "directory does not exist. Skipping cleanup")
+	}
 
-	// if runAsUser != "" {
-	// 	runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), metadata.DownloadDir)
-	// 	seqNumString := strconv.Itoa(metadata.SeqNum)
-	// 	ctx.Log("message", "removing all files from the download 'runas' directory "+runAsDownloadParent)
-	// 	err = utils.TryDeleteDirectoriesExcept(runAsDownloadParent, seqNumString)
-	// 	if err != nil {
-	// 		ctx.Log("event", "could not clear runas script")
-	// 	}
-	// }
+	if runAsUser != "" {
+		runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), metadata.DownloadDir)
+		seqNumString := strconv.Itoa(metadata.SeqNum)
+		ctx.Log("message", "removing all files from the download 'runas' directory "+runAsDownloadParent)
+		err = utils.TryDeleteDirectoriesExcept(runAsDownloadParent, seqNumString)
+		if err != nil {
+			ctx.Log("event", "could not clear runas script")
+		}
+	}
 }
