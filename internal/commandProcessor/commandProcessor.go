@@ -10,6 +10,7 @@ import (
 
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
@@ -22,6 +23,8 @@ import (
 
 var (
 	handlerEnvironmentGetter func(name, version string) (he *handlerenv.HandlerEnvironment, _ error) = handlerenv.GetHandlerEnvironment
+	fnGetHandlerSettings                                                                             = handlersettings.GetHandlerSettings
+	fnReportInstanceView                                                                             = instanceview.ReportInstanceView
 )
 
 func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSettingsFile, extensionName string, seqNum int) error {
@@ -71,17 +74,18 @@ func ProcessHandlerCommand(cmd types.Cmd) error {
 func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string) error {
 	ctx.Log("message", fmt.Sprintf("processing command for extensionName: %v and seqNum: %v", extensionName, seqNum))
 	instView := types.RunCommandInstanceView{
-		ExecutionState:   types.Running,
-		ExecutionMessage: "Execution in progress",
-		ExitCode:         0,
-		Output:           "",
-		Error:            "",
-		StartTime:        time.Now().UTC().Format(time.RFC3339),
-		EndTime:          "",
+		ExecutionState:          types.Running,
+		ExecutionMessage:        "Execution in progress",
+		ExitCode:                0,
+		Output:                  "",
+		Error:                   "",
+		StartTime:               time.Now().UTC().Format(time.RFC3339),
+		EndTime:                 "",
+		ErrorClarificationValue: 0,
 	}
 
 	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, constants.DataDir)
-	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
+	fnReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
 
 	// execute the subcommand
 	stdout, stderr, cmdInvokeError, exitCode := cmd.Functions.Invoke(ctx, hEnv, &instView, metadata, cmd)
@@ -96,13 +100,24 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		instView.ExitCode = exitCode
 		statusToReport := types.StatusSuccess
 
+		// Add an error clarification if we have one
+		var ewc *vmextension.ErrorWithClarification
+		if errors.As(cmdInvokeError, &ewc) {
+			instView.ErrorClarificationValue = ewc.ErrorCode
+		}
+
 		// If TreatFailureAsDeploymentFailure is set to true and the exit code is non-zero, set extension status to error
-		cfg, err := handlersettings.GetHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
+		cfg, err := fnGetHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
 		if err == nil && cfg.PublicSettings.TreatFailureAsDeploymentFailure && cmd.FailExitCode != 0 {
 			statusToReport = types.StatusError
 		}
 
-		instanceview.ReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView)
+		fnReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView)
+
+		if err == nil {
+			return nil
+		}
+
 		return errors.Wrapf(err, "command execution failed")
 	} else { // No error. Succeeded
 		instView.ExecutionMessage = "Execution completed"
@@ -111,7 +126,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		instView.ExitCode = constants.ExitCode_Okay
 	}
 
-	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusSuccess, cmd, &instView)
+	fnReportInstanceView(ctx, hEnv, metadata, types.StatusSuccess, cmd, &instView)
 	ctx.Log("event", "end")
 
 	return nil

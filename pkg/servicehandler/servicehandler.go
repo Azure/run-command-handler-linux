@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -82,25 +83,25 @@ func (handler *Handler) IsInstalled() (bool, error) {
 	return handler.manager.IsUnitInstalled(handler.config.Name, handler.ctx)
 }
 
-func (handler *Handler) Register(ctx *log.Context, unitConfigContent string) error {
+func (handler *Handler) Register(ctx *log.Context, unitConfigContent string) *vmextension.ErrorWithClarification {
 	err := handler.manager.RemoveUnitConfigurationFile(handler.config.Name, ctx)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("error while removing old unit configuration file: %v", err)
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotRemoveOldUnitConfigFile, fmt.Errorf("error while removing old unit configuration file: %v", err))
 	}
 
 	err = handler.manager.CreateUnitConfigurationFile(handler.config.Name, []byte(unitConfigContent), ctx)
 	if err != nil {
-		return fmt.Errorf("error while creating unit configuration file: %v", err)
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_ErrorCreatingUnitConfig, fmt.Errorf("error while creating unit configuration file: %v", err))
 	}
 
 	err = handler.DaemonReload()
 	if err != nil {
-		return fmt.Errorf("error while reloading daemon worker: %v", err)
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_ErrorReloadingDaemonWorker, fmt.Errorf("error while reloading daemon worker: %v", err))
 	}
 
 	err = handler.Enable()
 	if err != nil {
-		return fmt.Errorf("error while enabling unit: %v", err)
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_ErrorEnablingUnit, fmt.Errorf("error while enabling unit: %v", err))
 	}
 
 	return nil

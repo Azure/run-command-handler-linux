@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/go-kit/kit/log"
 )
 
@@ -35,7 +36,7 @@ func GetUriForLogging(uriString string) string {
 }
 
 // Get handler settings from config folder. Example path: /var/lib/waagent/Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.2/config
-func GetHandlerSettings(configFolder string, extensionName string, sequenceNumber int, logContext *log.Context) (HandlerSettings, error) {
+func GetHandlerSettings(configFolder string, extensionName string, sequenceNumber int, logContext *log.Context) (HandlerSettings, *vmextension.ErrorWithClarification) {
 	configPath := GetConfigFilePath(configFolder, sequenceNumber, extensionName)
 	cfg, err := ParseAndValidateSettings(logContext, configPath)
 	return cfg, err

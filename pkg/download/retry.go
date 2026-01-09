@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/go-kit/kit/log"
-	"github.com/pkg/errors"
 )
 
 // SleepFunc pauses the execution for at least duration d.
@@ -32,8 +32,8 @@ const (
 // closed on failures). If the retries do not succeed, the last error is returned.
 //
 // It sleeps in exponentially increasing durations between retries.
-func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.ReadCloser, error) {
-	var downloadErrors error
+func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.ReadCloser, *vmextension.ErrorWithClarification) {
+	var downloadError *vmextension.ErrorWithClarification
 	for _, d := range downloaders {
 		for n := 0; n < expRetryN; n++ {
 			ctx := ctx.With("retry", n)
@@ -42,13 +42,8 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 				return out, nil
 			}
 
-			if downloadErrors != nil {
-				downloadErrors = errors.Wrapf(downloadErrors, fmt.Sprintf("Attempt %d: %s ", n+1, err.Error()))
-			} else {
-				downloadErrors = err
-			}
-
-			ctx.Log("error", err)
+			downloadError = err
+			ctx.Log(fmt.Sprintf("Attempt %d: %s ", n+1, downloadError.Error()))
 
 			if out != nil { // we are not going to read this response body
 				out.Close()
@@ -74,7 +69,7 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 			}
 		}
 	}
-	return nil, downloadErrors
+	return nil, downloadError
 }
 
 func isTransientHttpStatusCode(statusCode int) bool {

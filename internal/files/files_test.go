@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/azure-extension-foundation/msi"
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/ahmetalpbalkan/go-httpbin"
@@ -98,6 +101,7 @@ func Test_urlToFileName_badURL(t *testing.T) {
 	_, err := UrlToFileName("http://192.168.0.%31/")
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), `unable to parse URL: "http://192.168.0.%31/"`)
+	VerifyErrorClarification(t, constants.FileDownload_UnableToParseFileName, err)
 }
 
 func Test_urlToFileName_noFileName(t *testing.T) {
@@ -117,6 +121,7 @@ func Test_urlToFileName_noFileName(t *testing.T) {
 		_, err := UrlToFileName(c)
 		require.NotNil(t, err, "not failed: %s", "url=%s", c)
 		require.Contains(t, err.Error(), "cannot extract file name from URL", "url=%s", c)
+		VerifyErrorClarification(t, constants.FileDownload_CannotExtractFileNameFromUrl, err)
 	}
 }
 
@@ -136,7 +141,8 @@ func Test_urlToFileName(t *testing.T) {
 }
 
 func Test_postProcessFile_fail(t *testing.T) {
-	require.NotNil(t, PostProcessFile("/non/existing/path"))
+	err := PostProcessFile("/non/existing/path")
+	VerifyErrorClarification(t, constants.Internal_FailedToOpenFileForReading, err)
 }
 
 func Test_postProcessFile(t *testing.T) {
@@ -226,4 +232,77 @@ func Test_saveScriptFile(t *testing.T) {
 	result, err := ioutil.ReadFile(filePath)
 	require.Nil(t, err)
 	require.Equal(t, content, string(result))
+}
+
+func TestGetDownloaders_NonBlobURL_ReturnsPublicOnly(t *testing.T) {
+	publicURL := "https://example.com/scripts/a.sh"
+
+	mock := &mockMsiDownloader{providerToReturn: providerSuccess()}
+	downloaders, err := getDownloaders(publicURL, nil, mock)
+
+	require.Nil(t, err)
+	require.Len(t, downloaders, 1, "non-blob URL must return only public downloader")
+	require.Equal(t, 0, mock.calledGet+mock.calledByClientID+mock.calledByObjectID,
+		"msi downloader must not be used for non-blob URL")
+}
+
+func TestGetDownloaders_EmptyURL_ReturnsClarification(t *testing.T) {
+	dl, err := getDownloaders("", nil, &mockMsiDownloader{providerToReturn: providerSuccess()})
+	require.Nil(t, dl)
+	VerifyErrorClarification(t, constants.FileDownload_Empty, err)
+}
+
+func VerifyErrorClarification(t *testing.T, expectedCode int, ewc *vmextension.ErrorWithClarification) {
+	require.NotNil(t, ewc, "No error returned when one was expected")
+	require.Equal(t, expectedCode, ewc.ErrorCode, "Expected error %d but received %d", expectedCode, ewc.ErrorCode)
+}
+
+func TestGetDownloaders_BlobURL_BothClientAndObjectID_ReturnsClarification(t *testing.T) {
+	blobURL := "https://acct.blob.core.windows.net/container/blob.txt"
+
+	mi := &handlersettings.RunCommandManagedIdentity{
+		ClientId: "11111111-1111-1111-1111-111111111111",
+		ObjectId: "22222222-2222-2222-2222-222222222222",
+	}
+
+	mock := &mockMsiDownloader{providerToReturn: providerSuccess()}
+	downloaders, err := getDownloaders(blobURL, mi, mock)
+
+	require.Nil(t, downloaders)
+	VerifyErrorClarification(t, constants.CustomerInput_ClientIdObjectIdBothSpecified, err)
+}
+
+// MsiProvider is invoked as: _, err := msiProvider()
+type mockMsiDownloader struct {
+	calledGet        int
+	calledByClientID int
+	calledByObjectID int
+	lastURL          string
+	lastClientID     string
+	lastObjectID     string
+	providerToReturn download.MsiProvider
+}
+
+func (m *mockMsiDownloader) GetMsiProvider(url string) download.MsiProvider {
+	m.calledGet++
+	m.lastURL = url
+	return m.providerToReturn
+}
+
+func (m *mockMsiDownloader) GetMsiProviderByClientId(url, clientId string) download.MsiProvider {
+	m.calledByClientID++
+	m.lastURL = url
+	m.lastClientID = clientId
+	return m.providerToReturn
+}
+
+func (m *mockMsiDownloader) GetMsiProviderByObjectId(url, objectId string) download.MsiProvider {
+	m.calledByObjectID++
+	m.lastURL = url
+	m.lastObjectID = objectId
+	return m.providerToReturn
+}
+
+func providerSuccess() download.MsiProvider {
+	return func() (msi.Msi, error) { return msi.Msi{}, nil }
 }

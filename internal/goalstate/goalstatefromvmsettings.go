@@ -4,20 +4,21 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
-func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
+func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, *vmextension.ErrorWithClarification) {
 	if communicator == nil {
-		return nil, lastProcessedETag, errors.New("communicator cannot be nil")
+		return nil, lastProcessedETag, vmextension.NewErrorWithClarificationPtr(constants.Hgap_InternalArgumentError, errors.New("communicator cannot be nil"))
 	}
 
 	responseData, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)
 	if err != nil {
-		return nil, lastProcessedETag, errors.Wrapf(err, "failed to retrieve immediate VMSettings")
+		return nil, lastProcessedETag, err
 	}
 
 	if responseData != nil && responseData.Modified {

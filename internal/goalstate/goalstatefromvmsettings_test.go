@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
@@ -14,7 +16,7 @@ import (
 
 type TestCommunicator struct{}
 
-func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
 	extName, seqNum := "testExtension", 5
 	immediateGoalState := hostgacommunicator.ImmediateExtensionGoalState{
 		Name: "Microsoft.CPlat.Core.RunCommandHandlerLinux",
@@ -82,19 +84,19 @@ func (t *TestCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string)
 
 type BadCommunicator struct{}
 
-func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
-	return nil, errors.New("http expected failure")
+func (t *BadCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
+	return nil, vmextension.NewErrorWithClarificationPtr(42, errors.New("http expected failure"))
 }
 
 type NilCommunicator struct{}
 
-func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+func (t *NilCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
 	return nil, nil
 }
 
 type EmptyCommunicator struct{}
 
-func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, error) {
+func (t *EmptyCommunicator) GetImmediateVMSettings(ctx *log.Context, eTag string) (*hostgacommunicator.ResponseData, *vmextension.ErrorWithClarification) {
 	return &hostgacommunicator.ResponseData{VMSettings: &hostgacommunicator.VMImmediateExtensionsGoalState{}, ETag: "123456", Modified: true}, nil
 }
 
@@ -110,8 +112,14 @@ func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	badCommunicator := new(BadCommunicator)
 	_, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, badCommunicator, "")
-	require.ErrorContains(t, err, "failed to retrieve immediate VMSettings")
 	require.ErrorContains(t, err, "http expected failure")
+}
+
+func Test_GetFilteredImmediateVMSettings_NoCommunicator(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	_, _, ewc := goalstate.GetImmediateRunCommandGoalStates(ctx, nil, "")
+	require.NotNil(t, ewc, "No error returned when one was expected")
+	require.Equal(t, constants.Hgap_InternalArgumentError, ewc.ErrorCode, "Expected error %d but received %d", constants.Hgap_InternalArgumentError, ewc.ErrorCode)
 }
 
 func Test_GetFilteredImmediateVMSettingsHandleEmptyResults(t *testing.T) {

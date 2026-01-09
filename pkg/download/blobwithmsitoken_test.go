@@ -3,6 +3,7 @@ package download
 import (
 	"encoding/json"
 	"io/ioutil"
+
 	// "net/http"
 	"testing"
 
@@ -46,8 +47,8 @@ func Test_realDownloadBlobWithMsiToken(t *testing.T) {
 		err := json.Unmarshal([]byte(msiJson), &msi)
 		return msi, err
 	}}
-	_, stream, err := Download(testctx, &downloader)
-	require.NoError(t, err, "File download failed")
+	_, stream, ewc := Download(testctx, &downloader)
+	require.NoError(t, ewc, "File download failed")
 	defer stream.Close()
 
 	bytes, err := ioutil.ReadAll(stream)

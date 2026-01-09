@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/servicehandler"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
@@ -34,10 +35,17 @@ StandardError=append:%run_command_output_directory%
 WantedBy=multi-user.target`
 )
 
-func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
+var (
+	fnIsSystemDPresent = systemd.IsSystemDPresent
+	fnGetUnitManager   = createUnitManager
+	fnChmod            = os.Chmod
+)
+
+func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) *vmextension.ErrorWithClarification {
 	if !isSystemdSupported(ctx) {
-		extensionEvents.LogErrorEvent("register", "Systemd not supported. Failed to register service")
-		return errors.New("Systemd not supported. Failed to register service")
+		errorMsg := "Systemd not supported. Failed to register servcice"
+		extensionEvents.LogErrorEvent("register", errorMsg)
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_Systemd_NotSupported, errors.New(errorMsg))
 	}
 	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
 	ctx.Log("message", "trying to register extension with version: "+targetVersion)
@@ -48,14 +56,14 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 
 	isInstalled, err := IsInstalled(ctx)
 	if err != nil {
-		return err
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotDetermineServiceInstalled, err)
 	}
 
 	// If the service is installed, check if it needs to be upgraded.
 	if isInstalled {
 		installedVersion, err := serviceHandler.GetInstalledVersion(ctx)
 		if err != nil {
-			return err
+			return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotDetermineInstalledVersion, err)
 		}
 
 		if installedVersion == targetVersion {
@@ -68,21 +76,21 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 
 	ctx.Log("message", "Making immediate-run-command-handler executable")
 	execDirectory := os.Getenv(constants.ExtensionPathEnvName) + "/bin/immediate-run-command-handler"
-	err = os.Chmod(execDirectory, 0744)
+	err = fnChmod(execDirectory, 0744)
 	if err != nil {
 		errMessage := fmt.Sprintf("Error while marking the immediate run command binary as executable: %v", err)
 		extensionEvents.LogErrorEvent("register", errMessage)
-		return errors.Wrap(err, "error while marking the immediate run command binary as executable")
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotMarkBinaryAsExecutable, errors.Wrap(err, errMessage))
 	}
 
-	err = serviceHandler.Register(ctx, systemdUnitContent)
-	if err != nil {
-		return err
+	ewc := serviceHandler.Register(ctx, systemdUnitContent)
+	if ewc != nil {
+		return ewc
 	}
 
 	err = Start(ctx, extensionEvents)
 	if err != nil {
-		return err
+		return vmextension.NewErrorWithClarificationPtr(constants.Immediate_CouldNotStartService, err)
 	}
 
 	extensionEvents.LogInformationalEvent("register", "Service registration complete")
@@ -225,7 +233,7 @@ func IsInstalled(ctx *log.Context) (bool, error) {
 func getSystemdHandler(ctx *log.Context) *servicehandler.Handler {
 	ctx.Log("message", "Getting service handler for "+systemdUnitName)
 	config := servicehandler.NewConfiguration(systemdUnitName)
-	handler := servicehandler.NewHandler(systemd.NewUnitManager(), config, ctx)
+	handler := servicehandler.NewHandler(fnGetUnitManager(), config, ctx)
 	return &handler
 }
 
@@ -239,7 +247,7 @@ func generateServiceConfigurationContent(ctx *log.Context) string {
 
 func isSystemdSupported(ctx *log.Context) bool {
 	ctx.Log("message", "Check if systemd is present on the system before applying next operation")
-	result := systemd.IsSystemDPresent()
+	result := fnIsSystemDPresent()
 
 	if result {
 		ctx.Log("message", "systemd was found on the system")
@@ -248,4 +256,8 @@ func isSystemdSupported(ctx *log.Context) bool {
 	}
 
 	return result
+}
+
+func createUnitManager() servicehandler.UnitManager {
+	return systemd.NewUnitManager()
 }

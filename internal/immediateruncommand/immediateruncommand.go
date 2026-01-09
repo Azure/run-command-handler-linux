@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
@@ -15,11 +16,28 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/counterutil"
 	"github.com/go-kit/kit/log"
-	"github.com/pkg/errors"
 )
 
 const (
 	maxConcurrentTasks int32 = 5
+)
+
+// ---- test seams (override in *_test.go) ----
+var (
+	getImmediateGoalStatesFn   = goalstate.GetImmediateRunCommandGoalStates
+	handleImmediateGoalStateFn = goalstate.HandleImmediateGoalState
+	reportFinalStatusFn        = goalstate.ReportFinalStatusForImmediateGoalState
+
+	// signature validation seam (lets tests bypass crypto fields on ImmediateExtensionGoalState)
+	validateSignatureFn = func(el hostgacommunicator.ImmediateExtensionGoalState) (bool, error) {
+		return el.ValidateSignature()
+	}
+
+	// goroutine seam (lets tests run synchronously)
+	spawnFn = func(f func()) { go f() }
+
+	// time seam
+	nowFn = func() time.Time { return time.Now().UTC() }
 )
 
 var executingTasks counterutil.AtomicCount
@@ -31,11 +49,11 @@ var goalStateEventObserver = status.StatusObserver{}
 
 type VMSettingsRequestManager struct{}
 
-func (*VMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, error) {
+func (*VMSettingsRequestManager) GetVMSettingsRequestManager(ctx *log.Context) (*requesthelper.RequestManager, *vmextension.ErrorWithClarification) {
 	return hostgacommunicator.GetVMSettingsRequestManager(ctx)
 }
 
-func StartImmediateRunCommand(ctx *log.Context) error {
+func StartImmediateRunCommand(ctx *log.Context) *vmextension.ErrorWithClarification {
 	ctx.Log("message", "starting immediate run command service")
 	var vmRequestManager = new(VMSettingsRequestManager)
 	var lastProcessedETag string = ""
@@ -47,7 +65,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 		newProcessedETag, err := processImmediateRunCommandGoalStates(ctx, communicator, lastProcessedETag)
 
 		if err != nil {
-			ctx.Log("error", errors.Wrapf(err, "could not process new immediate run command states because of an unexpected error"))
+			ctx.Log("error", vmextension.CreateWrappedErrorWithClarification(err, "could not process new immediate run command states because of an unexpected error"))
 			ctx.Log("message", "sleep for 5 seconds before retrying")
 			time.Sleep(time.Second * time.Duration(5))
 		} else {
@@ -61,7 +79,7 @@ func StartImmediateRunCommand(ctx *log.Context) error {
 	}
 }
 
-func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.HostGACommunicator, lastProcessedETag string) (string, error) {
+func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.HostGACommunicator, lastProcessedETag string) (string, *vmextension.ErrorWithClarification) {
 	executingTaskCount := executingTasks.Get()
 	maxTasksToFetch := int(math.Max(float64(maxConcurrentTasks-executingTaskCount), 0))
 
@@ -74,9 +92,9 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		return lastProcessedETag, nil
 	}
 
-	goalStates, newEtag, err := goalstate.GetImmediateRunCommandGoalStates(ctx, &communicator, lastProcessedETag)
+	goalStates, newEtag, err := getImmediateGoalStatesFn(ctx, &communicator, lastProcessedETag)
 	if err != nil {
-		return newEtag, errors.Wrapf(err, "could not retrieve goal states for immediate run command")
+		return newEtag, vmextension.CreateWrappedErrorWithClarification(err, "could not retrieve goal states for immediate run command")
 	}
 
 	// VM Settings have not changed and we should not process any new goal states
@@ -93,16 +111,18 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 		}
 	}
 	goalStateEventObserver.RemoveProcessedGoalStates(goalStateKeys)
-	newGoalStates, skippedGoalStates, err := getGoalStatesToProcess(goalStates, maxTasksToFetch)
-	if err != nil {
-		return newEtag, errors.Wrap(err, "could not get goal states to process")
+	newGoalStates, skippedGoalStates, ewc := getGoalStatesToProcess(goalStates, maxTasksToFetch)
+	if ewc != nil {
+		return newEtag, vmextension.CreateWrappedErrorWithClarification(err, "could not get goal states to process")
 	}
 
 	if len(newGoalStates) > 0 {
 		ctx.Log("message", fmt.Sprintf("trying to launch %v goal states concurrently", len(newGoalStates)))
 
 		for idx := range newGoalStates {
-			go func(state settings.SettingsCommon) {
+			st := newGoalStates[idx]
+			spawnFn(func() {
+				state := st
 				ctx.Log("message", "launching new goal state. Incrementing executing tasks counter")
 				executingTasks.Increment()
 
@@ -114,29 +134,33 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				notifier := &observer.Notifier{}
 				notifier.Register(&goalStateEventObserver)
 				notifier.Notify(status)
-				startTime := time.Now().UTC().Format(time.RFC3339)
-				exitCode, err := goalstate.HandleImmediateGoalState(ctx, state, notifier)
+				startTime := nowFn().Format(time.RFC3339)
+				exitCode, ewc := handleImmediateGoalStateFn(ctx, state, notifier)
 
 				ctx.Log("message", "goal state has exited. Decrementing executing tasks counter")
 				executingTasks.Decrement()
 
 				// If there was an error executing the goal state, report the final status to the HGAP
 				// For successful goal states, the status is reported by the usual workflow
-				if err != nil {
-					ctx.Log("error", "failed to execute goal state", "message", err)
-					instView := types.RunCommandInstanceView{
-						ExecutionState:   types.Failed,
-						ExecutionMessage: "Execution failed",
-						ExitCode:         exitCode,
-						Output:           "",
-						Error:            err.Error(),
-						StartTime:        startTime,
-						EndTime:          time.Now().UTC().Format(time.RFC3339),
-					}
-					goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView)
+				if ewc != nil {
+					ctx.Log("error", "failed to execute goal state", "message", ewc)
 
+					errorCode := ewc.ErrorCode
+
+					instView := types.RunCommandInstanceView{
+						ExecutionState:          types.Failed,
+						ExecutionMessage:        "Execution failed",
+						ExitCode:                exitCode,
+						Output:                  "",
+						Error:                   ewc.Error(),
+						StartTime:               startTime,
+						EndTime:                 nowFn().Format(time.RFC3339),
+						ErrorClarificationValue: errorCode,
+					}
+
+					reportFinalStatusFn(ctx, notifier, statusKey, types.StatusError, &instView)
 				}
-			}(newGoalStates[idx])
+			})
 		}
 
 		ctx.Log("message", "finished launching goal states")
@@ -155,13 +179,13 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 			instView := types.RunCommandInstanceView{
 				ExecutionState:   types.Failed,
 				ExecutionMessage: "Execution was skipped due to reaching the maximum concurrent tasks",
-				ExitCode:         constants.ExitCode_SkippedImmediateGoalState,
+				ExitCode:         constants.ImmediateRC_CommandSkipped,
 				Output:           "",
 				Error:            errorMsg,
 				StartTime:        time.Now().UTC().Format(time.RFC3339),
 				EndTime:          time.Now().UTC().Format(time.RFC3339),
 			}
-			goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusSkipped, &instView)
+			reportFinalStatusFn(ctx, notifier, statusKey, types.StatusSkipped, &instView)
 		}
 	} else {
 		ctx.Log("message", "no goal states were skipped")
@@ -175,9 +199,9 @@ func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGo
 	var newGoalStates []settings.SettingsCommon
 	var skippedGoalStates []settings.SettingsCommon
 	for _, el := range goalStates {
-		validSignature, err := el.ValidateSignature()
+		validSignature, err := validateSignatureFn(el)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to validate goal state signature")
+			return nil, nil, err
 		}
 
 		if validSignature {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/cleanup"
 	commands "github.com/Azure/run-command-handler-linux/internal/cmds"
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
@@ -33,20 +34,20 @@ var statusToCommandMap = map[string]string{
 // setting: The settings for the command.
 // notifier: The notifier to send the status to the HGAP. This is a notifier that must have been initialized and a status observer must have been added to it.
 // Returns the exit code and an error if there was an issue executing the goal state.
-func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier) (int, error) {
+func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier) (int, *vmextension.ErrorWithClarification) {
 	done := make(chan bool)
 	err := make(chan error)
 	go startAsync(ctx, setting, notifier, done, err)
 	select {
 	case e := <-err:
 		ctx.Log("error", fmt.Sprintf("error when trying to execute goal state: %v", e))
-		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(e, "error when trying to execute goal state")
+		return constants.ImmediateRC_UnknownFailure, vmextension.NewErrorWithClarificationPtr(constants.ImmediateRC_UnknownFailure, errors.New("error when trying to execute goal state"))
 	case <-done:
 		ctx.Log("message", "goal state successfully finished")
 		return constants.ExitCode_Okay, nil
 	case <-time.After(time.Minute * time.Duration(maxExecutionTimeInMinutes)):
 		ctx.Log("message", "timeout when trying to execute goal state")
-		return constants.ExitCode_ImmediateTaskTimeout, errors.New("timeout when trying to execute goal state")
+		return constants.ImmediateRC_TaskTimeout, vmextension.NewErrorWithClarificationPtr(constants.ImmediateRC_TaskTimeout, errors.New("timeout when trying to execute goal state"))
 	}
 }
 
@@ -109,7 +110,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 	}
 
 	// Overwrite function to report status to HGAP. This function prepares the status to be sent to the HGAP and then calls the notifier to send it.
-	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
+	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string, exitcode ...int) error {
 		if !c.ShouldReportStatus {
 			ctx.Log("status", fmt.Sprintf("status not reported for operation %v (by design)", c.Name))
 			return nil

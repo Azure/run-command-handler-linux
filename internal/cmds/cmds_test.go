@@ -12,10 +12,14 @@ import (
 	"strings"
 	"testing"
 
+	osexec "os/exec"
+
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
@@ -377,7 +381,7 @@ func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir st
 	err = encoder.Encode(handlerSettings)
 	require.Nil(t, err, "Could not serialze settings file")
 
-	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (*vmextension.ErrorWithClarification, int) {
 		wasCalled = true
 		return nil, 0 // mock behavior
 	}
@@ -434,6 +438,13 @@ func Test_runCmd_success(t *testing.T) {
 	dir, err := os.MkdirTemp("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
+
+	orig := exec.FnRunCommand
+	defer func() { exec.FnRunCommand = orig }()
+	exec.FnRunCommand = func(_ *osexec.Cmd) error {
+		// Success
+		return nil
+	}
 
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
@@ -582,7 +593,7 @@ func Test_downloadArtifactsFail(t *testing.T) {
 		})
 
 	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "failed to download artifact")
+	require.Contains(t, err.Error(), "Failed to download artifact")
 }
 
 func Test_downloadArtifacts(t *testing.T) {
@@ -637,7 +648,7 @@ func Test_decodeScript(t *testing.T) {
 	testSubject := "bHMK"
 	s, info, err := decodeScript(testSubject)
 
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, info, "4;3;gzip=0")
 	require.Equal(t, s, "ls\n")
 }
@@ -646,7 +657,7 @@ func Test_decodeScriptGzip(t *testing.T) {
 	testSubject := "H4sIACD731kAA8sp5gIAfShLWgMAAAA="
 	s, info, err := decodeScript(testSubject)
 
-	require.NoError(t, err)
+	require.Nil(t, err)
 	require.Equal(t, info, "32;3;gzip=1")
 	require.Equal(t, s, "ls\n")
 }

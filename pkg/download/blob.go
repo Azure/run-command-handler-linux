@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/pkg/blobutil"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -28,9 +30,9 @@ type blobDownload struct {
 }
 
 func (b blobDownload) GetRequest() (*http.Request, error) {
-	url, err := b.getURL()
-	if err != nil {
-		return nil, err
+	url, ewc := b.getURL()
+	if ewc != nil {
+		return nil, ewc
 	}
 	req, err := http.NewRequest("GET", url, nil)
 	if req != nil {
@@ -41,11 +43,11 @@ func (b blobDownload) GetRequest() (*http.Request, error) {
 
 // getURL returns publicly downloadable URL of the Azure Blob
 // by generating a URL with a temporary Shared Access Signature.
-func (b blobDownload) getURL() (string, error) {
+func (b blobDownload) getURL() (string, *vmextension.ErrorWithClarification) {
 	client, err := storage.NewClient(b.accountName, b.accountKey,
 		b.blob.StorageBase, storage.DefaultAPIVersion, true)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to initialize azure storage client")
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_StorageClientInitialization, errors.Wrap(err, "failed to initialize azure storage client"))
 	}
 
 	// get read-only
@@ -61,7 +63,7 @@ func (b blobDownload) getURL() (string, error) {
 	sasURL, err := blob.GetSASURI(options)
 
 	if err != nil {
-		return "", errors.Wrap(err, "failed to generate SAS key for blob")
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_CannotGenerateSasKey, errors.Wrap(err, "failed to generate SAS key for blob"))
 	}
 	return sasURL, nil
 }
@@ -73,25 +75,25 @@ func NewBlobDownload(accountName, accountKey string, blob blobutil.AzureBlobRef)
 
 // GetSASBlob download a blob with specified uri and sas authorization and saves it to the target directory
 // Returns the filePath where the blob was downloaded
-func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
+func GetSASBlob(blobURI, blobSas, targetDir string) (string, *vmextension.ErrorWithClarification) {
 	blobFullURL := blobURI + blobSas
 
 	loggableBlobUri := GetUriForLogging(blobURI)
 
 	resp, err := http.Get(blobFullURL)
 	if err != nil {
-		return "", errors.Wrapf(err, "Failed to download file: %q", loggableBlobUri)
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_GenericError, errors.Wrapf(err, "Failed to download file: %q", loggableBlobUri))
 	}
 	defer resp.Body.Close() // Ensure the response body is closed after we're done
 
 	// Check if the HTTP status code indicates success (e.g., 200 OK)
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.Wrapf(err, "Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status)
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_FailedStatusCode, errors.Wrapf(err, "Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status))
 	}
 
 	blobParsedurl, err := url.Parse(blobURI)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to parse URL: %q", loggableBlobUri)
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_CannotParseUrl, errors.Wrapf(err, "unable to parse URL: %q", loggableBlobUri))
 	}
 	// Extract container name from Path of the url https://<hostName>/<Path>   For ex. Path = "containerName/dir1/dir2/file.sh"
 	trimmedPath := strings.Trim(blobParsedurl.Path, "/")
@@ -101,7 +103,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	// Extract the blob path after container name
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerName)
 	if fileName == "" || blobPathError != nil {
-		return "", errors.Wrapf(blobPathError, "Failed to extract blob path name from URL: %q", loggableBlobUri)
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_CannotExtractFileNameFromUrl, errors.Wrapf(blobPathError, "Failed to extract blob path name from URL: %q", loggableBlobUri))
 	}
 
 	// Create the local file
@@ -109,7 +111,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	const mode = 0500 // scripts should have execute permissions
 	outFile, err := os.OpenFile(scriptFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return "", errors.Wrapf(err, "Failed to open file '%s' for writing: ", scriptFilePath)
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_UnableToWriteFile, errors.Wrapf(err, "Failed to open file '%s' for writing: ", scriptFilePath))
 	}
 	defer outFile.Close() // Ensure the file is closed after we're done
 
@@ -118,34 +120,34 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	// loading the entire file into memory.
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
-		return "", errors.Wrapf(err, "Failed to copy data to file '%s'", scriptFilePath)
+		return "", vmextension.NewErrorWithClarificationPtr(constants.FileDownload_UnableToWriteFile, errors.Wrapf(err, "Failed to copy data to file '%s'", scriptFilePath))
 	}
 
 	return scriptFilePath, nil
 }
 
 // CreateOrReplaceAppendBlob creates a reference to an append blob. If blob exists - it gets deleted first.
-func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
+func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, *vmextension.ErrorWithClarification) {
 
 	bloburl, err := url.Parse(blobURI + blobSas)
 	if err != nil {
-		return nil, err
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_InvalidUri, err)
 	}
 
 	containerRef, err := storage.GetContainerReferenceFromSASURI(*bloburl)
 	if err != nil {
-		return nil, err
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_InvalidUri, err)
 	}
 
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
-		return nil, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", GetUriForLogging(blobURI))
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_InvalidUri, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", GetUriForLogging(blobURI)))
 	}
 
 	blobref := containerRef.GetBlobReference(fileName)
 	err = blobref.PutAppendBlob(nil) // Create the append blob
 	if err != nil {
-		return nil, err
+		return nil, vmextension.NewErrorWithClarificationPtr(constants.AppendBlobCreation_Other, err)
 	}
 
 	return blobref, nil

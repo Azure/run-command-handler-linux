@@ -30,13 +30,14 @@ const (
 
 // RunCommandInstanceView reports script execution status
 type RunCommandInstanceView struct {
-	ExecutionState   ExecutionState `json:"executionState"`
-	ExecutionMessage string         `json:"executionMessage"`
-	Output           string         `json:"output"`
-	Error            string         `json:"error"`
-	ExitCode         int            `json:"exitCode"`
-	StartTime        string         `json:"startTime"`
-	EndTime          string         `json:"endTime"`
+	ExecutionState          ExecutionState `json:"executionState"`
+	ExecutionMessage        string         `json:"executionMessage"`
+	Output                  string         `json:"output"`
+	Error                   string         `json:"error"`
+	ExitCode                int            `json:"exitCode"`
+	StartTime               string         `json:"startTime"`
+	EndTime                 string         `json:"endTime"`
+	ErrorClarificationValue int            `json:"errorClarificationValue,omitempty"`
 }
 
 func (instanceView RunCommandInstanceView) Marshal() ([]byte, error) {

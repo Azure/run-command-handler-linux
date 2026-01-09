@@ -1,6 +1,7 @@
 package handlersettings
 
 import (
+	"github.com/Azure/azure-extension-platform/vmextension"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -11,7 +12,7 @@ var (
 
 // parseAndValidateSettings reads configuration from configFolder, decrypts it,
 // runs JSON-schema and logical validation on it and returns it back.
-func ParseAndValidateSettings(ctx *log.Context, configFilePath string) (h HandlerSettings, _ error) {
+func ParseAndValidateSettings(ctx *log.Context, configFilePath string) (h HandlerSettings, _ *vmextension.ErrorWithClarification) {
 	ctx.Log("event", "reading configuration from "+configFilePath)
 	pubJSON, protJSON, err := readSettings(configFilePath)
 	if err != nil {
@@ -21,13 +22,13 @@ func ParseAndValidateSettings(ctx *log.Context, configFilePath string) (h Handle
 
 	ctx.Log("event", "parsing configuration json")
 	if err := UnmarshalHandlerSettings(pubJSON, protJSON, &h.PublicSettings, &h.ProtectedSettings); err != nil {
-		return h, errors.Wrap(err, "json parsing error")
+		return h, err
 	}
 	ctx.Log("event", "parsed configuration json")
 
 	ctx.Log("event", "validating configuration logically")
 	if err := h.validate(); err != nil {
-		return h, errors.Wrap(err, "invalid configuration")
+		return h, err
 	}
 	ctx.Log("event", "validated configuration")
 	return h, nil
@@ -36,8 +37,7 @@ func ParseAndValidateSettings(ctx *log.Context, configFilePath string) (h Handle
 // readSettings uses specified configFilePath (comes from HandlerEnvironment) to
 // decrypt and parse the public/protected settings of the extension handler into
 // JSON objects.
-func readSettings(configFilePath string) (pubSettingsJSON, protSettingsJSON map[string]interface{}, err error) {
+func readSettings(configFilePath string) (pubSettingsJSON, protSettingsJSON map[string]interface{}, err *vmextension.ErrorWithClarification) {
 	pubSettingsJSON, protSettingsJSON, err = ReadSettings(configFilePath)
-	err = errors.Wrapf(err, "error reading extension configuration")
 	return
 }

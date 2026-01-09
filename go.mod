@@ -6,7 +6,7 @@ toolchain go1.24.5
 
 require (
 	github.com/Azure/azure-extension-foundation v0.0.0-20250620154556-caff9e3c3c5c
-	github.com/Azure/azure-extension-platform v0.0.0-20250107200156-aa20f765d49f
+	github.com/Azure/azure-extension-platform v0.0.0-20260107210613-2a62cc200c34
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.8.0
