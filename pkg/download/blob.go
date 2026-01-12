@@ -104,7 +104,14 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 		return "", errors.Wrapf(blobPathError, "Failed to extract blob path name from URL: %q", loggableBlobUri)
 	}
 
-	// Create the local file
+	// Create the local file path, including any nested directories
+	nestedDirs := strings.Replace(trimmedPath, containerName, "", 1)
+	nestedDirs = strings.Replace(nestedDirs, splitStrings[len(splitStrings)-1], "", 1)
+	fileDir := targetDir + "/" + nestedDirs // Create the nested directories if they do not exist
+	if os.MkdirAll(fileDir, 0777) != nil {
+		return "", errors.Wrapf(err, "Failed to create target directory: %q", fileDir)
+	}
+
 	scriptFilePath := filepath.Join(targetDir, fileName)
 	const mode = 0500 // scripts should have execute permissions
 	outFile, err := os.OpenFile(scriptFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
