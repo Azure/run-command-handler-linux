@@ -96,12 +96,16 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	// Extract container name from Path of the url https://<hostName>/<Path>   For ex. Path = "containerName/dir1/dir2/file.sh"
 	trimmedPath := strings.Trim(blobParsedurl.Path, "/")
 	splitStrings := strings.Split(trimmedPath, "/")
-	containerName := splitStrings[0]
+	//containerName := splitStrings[0]
 
 	// Extract the blob path after container name
-	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerName)
-	if fileName == "" || blobPathError != nil {
-		return "", errors.Wrapf(blobPathError, "Failed to extract blob path name from URL: %q", loggableBlobUri)
+	// fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerName)
+	// if fileName == "" || blobPathError != nil {
+	// 	return "", errors.Wrapf(blobPathError, "Failed to extract blob path name from URL: %q", loggableBlobUri)
+	// }
+	fileName := splitStrings[len(splitStrings)-1]
+	if fileName == "" {
+		return "", errors.Errorf("cannot extract file name from URL: %q", loggableBlobUri)
 	}
 
 	// Create the local file

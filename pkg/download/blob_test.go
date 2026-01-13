@@ -200,6 +200,73 @@ func Test_blobDownload_actualBlob(t *testing.T) {
 	require.EqualValues(t, chunk, b, "retrieved body is different body=%d chunk=%d", len(b), len(chunk))
 }
 
+func Test_GetSASBlob_nestedDirectories_actualBlob(t *testing.T) {
+    acct := os.Getenv("AZURE_STORAGE_ACCOUNT")
+    key := os.Getenv("AZURE_STORAGE_ACCESS_KEY")
+    if acct == "" || key == "" {
+        t.Skipf("Skipping: AZURE_STORAGE_ACCOUNT or AZURE_STORAGE_ACCESS_KEY not specified to run this test")
+    }
+    base := storage.DefaultBaseURL
+
+    // Create a blob in a nested directory structure
+    client, err := storage.NewClient(acct, key, base, storage.DefaultAPIVersion, true)
+    require.Nil(t, err)
+    blobStorageClient := client.GetBlobService()
+
+    var (
+        content   = []byte("test script content\n")
+        name      = "dir1/dir2/script.sh" // nested path
+        container = fmt.Sprintf("run-command-test-%d", rand.New(rand.NewSource(time.Now().UnixNano())).Int63())
+    )
+
+    containerReference := blobStorageClient.GetContainerReference(container)
+    _, err = containerReference.DeleteIfExists(nil)
+    require.Nil(t, err)
+    _, err = containerReference.CreateIfNotExists(&storage.CreateContainerOptions{Access: storage.ContainerAccessTypePrivate})
+    require.Nil(t, err)
+    defer containerReference.Delete(nil)
+    
+    blobReference := containerReference.GetBlobReference(name)
+    require.Nil(t, blobReference.PutAppendBlob(nil))
+    require.Nil(t, blobReference.AppendBlock(content, nil))
+
+    // Generate SAS URL for the blob
+    d := NewBlobDownload(acct, key, blobutil.AzureBlobRef{
+        Container:   container,
+        Blob:        name,
+        StorageBase: base,
+    })
+    v, ok := d.(blobDownload)
+    require.True(t, ok)
+    sasURL, err := v.getURL()
+    require.Nil(t, err)
+
+    // Parse the SAS URL to separate URI from SAS token
+    blobURI := fmt.Sprintf("https://%s.blob.%s/%s/%s", acct, base, container, name)
+    sasToken := sasURL[len(blobURI):] // Everything after the base URI is the SAS token
+
+    // Download the blob using GetSASBlob
+    tmpDir, err := ioutil.TempDir("", "nested-test-")
+    require.Nil(t, err)
+    defer os.RemoveAll(tmpDir)
+
+    scriptFilePath, err := GetSASBlob(blobURI, sasToken, tmpDir)
+    require.Nil(t, err)
+
+    // Verify that the file was downloaded with correct content
+    result, err := ioutil.ReadFile(scriptFilePath)
+    require.Nil(t, err)
+    require.EqualValues(t, content, result, "downloaded content should match")
+
+    // Verify that the file was created
+    require.Contains(t, scriptFilePath, tmpDir, "file path should be in temp directory")
+    
+    // Verify the file exists and is not a directory
+    fileInfo, err := os.Stat(scriptFilePath)
+    require.Nil(t, err)
+    require.False(t, fileInfo.IsDir(), "should be a file, not a directory")
+}
+
 func Test_blobAppend_actualBlob(t *testing.T) {
 	// Before running the test locally prepare storage account and set the following env variables:
 	// export AZURE_STORAGE_BLOB="https://atanas.blob.core.windows.net/con1/output5.txt"
