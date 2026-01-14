@@ -456,14 +456,19 @@ func determineUpgradeVersionDirectories(ctx *log.Context, extensionEvents *exten
 	upgradeToVersion := os.Getenv(constants.VersionEnvName)
 	extensionVersionValue := os.Getenv(constants.ExtensionVersionEnvName)
 	updatingFromVersionValue := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
-	upgradeType := "upgrade"
 
-	// First, we need to determine if this is an upgrade or a downgrade
-	// This is a downgrade if the updating from version is equal to the version
+	// In some WALA versions, there is a bug where on downgrade it will send the same value for upgradeToVersion and upgradeFromVersion
+	// Newer versions will send the correct value for upgradeToVersion
+	// Therefore:
+	// Action    | Old WALA                               | New WALA
+	// ---------------------------------------------------| -------------------------------------
+	// Downgrade | upgradeToVersion == upgradeFromVersion | upgradeToVersion < upgradeFromVersion
+	// ------------------------------------------------------------------------------------------
+	// Upgrade   | upgradeToVersion > upgradeFromVersion  | upgradeToVersion > upgradeFromVersion
+	// ------------------------------------------------------------------------------------------
 	if upgradeToVersion == updatingFromVersionValue {
-		// This is a downgrade
+		// This is a downgrade. We therefore need to use the extension version
 		upgradeFromVersion = extensionVersionValue
-		upgradeType = "downgrade"
 	} else {
 		// This is an upgrade
 		upgradeFromVersion = updatingFromVersionValue
@@ -479,7 +484,7 @@ func determineUpgradeVersionDirectories(ctx *log.Context, extensionEvents *exten
 		upgradeToVersionDirectory = strings.ReplaceAll(extensionDirectory, upgradeFromVersion, upgradeToVersion)
 	}
 
-	msg := fmt.Sprintf("determineUpgradeVersionDirectories: %s from='%s' to='%s'", upgradeType, upgradeToVersionDirectory, upgradeFromVersionDirectory)
+	msg := fmt.Sprintf("determineUpgradeVersionDirectories: move from='%s' to='%s'", upgradeToVersionDirectory, upgradeFromVersionDirectory)
 	ctx.Log("message", msg)
 	extensionEvents.LogInformationalEvent("determineUpgradeVersions", msg)
 
