@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -452,74 +453,37 @@ func CopyStateForUpdate(ctx log.Logger, upgradeFromVersionDirectory string, upgr
 func determineUpgradeVersionDirectories(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) (upgradeFromVersionDirectory string, upgradeToVersionDirectory string, upgradeFromVersion string) {
 	// These two environment variables will tell us the extension versions involved, but won't actually tell us
 	// the from/to versions
-	firstExtensionVersion := os.Getenv(constants.ExtensionVersionEnvName)
-	secondExtensionVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
+	upgradeToVersion := os.Getenv(constants.VersionEnvName)
+	extensionVersionValue := os.Getenv(constants.ExtensionVersionEnvName)
+	updatingFromVersionValue := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
+	upgradeType := "upgrade"
 
-	// To determine to which version we're actually upgrading, we'll need to look into the folders
-	// The higher version isn't necessarily the one we're upgrading to, since we may be downgrading
-	// If one has at least one .mrseq file, and the other has none, then we're upgrading to the one that has none
-	// If neither has a .mrseq file, then just choose the higher version number
-	// If both have .mrseq files, then this shouldn't happen, but for the sake of sanity choose the higher version number
-	firstExtensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
-	secondExtensionDirectory := strings.ReplaceAll(firstExtensionDirectory, firstExtensionVersion, secondExtensionVersion)
-
-	// Check for *.mrseq presence in each directory
-	firstHasMrseq := hasMrseq(ctx, firstExtensionDirectory)
-	secondHasMrseq := hasMrseq(ctx, secondExtensionDirectory)
-
-	// If one has mrseq and the other doesn't → upgrade to the one without mrseq
-	if firstHasMrseq != secondHasMrseq {
-		if firstHasMrseq && !secondHasMrseq {
-			upgradeToVersionDirectory, upgradeFromVersionDirectory = secondExtensionDirectory, firstExtensionDirectory
-			upgradeFromVersion = firstExtensionVersion
-		} else {
-			upgradeToVersionDirectory, upgradeFromVersionDirectory = firstExtensionDirectory, secondExtensionDirectory
-			upgradeFromVersion = secondExtensionVersion
-		}
-
-		msg := fmt.Sprintf("determineUpgradeVersions: mrseq-guided choice → to='%s' from='%s'", upgradeToVersionDirectory, upgradeFromVersionDirectory)
-		ctx.Log("message", msg)
-		extensionEvents.LogInformationalEvent("determineUpgradeVersions", msg)
-
-		return upgradeFromVersionDirectory, upgradeToVersionDirectory, upgradeFromVersion
+	// First, we need to determine if this is an upgrade or a downgrade
+	// This is a downgrade if the updating from version is equal to the version
+	if upgradeToVersion == updatingFromVersionValue {
+		// This is a downgrade
+		upgradeFromVersion = extensionVersionValue
+		upgradeType = "downgrade"
+	} else {
+		// This is an upgrade
+		upgradeFromVersion = updatingFromVersionValue
 	}
 
-	// Rule 2 & 3: neither has mrseq OR both have mrseq → choose higher version number as upgradeTo
-	switch c := compareVersions(firstExtensionVersion, secondExtensionVersion); {
-	case c > 0:
-		upgradeToVersionDirectory, upgradeFromVersionDirectory = firstExtensionDirectory, secondExtensionDirectory
-		upgradeFromVersion = secondExtensionVersion
-	case c < 0:
-		upgradeToVersionDirectory, upgradeFromVersionDirectory = secondExtensionDirectory, firstExtensionDirectory
-		upgradeFromVersion = firstExtensionVersion
-	default:
-		// Equal versions (shouldn’t normally happen in an upgrade path). Keep first as "to".
-		upgradeToVersionDirectory, upgradeFromVersionDirectory = firstExtensionDirectory, secondExtensionDirectory
-		upgradeFromVersion = secondExtensionVersion
+	// Determine the corresponding extension directories
+	extensionDirectory := os.Getenv(constants.ExtensionPathEnvName)
+	if strings.Contains(extensionDirectory, upgradeToVersion) {
+		upgradeToVersionDirectory = extensionDirectory
+		upgradeFromVersionDirectory = strings.ReplaceAll(extensionDirectory, upgradeToVersion, upgradeFromVersion)
+	} else {
+		upgradeFromVersionDirectory = extensionDirectory
+		upgradeToVersionDirectory = strings.ReplaceAll(extensionDirectory, upgradeFromVersion, upgradeToVersion)
 	}
 
-	msg := fmt.Sprintf("determineUpgradeVersions: version-ordered choice → to='%s' from='%s' (mrseq first=%t second=%t)", upgradeToVersionDirectory, upgradeFromVersionDirectory, firstHasMrseq, secondHasMrseq)
+	msg := fmt.Sprintf("determineUpgradeVersionDirectories: %s from='%s' to='%s'", upgradeType, upgradeToVersionDirectory, upgradeFromVersionDirectory)
 	ctx.Log("message", msg)
 	extensionEvents.LogInformationalEvent("determineUpgradeVersions", msg)
 
 	return upgradeFromVersionDirectory, upgradeToVersionDirectory, upgradeFromVersion
-}
-
-// hasMrseq returns true if the given directory contains at least one *.mrseq file.
-// It is resilient to missing directories and IO errors (logs and returns false).
-func hasMrseq(ctx *log.Context, dir string) bool {
-	if dir == "" {
-		return false
-	}
-	// Resolve glob pattern
-	pattern := filepath.Join(dir, "*.mrseq")
-
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		ctx.Log("error", fmt.Sprintf("hasMrseq: glob error for '%s': %v", pattern, err))
-		return false
-	}
-	return len(matches) > 0
 }
 
 // compareVersions compares two dotted version strings (e.g., "2.1", "2.1.0", "2.1.0.3").
@@ -549,36 +513,30 @@ func splitVersion(v string) []int {
 	parts := strings.Split(v, ".")
 	out := make([]int, 0, len(parts))
 	for _, p := range parts {
-		// Trim any stray spaces; non-numeric gets 0
 		p = strings.TrimSpace(p)
-		n := 0
-		for i := 0; i < len(p); i++ {
-			if p[i] < '0' || p[i] > '9' {
-				// non-numeric component; keep as 0
-				n = 0
-				goto done
-			}
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			n = 0
 		}
-		if p != "" {
-			// safe Atoi without error branch since we checked digits
-			for i := 0; i < len(p); i++ {
-				n = n*10 + int(p[i]-'0')
-			}
-		}
-	done:
 		out = append(out, n)
 	}
 	return out
 }
 
 func padTo(in []int, size int) []int {
+
 	if len(in) >= size {
 		return in[:size]
 	}
-	out := make([]int, size)
-	copy(out, in)
-	// remaining default to 0
+	n := size - len(in)
+
+	// Ensure capacity for the extra n elements without reallocating.
+	out := slices.Grow(in, n)
+
+	// Extend length to size by appending n zero-values.
+	out = append(out, make([]int, n)...)
 	return out
+
 }
 
 func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersionDirectory string, updateToVersionDirectory string, extensionEvents *extensionevents.ExtensionEventManager) error {

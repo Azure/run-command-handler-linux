@@ -301,7 +301,7 @@ func TestHandlerSuccessfulDeRegister(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp)
 
-	os.Setenv(constants.ExtensionVersionEnvName, installedTargetVersion)
+	os.Setenv(constants.VersionEnvName, installedTargetVersion)
 	handler := NewHandler(m, config, ctx)
 	err := handler.DeRegister(ctx)
 	if err != nil {
@@ -336,7 +336,7 @@ func TestHandlerSkipDeRegisterForNonInstalledTargetVersion(t *testing.T) {
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(
 		os.Stdout))).With("time", log.DefaultTimestamp)
 
-	os.Setenv(constants.ExtensionVersionEnvName, nonInstalledTargetVersion)
+	os.Setenv(constants.VersionEnvName, nonInstalledTargetVersion)
 	handler := NewHandler(m, config, ctx)
 	err := handler.DeRegister(ctx)
 	if err != nil {

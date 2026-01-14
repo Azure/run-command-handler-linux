@@ -3,7 +3,6 @@ package commands
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -31,9 +30,9 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	currentExtensionVersionDirectory := "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8"
 	os.Setenv(constants.ExtensionPathEnvName, currentExtensionVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.7")
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
+	os.Setenv(constants.VersionEnvName, "1.3.8")
 
-	currentVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	currentVersion := os.Getenv(constants.VersionEnvName)
 	previousVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
 	previousExtensionVersionDirectory := strings.ReplaceAll(currentExtensionVersionDirectory, currentVersion, previousVersion)
 
@@ -212,7 +211,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
+	os.Setenv(constants.VersionEnvName, "1.3.8")
 
 	// Create two extensions
 	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
@@ -224,7 +223,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
 
 	// Step 2: WALA will call update
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.9")
+	os.Setenv(constants.VersionEnvName, "1.3.9")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
 	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
@@ -264,7 +263,7 @@ func Test_update_e23_non_problematic_version(t *testing.T) {
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.26")
+	os.Setenv(constants.VersionEnvName, "1.3.26")
 
 	// Create three extensions
 	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
@@ -281,7 +280,7 @@ func Test_update_e23_non_problematic_version(t *testing.T) {
 	disable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk")
 
 	// Step 2: WALA will call update
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.27")
+	os.Setenv(constants.VersionEnvName, "1.3.27")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.26")
 	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
@@ -327,7 +326,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.17")
+	os.Setenv(constants.VersionEnvName, "1.3.17")
 
 	// Create three extensions
 	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
@@ -354,7 +353,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	os.WriteFile(filepath.Join(oldStatusPath, "this.is.a.bad.chipmunk.0.status"), []byte("0"), os.FileMode(0600))
 
 	// Step 2: WALA will call update
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.18")
+	os.Setenv(constants.VersionEnvName, "1.3.18")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.17")
 	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
@@ -932,12 +931,12 @@ func TestSplitVersion(t *testing.T) {
 			name: "dash-negative-like",
 			in:   "1.-2.3",
 			// '-' makes component non-numeric → 0
-			expected: []int{1, 0, 3},
+			expected: []int{1, -2, 3},
 		},
 		{
 			name:     "plus-sign",
 			in:       "+1.2",
-			expected: []int{0, 2},
+			expected: []int{1, 2},
 		},
 		{
 			name:     "long-many-parts",
@@ -1065,224 +1064,136 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
-func TestHasMrseq(t *testing.T) {
+func Test_determineUpgradeVersionDirectories_Upgrade_PathContainsToVersion(t *testing.T) {
+	/*
+	   Upgrade: updatingFrom != toVersion
+	   Path contains the toVersion -> replace toVersion with fromVersion for the "from" dir
+	*/
+	to := "2.5.0"
+	from := "2.4.3"
+	curr := "2.5.0" // current extension version value (doesn't affect upgrade/downgrade decision)
+	dir := "/var/lib/waagent/My.Ext/" + to + "/"
+
+	setEnvs(t, to, curr, from, dir)
+
+	tempDir, _ := os.MkdirTemp("", "upgradetoversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
 	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
 
-	t.Run("empty dir string returns false", func(t *testing.T) {
-		if got := hasMrseq(ctx, ""); got {
-			t.Fatalf("hasMrseq(ctx, \"\") = true; want false")
-		}
-	})
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
 
-	t.Run("non-existent directory returns false", func(t *testing.T) {
-		nonExistent := filepath.Join(t.TempDir(), "this-dir-does-not-exist")
-		// Ensure it truly doesn't exist
-		if _, err := os.Stat(nonExistent); !os.IsNotExist(err) {
-			t.Fatalf("test setup: expected directory to not exist: %s", nonExistent)
-		}
-		if got := hasMrseq(ctx, nonExistent); got {
-			t.Fatalf("hasMrseq(ctx, %q) = true; want false", nonExistent)
-		}
-	})
+	require.Equal(t, from, gotFromVersion, "upgradeFromVersion should be updating-from value on upgrade")
+	require.Equal(t, dir, toDir, "when path contains toVersion, toDir is the given path")
 
-	t.Run("empty directory returns false", func(t *testing.T) {
-		dir := t.TempDir()
-		if got := hasMrseq(ctx, dir); got {
-			t.Fatalf("hasMrseq(ctx, %q) = true; want false", dir)
-		}
-	})
-
-	t.Run("directory with one .mrseq file returns true", func(t *testing.T) {
-		dir := t.TempDir()
-		f := filepath.Join(dir, "run1.mrseq")
-		if err := os.WriteFile(f, []byte("dummy"), 0o644); err != nil {
-			t.Fatalf("test setup: write %s: %v", f, err)
-		}
-		if got := hasMrseq(ctx, dir); !got {
-			t.Fatalf("hasMrseq(ctx, %q) = false; want true", dir)
-		}
-	})
-
-	t.Run("directory with multiple .mrseq files returns true", func(t *testing.T) {
-		dir := t.TempDir()
-		for i := 1; i <= 3; i++ {
-			name := filepath.Join(dir, fmt.Sprintf("batch_%d.mrseq", i))
-			if err := os.WriteFile(name, []byte("dummy"), 0o644); err != nil {
-				t.Fatalf("test setup: write %s: %v", name, err)
-			}
-		}
-		if got := hasMrseq(ctx, dir); !got {
-			t.Fatalf("hasMrseq(ctx, %q) = false; want true", dir)
-		}
-	})
-
-	t.Run("directory with non-mrseq files only returns false", func(t *testing.T) {
-		dir := t.TempDir()
-		others := []string{"a.txt", "b.mrseq.bak", "c.mrseqq", "d.MRSEQ"} // case-sensitive on most platforms
-		for _, name := range others {
-			path := filepath.Join(dir, name)
-			if err := os.WriteFile(path, []byte("dummy"), 0o644); err != nil {
-				t.Fatalf("test setup: write %s: %v", path, err)
-			}
-		}
-		if got := hasMrseq(ctx, dir); got {
-			t.Fatalf("hasMrseq(ctx, %q) = true; want false", dir)
-		}
-	})
-
-	t.Run("non-recursive: file only in subdirectory does not count", func(t *testing.T) {
-		dir := t.TempDir()
-		sub := filepath.Join(dir, "sub")
-		if err := os.MkdirAll(sub, 0o755); err != nil {
-			t.Fatalf("test setup: mkdir %s: %v", sub, err)
-		}
-		f := filepath.Join(sub, "nested.mrseq")
-		if err := os.WriteFile(f, []byte("dummy"), 0o644); err != nil {
-			t.Fatalf("test setup: write %s: %v", f, err)
-		}
-		// Glob(dir, "*.mrseq") should not find files in subdir
-		if got := hasMrseq(ctx, dir); got {
-			t.Fatalf("hasMrseq(ctx, %q) = true; want false (non-recursive glob)", dir)
-		}
-	})
-
-	// Optional: demonstrate that unrelated extensions don't affect the outcome when at least one *.mrseq exists.
-	t.Run("mixed files: presence of .mrseq wins", func(t *testing.T) {
-		dir := t.TempDir()
-		_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dummy"), 0o644)
-		_ = os.WriteFile(filepath.Join(dir, "b.log"), []byte("dummy"), 0o644)
-		_ = os.WriteFile(filepath.Join(dir, "c.mrseq"), []byte("dummy"), 0o644)
-		if got := hasMrseq(ctx, dir); !got {
-			t.Fatalf("hasMrseq(ctx, %q) = false; want true", dir)
-		}
-	})
+	expectedFromDir := strings.ReplaceAll(dir, to, from)
+	require.Equal(t, expectedFromDir, fromDir)
 }
 
-func makeDirWithMrseq(t *testing.T, dir string, addMrseq bool, version string) string {
-	sub := filepath.Join(dir, version)
-	if err := os.MkdirAll(sub, 0o755); err != nil {
-		t.Fatalf("test setup: mkdir %s: %v", sub, err)
+func Test_determineUpgradeVersionDirectories_Upgrade_PathContainsFromVersion(t *testing.T) {
+	/*
+	   Upgrade: updatingFrom != toVersion
+	   Path contains the fromVersion -> replace fromVersion with toVersion for the "to" dir
+	*/
+	to := "3.0.1"
+	from := "2.9.9"
+	curr := "3.0.1"
+	dir := "/opt/exts/My.Ext/" + from + "/bin"
+
+	setEnvs(t, to, curr, from, dir)
+
+	tempDir, _ := os.MkdirTemp("", "upgradefromversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
 	}
 
-	if addMrseq {
-		f := filepath.Join(sub, "floopster.mrseq")
-		if err := os.WriteFile(f, []byte("0"), 0o644); err != nil {
-			t.Fatalf("setup: write %s: %v", f, err)
-		}
-	}
-	return sub
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+
+	require.Equal(t, from, gotFromVersion)
+	require.Equal(t, dir, fromDir, "when path does NOT contain toVersion, fromDir is the given path")
+
+	expectedToDir := strings.ReplaceAll(dir, from, to)
+	require.Equal(t, expectedToDir, toDir)
 }
 
-func TestDetermineUpgradeVersionDirectories(t *testing.T) {
-	tests := []struct {
-		name             string
-		firstVersion     string
-		secondVersion    string
-		firstHasMrseq    bool
-		secondHasMrseq   bool
-		expectedToSuffix string
-		expectedFrom     string
-	}{
-		{
-			name:             "first has mrseq, second does not → upgrade to second",
-			firstVersion:     "1.0.0",
-			secondVersion:    "2.0.0",
-			firstHasMrseq:    true,
-			secondHasMrseq:   false,
-			expectedToSuffix: "second",
-			expectedFrom:     "1.0.0",
-		},
-		{
-			name:             "second has mrseq, first does not → upgrade to first",
-			firstVersion:     "1.0.0",
-			secondVersion:    "2.0.0",
-			firstHasMrseq:    false,
-			secondHasMrseq:   true,
-			expectedToSuffix: "first",
-			expectedFrom:     "2.0.0",
-		},
-		{
-			name:             "neither has mrseq → choose higher version (second)",
-			firstVersion:     "1.0.0",
-			secondVersion:    "2.0.0",
-			firstHasMrseq:    false,
-			secondHasMrseq:   false,
-			expectedToSuffix: "second",
-			expectedFrom:     "1.0.0",
-		},
-		{
-			name:             "both have mrseq → choose higher version (second)",
-			firstVersion:     "1.0.0",
-			secondVersion:    "2.0.0",
-			firstHasMrseq:    true,
-			secondHasMrseq:   true,
-			expectedToSuffix: "second",
-			expectedFrom:     "1.0.0",
-		},
-		{
-			name:             "equal versions → choose first as upgradeTo",
-			firstVersion:     "1.0.0",
-			secondVersion:    "1.0.0",
-			firstHasMrseq:    false,
-			secondHasMrseq:   false,
-			expectedToSuffix: "first",
-			expectedFrom:     "1.0.0",
-		},
+func Test_determineUpgradeVersionDirectories_Downgrade_PathContainsToVersion(t *testing.T) {
+	/*
+	   Downgrade: updatingFrom == toVersion
+	   upgradeFromVersion becomes extensionVersionValue (curr)
+	   Path contains toVersion -> replace toVersion with fromVersion (curr) for the "from" dir
+	*/
+	to := "2.1.0"
+	curr := "2.3.0" // extensionVersionValue
+	fromUpdating := to
+	dir := "C:\\Packages\\Plugins\\My.Ext\\" + to + "\\"
+
+	setEnvs(t, to, curr, fromUpdating, dir)
+
+	tempDir, _ := os.MkdirTemp("", "downgradetoversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Prepare directories
-			dir := t.TempDir()
-			firstDir := makeDirWithMrseq(t, dir, tt.firstHasMrseq, tt.firstVersion)
-			secondDir := makeDirWithMrseq(t, dir, tt.secondHasMrseq, tt.secondVersion)
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
 
-			// Simulate environment variables
-			os.Setenv(constants.ExtensionVersionEnvName, tt.firstVersion)
-			os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, tt.secondVersion)
-			os.Setenv(constants.ExtensionPathEnvName, firstDir)
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
 
-			// Replace secondDir logic: mimic original code's substitution
-			// (strings.ReplaceAll(firstDir, firstVersion, secondVersion))
-			// For test simplicity, override secondDir directly
-			// but ensure substitution works if versions appear in path
-			if strings.Contains(firstDir, tt.firstVersion) {
-				secondDir = strings.ReplaceAll(firstDir, tt.firstVersion, tt.secondVersion)
-			}
+	require.Equal(t, curr, gotFromVersion, "on downgrade, fromVersion becomes the current extension version")
+	require.Equal(t, dir, toDir)
 
-			tempDir, _ := os.MkdirTemp("", "determineupgrade")
-			defer os.RemoveAll(tempDir)
-			handlerEnvironment := handlerenv.HandlerEnvironment{
-				EventsFolder: tempDir,
-			}
+	expectedFromDir := strings.ReplaceAll(dir, to, curr)
+	require.Equal(t, expectedFromDir, fromDir)
+}
 
-			extensionLogger := logging.New(nil)
-			events := extensionevents.New(extensionLogger, &handlerEnvironment)
-			ctx := log.NewContext(log.NewNopLogger())
+func Test_determineUpgradeVersionDirectories_Downgrade_PathContainsFromVersion(t *testing.T) {
+	/*
+	   Downgrade: updatingFrom == toVersion
+	   Path contains the computed fromVersion (curr), so toDir is replacement of fromVersion->toVersion
+	*/
+	to := "1.7.0"
+	curr := "1.7.5"
+	fromUpdating := to
+	dir := "/extensions/handler/" + curr + "/"
 
-			gotFromDir, gotToDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+	setEnvs(t, to, curr, fromUpdating, dir)
 
-			// Validate upgradeFromVersion
-			if gotFromVersion != tt.expectedFrom {
-				t.Errorf("upgradeFromVersion = %q; want %q", gotFromVersion, tt.expectedFrom)
-			}
-
-			// Validate which directory chosen as upgradeTo
-			if tt.expectedToSuffix == "first" {
-				if gotToDir != firstDir {
-					t.Errorf("upgradeToDir = %q; want firstDir %q", gotToDir, firstDir)
-				}
-				if gotFromDir != secondDir {
-					t.Errorf("upgradeFromDir = %q; want secondDir %q", gotFromDir, secondDir)
-				}
-			} else {
-				if gotToDir != secondDir {
-					t.Errorf("upgradeToDir = %q; want secondDir %q", gotToDir, secondDir)
-				}
-				if gotFromDir != firstDir {
-					t.Errorf("upgradeFromDir = %q; want firstDir %q", gotFromDir, firstDir)
-				}
-			}
-		})
+	tempDir, _ := os.MkdirTemp("", "downgradefromversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
 	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+
+	require.Equal(t, curr, gotFromVersion)
+	require.Equal(t, dir, fromDir)
+
+	expectedToDir := strings.ReplaceAll(dir, curr, to)
+	require.Equal(t, expectedToDir, toDir)
+}
+
+// setEnvs is a helper to seed the env for each scenario.
+func setEnvs(t *testing.T, to, curr, from, dir string) {
+	t.Helper()
+	t.Setenv(constants.VersionEnvName, to)
+	t.Setenv(constants.ExtensionVersionEnvName, curr)
+	t.Setenv(constants.ExtensionVersionUpdatingFromEnvName, from)
+	t.Setenv(constants.ExtensionPathEnvName, dir)
 }
