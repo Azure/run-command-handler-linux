@@ -1189,6 +1189,246 @@ func Test_determineUpgradeVersionDirectories_Downgrade_PathContainsFromVersion(t
 	require.Equal(t, expectedToDir, toDir)
 }
 
+func Test_rehydrateMrSeqFiles_OpenStatusDirFails(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "OpenStatusDirFails")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := t.TempDir() // does not contain the status subdir
+	to := t.TempDir()
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.NotNil(t, err, "expected error when opening missing status dir")
+	require.True(t, strings.Contains(err.Error(), "Failed to open status directory"), "unexpected error message: %s", err.Error())
+}
+
+func Test_rehydrateMrSeqFiles_ReadDirFails(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "ReadDirFails")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	// Create a *file* at "<from>/status" so os.Open succeeds but ReadDir fails.
+	statusPath := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.WriteFile(statusPath, []byte("not a directory"), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.NotNil(t, err, "expected error when ReadDir fails")
+	require.True(t, strings.Contains(err.Error(), "could not read directory entries"), "unexpected error message: %s", err.Error())
+}
+
+func Test_rehydrateMrSeqFiles_IgnoresInvalidStatusFilename(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "IgnoresInvalidStatusFilename")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	// Proper status directory
+	require.NoError(t, os.MkdirAll(filepath.Join(from, constants.StatusFileDirectory), 0o755))
+
+	// Invalid filename (only two parts, missing seqNo). Should be ignored.
+	invalid := filepath.Join(from, constants.StatusFileDirectory, "alpha"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(invalid, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	// No mrseq should be created for invalid filenames.
+	_, err = os.Stat(filepath.Join(to, "alpha"+constants.MrSeqFileExtension))
+	require.True(t, os.IsNotExist(err), "alpha%s should not have been created", constants.MrSeqFileExtension)
+}
+
+func Test_rehydrateMrSeqFiles_RehydrateMissingMrseq(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "RehydrateMissingMrseq")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	if err := os.MkdirAll(statusDir, 0o755); err != nil {
+		t.Fatalf("mkdir status: %v", err)
+	}
+
+	// alpha.5.status → should create to/alpha.mrseq with "5"
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	mrseqPath := filepath.Join(to, "alpha"+constants.MrSeqFileExtension)
+	got := mustReadFile(t, mrseqPath)
+	require.Equal(t, "5", got, "mrseq content = %q, want %q", got, "5")
+}
+
+func Test_rehydrateMrSeqFiles_UpdateExistingMrseqWhenHigherSeqFound(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "UpdateExistingMrseqWhenHigherSeqFound")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Existing mrseq=3
+	mrseqPath := filepath.Join(to, "alpha"+constants.MrSeqFileExtension)
+	require.NoError(t, os.WriteFile(mrseqPath, []byte("3"), 0o600))
+
+	// Status reports seq=5 → should overwrite to "5"
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	got := mustReadFile(t, mrseqPath)
+	require.Equal(t, "5", got, "mrseq content = %q, want %q", got, "5")
+}
+
+func Test_rehydrateMrSeqFiles_NoUpdateWhenExistingIsHigher(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "NoUpdateWhenExistingIsHigher")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Existing mrseq=7
+	mrseqPath := filepath.Join(to, "alpha "+constants.MrSeqFileExtension)
+	require.NoError(t, os.WriteFile(mrseqPath, []byte("7"), 0o600))
+
+	// Status reports seq=5 → should NOT overwrite
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	got := mustReadFile(t, mrseqPath)
+	require.Equal(t, "7", got, "mrseq content = %q, want %q", got, "7")
+}
+
+func Test_rehydrateMrSeqFiles_MultipleStatusFiles_TakesMax(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "TakesMax")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Both alpha.3.status and alpha.7.status — final mrseq should be "7"
+	for _, seq := range []int{3, 7} {
+		p := filepath.Join(statusDir, "alpha."+strconv.Itoa(seq)+constants.StatusFileExtension)
+		require.NoError(t, os.WriteFile(p, []byte(""), 0o600))
+	}
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	got := mustReadFile(t, filepath.Join(to, "alpha"+constants.MrSeqFileExtension))
+	require.Equal(t, "7", got, "mrseq content = %q, want %q", got, "7")
+}
+
+func Test_rehydrateMrSeqFiles_ReadExistingMrseqFails(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "ReadExistingMrseqFails")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Make a directory at the mrseq path so ReadFile fails
+	mrseqPath := filepath.Join(to, "alpha"+constants.MrSeqFileExtension)
+	require.NoError(t, os.MkdirAll(mrseqPath, 0o755))
+
+	// Now create a status that would try to read/compare
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.NotNil(t, err, "expected error due to unreadable mrseq")
+	require.True(t, strings.Contains(err.Error(), "Could not read file"), "Unexpected error: %v", err.Error())
+}
+
 // setEnvs is a helper to seed the env for each scenario.
 func setEnvs(t *testing.T, to, curr, from, dir string) {
 	t.Helper()
@@ -1196,4 +1436,12 @@ func setEnvs(t *testing.T, to, curr, from, dir string) {
 	t.Setenv(constants.ExtensionVersionEnvName, curr)
 	t.Setenv(constants.ExtensionVersionUpdatingFromEnvName, from)
 	t.Setenv(constants.ExtensionPathEnvName, dir)
+}
+
+func mustReadFile(t *testing.T, p string) string {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read %s: %v", p, err)
+	}
+	return string(b)
 }

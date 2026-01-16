@@ -470,7 +470,7 @@ func determineUpgradeVersionDirectories(ctx *log.Context, extensionEvents *exten
 		// This is a downgrade. We therefore need to use the extension version
 		upgradeFromVersion = extensionVersionValue
 	} else {
-		// This is an upgrade
+		// This is an upgrade on the old WALA or an upgrade or downgrade on the new WALA
 		upgradeFromVersion = updatingFromVersionValue
 	}
 
