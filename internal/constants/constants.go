@@ -38,6 +38,9 @@ const (
 	// The output directory for logs of immediate run command
 	ImmediateRCOutputDirectory = "/var/log/azure/run-command-handler/ImmediateRunCommandService.log"
 
+	// This is the directory where we place all the .mrseq files
+	WorkingDirectory = "../run-command-handler/workdir"
+
 	// Download folder to use for standard managed run command
 	DownloadFolder = "download/"
 
@@ -48,22 +51,23 @@ const (
 	RunCommandExtensionName     = "Microsoft.CPlat.Core.RunCommandHandlerLinux"
 	RunCommandTestExtensionName = "Microsoft.Azure.Extensions.Edp.RunCommandHandlerLinuxTest"
 
-	// List of problematic RCV2 versions that delete the mrseq files
-	ProductionVersionThatDeletesMrSeqFiles = "1.3.17"
-	FirstTestVersionThatDeletesMrSeqFiles  = "1.8.0"
-	SecondTestVersionThatDeletesMrSeqFiles = "1.9.0"
-
 	// The current version of the extension. This value is provided by the agent for all commands.
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
-	ExtensionVersionEnvName = "AZURE_GUEST_AGENT_EXTENSION_VERSION"
+	VersionEnvName = "VERSION"
 
 	// This is the version the extension is updating from
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
 	ExtensionVersionUpdatingFromEnvName = "AZURE_GUEST_AGENT_UPDATING_FROM_VERSION"
 
+	// We'll use this variable to determine if there's a downgrade
+	ExtensionVersionEnvName = "AZURE_GUEST_AGENT_EXTENSION_VERSION"
+
 	// The path of the extension in the VM with full name. This value is provided by the agent for all commands.
 	// See more in: https://github.com/Azure/azure-vmextension-publishing/wiki/2.0-Partner-Guide-Handler-Design-Details#236-summary
 	ExtensionPathEnvName = "AZURE_GUEST_AGENT_EXTENSION_PATH"
+
+	// The first version from which no rehydration is necessary because we do not delete the .mrseq file in disable
+	FirstVersionNoRehydration = "1.3.26"
 
 	// The name of the immediate run command service
 	ImmediateRunCommandHandlerName = "runCommandService"

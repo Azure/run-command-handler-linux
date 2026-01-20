@@ -39,7 +39,7 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 		extensionEvents.LogErrorEvent("register", "Systemd not supported. Failed to register service")
 		return errors.New("Systemd not supported. Failed to register service")
 	}
-	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	targetVersion := os.Getenv(constants.VersionEnvName)
 	ctx.Log("message", "trying to register extension with version: "+targetVersion)
 
 	ctx.Log("message", "Generating service configuration files")

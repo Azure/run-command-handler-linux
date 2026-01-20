@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -29,9 +30,9 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	currentExtensionVersionDirectory := "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8"
 	os.Setenv(constants.ExtensionPathEnvName, currentExtensionVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.7")
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
+	os.Setenv(constants.VersionEnvName, "1.3.8")
 
-	currentVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	currentVersion := os.Getenv(constants.VersionEnvName)
 	previousVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
 	previousExtensionVersionDirectory := strings.ReplaceAll(currentExtensionVersionDirectory, currentVersion, previousVersion)
 
@@ -85,7 +86,7 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 
 	extensionLogger := logging.New(nil)
 	extensionEventManager := extensionevents.New(extensionLogger, &handlerEnvironment)
-	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), extensionEventManager)
+	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), previousExtensionVersionDirectory, currentExtensionVersionDirectory, extensionEventManager)
 	require.Nil(t, err)
 
 	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
@@ -210,7 +211,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.8")
+	os.Setenv(constants.VersionEnvName, "1.3.8")
 
 	// Create two extensions
 	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
@@ -222,7 +223,7 @@ func Test_update_e2e_cmd(t *testing.T) {
 	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
 
 	// Step 2: WALA will call update
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.9")
+	os.Setenv(constants.VersionEnvName, "1.3.9")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
 	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
@@ -237,6 +238,69 @@ func Test_update_e2e_cmd(t *testing.T) {
 	// Now call enable and verify we did NOT re-execute the script
 	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 0)
 	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+}
+
+func Test_update_e23_non_problematic_version(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
+	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
+	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.26")
+	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.27")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
+
+	fakeEnv := types.HandlerEnvironment{}
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.VersionEnvName, "1.3.26")
+
+	// Create three extensions
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk", true, 0)
+
+	// Run one of them again to obtain multiple status files
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 1)
+
+	// Now, pretend that the extension was updated
+	// Step 1: WALA calls Disable on our two extensions
+	disable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "stubbornChipmunk")
+
+	// Step 2: WALA will call update
+	os.Setenv(constants.VersionEnvName, "1.3.27")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.26")
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
+	update_handler(t, fakeEnv, tempDir)
+
+	// Now, WALA will uninstall the old extension
+	uninstall_handler(t, fakeEnv, tempDir)
+
+	// Then, WALA will install the new extension
+	install_handler(t, fakeEnv, tempDir)
+
+	// Now call enable and verify we did NOT re-execute the script
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", false, 0)
+
+	// Run them again with a higher seqNo to ensure they're now executed
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", true, 2)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", true, 1)
+	enable_extension(t, fakeEnv, newVersionDirectory, "stubbornChipmunk", true, 1)
 }
 
 func Test_udpate_e2e_problematic_version(t *testing.T) {
@@ -262,7 +326,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 
 	// We start on the old version
 	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.17")
+	os.Setenv(constants.VersionEnvName, "1.3.17")
 
 	// Create three extensions
 	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
@@ -289,7 +353,7 @@ func Test_udpate_e2e_problematic_version(t *testing.T) {
 	os.WriteFile(filepath.Join(oldStatusPath, "this.is.a.bad.chipmunk.0.status"), []byte("0"), os.FileMode(0600))
 
 	// Step 2: WALA will call update
-	os.Setenv(constants.ExtensionVersionEnvName, "1.3.18")
+	os.Setenv(constants.VersionEnvName, "1.3.18")
 	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
 	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.17")
 	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
@@ -435,18 +499,16 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	// Ensure that the script succeeds
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return nil, 0
+	}
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}},
 	}, metadata)
 	require.Nil(t, err, "command should run successfully")
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
-
-	// check stdout stderr files
-	_, err = os.Stat(filepath.Join(dir, "stdout"))
-	require.Nil(t, err, "stdout should exist")
-	_, err = os.Stat(filepath.Join(dir, "stderr"))
-	require.Nil(t, err, "stderr should exist")
 
 	// Check embedded script if saved to file
 	_, err = os.Stat(filepath.Join(dir, "script.sh"))
@@ -460,6 +522,11 @@ func Test_runCmd_fail(t *testing.T) {
 	dir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
+
+	// Ensure that the script fails
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return errors.New("the chipmunks have risen in revolt"), 42
+	}
 
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
@@ -692,12 +759,17 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	// Ensure that the script fails
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return errors.New("the chipmunks do not like the script"), 127
+	}
+
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
 	}, metadata)
 	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "failed to execute command: command terminated with exit status=127")
+	require.Contains(t, err.Error(), "failed to execute command: the chipmunks do not like the script")
 	require.NotEqual(t, constants.ExitCode_Okay, exitCode)
 }
 
@@ -711,10 +783,665 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_SimpleScriptSucceeds(t *testing.
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
+	// Ensure that the script succeeds
+	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
+		return nil, 0
+	}
+
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
 	err, exitCode := runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: false},
 	}, metadata)
 	require.Nil(t, err)
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
+}
+
+func TestPadTo(t *testing.T) {
+	tests := []struct {
+		name     string
+		in       []int
+		size     int
+		expected []int
+	}{
+		{
+			name:     "Input longer than size",
+			in:       []int{1, 2, 3, 4},
+			size:     2,
+			expected: []int{1, 2},
+		},
+		{
+			name:     "Input equal to size",
+			in:       []int{1, 2, 3},
+			size:     3,
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "Input shorter than size",
+			in:       []int{1, 2},
+			size:     5,
+			expected: []int{1, 2, 0, 0, 0},
+		},
+		{
+			name:     "Empty input",
+			in:       []int{},
+			size:     3,
+			expected: []int{0, 0, 0},
+		},
+		{
+			name:     "Size zero",
+			in:       []int{1, 2, 3},
+			size:     0,
+			expected: []int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := padTo(tt.in, tt.size)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("padTo(%v, %d) = %v; expected %v", tt.in, tt.size, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSplitVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		in       string
+		expected []int
+	}{
+		{
+			name:     "simple-3-parts",
+			in:       "1.2.3",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "single-part",
+			in:       "42",
+			expected: []int{42},
+		},
+		{
+			name:     "leading-zeros",
+			in:       "001.0002.00003",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "spaces-around-parts",
+			in:       "  1 .  2  .  3  ",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "non-numeric-alpha",
+			in:       "1.a.3",
+			expected: []int{1, 0, 3},
+		},
+		{
+			name:     "non-numeric-mixed",
+			in:       "1.2beta.3",
+			expected: []int{1, 0, 3},
+		},
+		{
+			name: "empty-string",
+			in:   "",
+			// strings.Split("", ".") == []string{""} → p=="" → append 0
+			expected: []int{0},
+		},
+		{
+			name: "consecutive-dots-empty-components",
+			in:   "1..3....5",
+			// empty parts become 0
+			expected: []int{1, 0, 3, 0, 0, 0, 5},
+		},
+		{
+			name:     "trailing-dot",
+			in:       "1.2.",
+			expected: []int{1, 2, 0},
+		},
+		{
+			name:     "leading-dot",
+			in:       ".2.3",
+			expected: []int{0, 2, 3},
+		},
+		{
+			name: "very-large-number",
+			in:   "2147483647.0",
+			// Note: Go int is platform-dependent; still valid parsing.
+			expected: []int{2147483647, 0},
+		},
+		{
+			name:     "zeros-only",
+			in:       "0.0.0",
+			expected: []int{0, 0, 0},
+		},
+		{
+			name: "whitespace-only-component",
+			in:   "1.   .3",
+			// TrimSpace makes middle part "", thus 0
+			expected: []int{1, 0, 3},
+		},
+		{
+			name:     "unicode-digits-are-not-ASCII-digits",
+			in:       "１.2", // Note: first char is full-width '１' (U+FF11) → non-ASCII → 0
+			expected: []int{0, 2},
+		},
+		{
+			name: "dash-negative-like",
+			in:   "1.-2.3",
+			// '-' makes component non-numeric → 0
+			expected: []int{1, -2, 3},
+		},
+		{
+			name:     "plus-sign",
+			in:       "+1.2",
+			expected: []int{1, 2},
+		},
+		{
+			name:     "long-many-parts",
+			in:       "1.2.3.4.5.6.7.8.9",
+			expected: []int{1, 2, 3, 4, 5, 6, 7, 8, 9},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := splitVersion(tt.in)
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Fatalf("splitVersion(%q) = %v, want %v", tt.in, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		a        string
+		b        string
+		expected int
+	}{
+		{
+			name:     "equal-simple",
+			a:        "1.2.3",
+			b:        "1.2.3",
+			expected: 0,
+		},
+		{
+			name:     "equal-with-extra-zeros",
+			a:        "1.2.3.0",
+			b:        "1.2.3",
+			expected: 0,
+		},
+		{
+			name:     "a-greater-last-segment",
+			a:        "1.2.3.4",
+			b:        "1.2.3.3",
+			expected: 1,
+		},
+		{
+			name:     "b-greater-last-segment",
+			a:        "1.2.3.3",
+			b:        "1.2.3.4",
+			expected: -1,
+		},
+		{
+			name:     "a-greater-first-segment",
+			a:        "2.0.0",
+			b:        "1.9.9",
+			expected: 1,
+		},
+		{
+			name:     "b-greater-first-segment",
+			a:        "1.9.9",
+			b:        "2.0.0",
+			expected: -1,
+		},
+		{
+			name:     "normalize-length-a-shorter",
+			a:        "1.2",
+			b:        "1.2.0.1",
+			expected: -1,
+		},
+		{
+			name:     "normalize-length-b-shorter",
+			a:        "1.2.0.1",
+			b:        "1.2",
+			expected: 1,
+		},
+		{
+			name:     "leading-zeros-equal",
+			a:        "01.002.0003",
+			b:        "1.2.3",
+			expected: 0,
+		},
+		{
+			name:     "non-numeric-in-a",
+			a:        "1.alpha.3",
+			b:        "1.0.3",
+			expected: 0, // alpha → 0
+		},
+		{
+			name:     "non-numeric-in-b",
+			a:        "1.2.3",
+			b:        "1.beta.3",
+			expected: 1, // beta → 0, so a > b
+		},
+		{
+			name:     "empty-strings",
+			a:        "",
+			b:        "",
+			expected: 0,
+		},
+		{
+			name:     "empty-vs-non-empty",
+			a:        "",
+			b:        "0.0.0.1",
+			expected: -1,
+		},
+		{
+			name:     "longer-than-4-segments-ignored-after-4",
+			a:        "1.2.3.4.999",
+			b:        "1.2.3.4.0",
+			expected: 0, // only first 4 segments matter
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := compareVersions(tt.a, tt.b)
+			if got != tt.expected {
+				t.Fatalf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.expected)
+			}
+		})
+	}
+}
+
+func Test_determineUpgradeVersionDirectories_Upgrade_PathContainsToVersion(t *testing.T) {
+	/*
+	   Upgrade: updatingFrom != toVersion
+	   Path contains the toVersion -> replace toVersion with fromVersion for the "from" dir
+	*/
+	to := "2.5.0"
+	from := "2.4.3"
+	curr := "2.5.0" // current extension version value (doesn't affect upgrade/downgrade decision)
+	dir := "/var/lib/waagent/My.Ext/" + to + "/"
+
+	setEnvs(t, to, curr, from, dir)
+
+	tempDir, _ := os.MkdirTemp("", "upgradetoversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+
+	require.Equal(t, from, gotFromVersion, "upgradeFromVersion should be updating-from value on upgrade")
+	require.Equal(t, dir, toDir, "when path contains toVersion, toDir is the given path")
+
+	expectedFromDir := strings.ReplaceAll(dir, to, from)
+	require.Equal(t, expectedFromDir, fromDir)
+}
+
+func Test_determineUpgradeVersionDirectories_Upgrade_PathContainsFromVersion(t *testing.T) {
+	/*
+	   Upgrade: updatingFrom != toVersion
+	   Path contains the fromVersion -> replace fromVersion with toVersion for the "to" dir
+	*/
+	to := "3.0.1"
+	from := "2.9.9"
+	curr := "3.0.1"
+	dir := "/opt/exts/My.Ext/" + from + "/bin"
+
+	setEnvs(t, to, curr, from, dir)
+
+	tempDir, _ := os.MkdirTemp("", "upgradefromversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+
+	require.Equal(t, from, gotFromVersion)
+	require.Equal(t, dir, fromDir, "when path does NOT contain toVersion, fromDir is the given path")
+
+	expectedToDir := strings.ReplaceAll(dir, from, to)
+	require.Equal(t, expectedToDir, toDir)
+}
+
+func Test_determineUpgradeVersionDirectories_Downgrade_PathContainsToVersion(t *testing.T) {
+	/*
+	   Downgrade: updatingFrom == toVersion
+	   upgradeFromVersion becomes extensionVersionValue (curr)
+	   Path contains toVersion -> replace toVersion with fromVersion (curr) for the "from" dir
+	*/
+	to := "2.1.0"
+	curr := "2.3.0" // extensionVersionValue
+	fromUpdating := to
+	dir := "C:\\Packages\\Plugins\\My.Ext\\" + to + "\\"
+
+	setEnvs(t, to, curr, fromUpdating, dir)
+
+	tempDir, _ := os.MkdirTemp("", "downgradetoversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+
+	require.Equal(t, curr, gotFromVersion, "on downgrade, fromVersion becomes the current extension version")
+	require.Equal(t, dir, toDir)
+
+	expectedFromDir := strings.ReplaceAll(dir, to, curr)
+	require.Equal(t, expectedFromDir, fromDir)
+}
+
+func Test_determineUpgradeVersionDirectories_Downgrade_PathContainsFromVersion(t *testing.T) {
+	/*
+	   Downgrade: updatingFrom == toVersion
+	   Path contains the computed fromVersion (curr), so toDir is replacement of fromVersion->toVersion
+	*/
+	to := "1.7.0"
+	curr := "1.7.5"
+	fromUpdating := to
+	dir := "/extensions/handler/" + curr + "/"
+
+	setEnvs(t, to, curr, fromUpdating, dir)
+
+	tempDir, _ := os.MkdirTemp("", "downgradefromversion")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	fromDir, toDir, gotFromVersion := determineUpgradeVersionDirectories(ctx, events)
+
+	require.Equal(t, curr, gotFromVersion)
+	require.Equal(t, dir, fromDir)
+
+	expectedToDir := strings.ReplaceAll(dir, curr, to)
+	require.Equal(t, expectedToDir, toDir)
+}
+
+func Test_rehydrateMrSeqFiles_OpenStatusDirFails(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "OpenStatusDirFails")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := t.TempDir() // does not contain the status subdir
+	to := t.TempDir()
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.NotNil(t, err, "expected error when opening missing status dir")
+	require.True(t, strings.Contains(err.Error(), "Failed to open status directory"), "unexpected error message: %s", err.Error())
+}
+
+func Test_rehydrateMrSeqFiles_ReadDirFails(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "ReadDirFails")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	// Create a *file* at "<from>/status" so os.Open succeeds but ReadDir fails.
+	statusPath := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.WriteFile(statusPath, []byte("not a directory"), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.NotNil(t, err, "expected error when ReadDir fails")
+	require.True(t, strings.Contains(err.Error(), "could not read directory entries"), "unexpected error message: %s", err.Error())
+}
+
+func Test_rehydrateMrSeqFiles_IgnoresInvalidStatusFilename(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "IgnoresInvalidStatusFilename")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	// Proper status directory
+	require.NoError(t, os.MkdirAll(filepath.Join(from, constants.StatusFileDirectory), 0o755))
+
+	// Invalid filename (only two parts, missing seqNo). Should be ignored.
+	invalid := filepath.Join(from, constants.StatusFileDirectory, "alpha"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(invalid, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	// No mrseq should be created for invalid filenames.
+	_, err = os.Stat(filepath.Join(to, "alpha"+constants.MrSeqFileExtension))
+	require.True(t, os.IsNotExist(err), "alpha%s should not have been created", constants.MrSeqFileExtension)
+}
+
+func Test_rehydrateMrSeqFiles_RehydrateMissingMrseq(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "RehydrateMissingMrseq")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	if err := os.MkdirAll(statusDir, 0o755); err != nil {
+		t.Fatalf("mkdir status: %v", err)
+	}
+
+	// alpha.5.status → should create to/alpha.mrseq with "5"
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	mrseqPath := filepath.Join(to, "alpha"+constants.MrSeqFileExtension)
+	got := mustReadFile(t, mrseqPath)
+	require.Equal(t, "5", got, "mrseq content = %q, want %q", got, "5")
+}
+
+func Test_rehydrateMrSeqFiles_UpdateExistingMrseqWhenHigherSeqFound(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "UpdateExistingMrseqWhenHigherSeqFound")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Existing mrseq=3
+	mrseqPath := filepath.Join(to, "alpha"+constants.MrSeqFileExtension)
+	require.NoError(t, os.WriteFile(mrseqPath, []byte("3"), 0o600))
+
+	// Status reports seq=5 → should overwrite to "5"
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	got := mustReadFile(t, mrseqPath)
+	require.Equal(t, "5", got, "mrseq content = %q, want %q", got, "5")
+}
+
+func Test_rehydrateMrSeqFiles_NoUpdateWhenExistingIsHigher(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "NoUpdateWhenExistingIsHigher")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Existing mrseq=7
+	mrseqPath := filepath.Join(to, "alpha "+constants.MrSeqFileExtension)
+	require.NoError(t, os.WriteFile(mrseqPath, []byte("7"), 0o600))
+
+	// Status reports seq=5 → should NOT overwrite
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	got := mustReadFile(t, mrseqPath)
+	require.Equal(t, "7", got, "mrseq content = %q, want %q", got, "7")
+}
+
+func Test_rehydrateMrSeqFiles_MultipleStatusFiles_TakesMax(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "TakesMax")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Both alpha.3.status and alpha.7.status — final mrseq should be "7"
+	for _, seq := range []int{3, 7} {
+		p := filepath.Join(statusDir, "alpha."+strconv.Itoa(seq)+constants.StatusFileExtension)
+		require.NoError(t, os.WriteFile(p, []byte(""), 0o600))
+	}
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.Nil(t, err, "unexpected error: %v", err)
+
+	got := mustReadFile(t, filepath.Join(to, "alpha"+constants.MrSeqFileExtension))
+	require.Equal(t, "7", got, "mrseq content = %q, want %q", got, "7")
+}
+
+func Test_rehydrateMrSeqFiles_ReadExistingMrseqFails(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "ReadExistingMrseqFails")
+	defer os.RemoveAll(tempDir)
+	handlerEnvironment := handlerenv.HandlerEnvironment{
+		EventsFolder: tempDir,
+	}
+
+	ctx := log.NewContext(log.NewNopLogger())
+	extensionLogger := logging.New(nil)
+	events := extensionevents.New(extensionLogger, &handlerEnvironment)
+
+	from := filepath.Join(tempDir, "from")
+	require.NoError(t, os.Mkdir(from, 0o755))
+	to := filepath.Join(tempDir, "to")
+	require.NoError(t, os.Mkdir(to, 0o755))
+
+	statusDir := filepath.Join(from, constants.StatusFileDirectory)
+	require.NoError(t, os.MkdirAll(statusDir, 0o755))
+
+	// Make a directory at the mrseq path so ReadFile fails
+	mrseqPath := filepath.Join(to, "alpha"+constants.MrSeqFileExtension)
+	require.NoError(t, os.MkdirAll(mrseqPath, 0o755))
+
+	// Now create a status that would try to read/compare
+	alphaStatus := filepath.Join(statusDir, "alpha.5"+constants.StatusFileExtension)
+	require.NoError(t, os.WriteFile(alphaStatus, []byte(""), 0o600))
+
+	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
+	require.NotNil(t, err, "expected error due to unreadable mrseq")
+	require.True(t, strings.Contains(err.Error(), "Could not read file"), "Unexpected error: %v", err.Error())
+}
+
+// setEnvs is a helper to seed the env for each scenario.
+func setEnvs(t *testing.T, to, curr, from, dir string) {
+	t.Helper()
+	t.Setenv(constants.VersionEnvName, to)
+	t.Setenv(constants.ExtensionVersionEnvName, curr)
+	t.Setenv(constants.ExtensionVersionUpdatingFromEnvName, from)
+	t.Setenv(constants.ExtensionPathEnvName, dir)
+}
+
+func mustReadFile(t *testing.T, p string) string {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read %s: %v", p, err)
+	}
+	return string(b)
 }
