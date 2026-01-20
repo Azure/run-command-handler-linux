@@ -484,7 +484,7 @@ func determineUpgradeVersionDirectories(ctx *log.Context, extensionEvents *exten
 		upgradeToVersionDirectory = strings.ReplaceAll(extensionDirectory, upgradeFromVersion, upgradeToVersion)
 	}
 
-	msg := fmt.Sprintf("determineUpgradeVersionDirectories: move from='%s' to='%s'", upgradeToVersionDirectory, upgradeFromVersionDirectory)
+	msg := fmt.Sprintf("determineUpgradeVersionDirectories: move from='%s' to='%s'", upgradeFromVersionDirectory, upgradeToVersionDirectory)
 	ctx.Log("message", msg)
 	extensionEvents.LogInformationalEvent("determineUpgradeVersions", msg)
 
