@@ -67,7 +67,7 @@ const (
 	ExtensionPathEnvName = "AZURE_GUEST_AGENT_EXTENSION_PATH"
 
 	// The first version from which no rehydration is necessary because we do not delete the .mrseq file in disable
-	FirstVersionNoRehydration = "1.3.26"
+	FirstVersionNoRehydration = "1.3.27"
 
 	// The name of the immediate run command service
 	ImmediateRunCommandHandlerName = "runCommandService"
