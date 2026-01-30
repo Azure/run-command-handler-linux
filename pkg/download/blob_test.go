@@ -201,6 +201,12 @@ func Test_blobDownload_actualBlob(t *testing.T) {
 }
 
 func Test_GetSASBlob_nestedDirectories_actualBlob(t *testing.T) {
+	// Running this test requires real storage account values and keys.
+	// Create a storage account in Azure, and ensure that Shared Access Key is enabled under Configuration settings.
+	// Go to your Storage Account page > Security + networking > Access keys and copy either key1 or key2.
+	// Then, run the following commands prior to this test
+	// export AZURE_STORAGE_ACCOUNT="<your_storage_account_name>"
+	// export AZURE_STORAGE_ACCESS_KEY="<your_storage_account_access_key>"
     acct := os.Getenv("AZURE_STORAGE_ACCOUNT")
     key := os.Getenv("AZURE_STORAGE_ACCESS_KEY")
     if acct == "" || key == "" {
