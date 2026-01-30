@@ -102,7 +102,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	
 	fileName := splitStrings[len(splitStrings)-1]
 	if fileName == "" {
-		return "", errors.Errorf("cannot extract file name from URL: %q", loggableBlobUri)
+		return "", fmt.Errorf("cannot extract file name from URL: %q", loggableBlobUri)
 	}
 
 	// Create the local file
