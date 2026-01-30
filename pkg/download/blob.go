@@ -101,6 +101,10 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	if fileName == "" {
 		return "", errors.Errorf("cannot extract file name from URL: %q", loggableBlobUri)
 	}
+	
+	if len(splitStrings) == 0 {
+		return "", fmt.Errorf("cannot extract file name from URL: %q. Trimmed path was empty", loggableBlobUri);
+	}
 
 	// Create the local file
 	scriptFilePath := filepath.Join(targetDir, fileName)
