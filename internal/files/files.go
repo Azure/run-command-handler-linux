@@ -69,6 +69,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 
 	//If there was an error downloading using SAS URI or SAS was not provided, download using managedIdentity or publicly.
 	if scriptSASDownloadErr != nil || scriptSAS == "" {
+		ctx.Log("info",fmt.Sprintf("Downloading script using SAS token failed: %v. Attempting download using managed identity or public access.", scriptSASDownloadErr))
 		downloaders, getDownloadersError := getDownloaders(url, sourceManagedIdentity, download.ProdMsiDownloader{})
 		if getDownloadersError == nil {
 			const mode = 0500 // we assume users download scripts to execute
