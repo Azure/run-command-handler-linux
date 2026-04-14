@@ -36,5 +36,12 @@ const (
 	ExitCode_ImmediateTaskFailed                          = -223
 	ExitCode_CouldNotRehydrateMrSeq                       = -224
 
-	// Unknown errors (-300s):
+	// Extension Policy Settings Errors (-300s):
+	ExitCode_LoadExtensionPolicySettingsFailed = -300
+	ExitCode_GetExtensionPolicySettingsFailed  = -301
+	ExitCode_ExtensionPolicyInvalid            = -302
+	ExitCode_CommandNotAllowedByPolicy         = -303
+	ExitCode_ScriptNotAllowedByPolicy          = -304
+
+	// Unknown errors (-400s):
 )

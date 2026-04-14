@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
+	"github.com/Azure/azure-extension-platform/pkg/extensionpolicysettings"
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
@@ -208,6 +209,35 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	// If there is an error or the customer requested to install the script as a service, return the error and exit code immediately.
 	if err != nil || cfg.InstallAsService() {
 		return "", "", err, exitCode
+	}
+
+	// Load extension policy settings.
+	// If policy file exists, load the policy. If not, then don't load.
+	var ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings]
+	policyPath := filepath.Join(h.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
+
+	if _, err := os.Stat(policyPath); err == nil {
+		ExtensionPolicyManagerPtr, err = extensionpolicysettings.NewExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings](policyPath)
+		if err != nil {
+			return "", "", errors.Wrap(err, "failed to create extension policy settings manager"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+		}
+
+		err = ExtensionPolicyManagerPtr.LoadExtensionPolicySettings()
+		if err != nil {
+			return "", "", errors.Wrap(err, "failed to load extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+		} else {
+			settings, err := ExtensionPolicyManagerPtr.GetSettings()
+
+			if err != nil {
+				return "", "", errors.Wrap(err, "failed to get extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+			}
+			ctx.Log("message", "successfully loaded extension policy settings", "settings", settings)
+		}
+	} else if !os.IsNotExist(err) {
+		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
+		ExtensionPolicyManagerPtr = nil
+	} else {
+		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
 
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))

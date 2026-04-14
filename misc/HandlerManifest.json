@@ -6,6 +6,7 @@
     "updateCommand": "bin/run-command-shim update",
     "enableCommand": "bin/run-command-shim enable",
     "disableCommand": "bin/run-command-shim disable",
+    "supportsPolicy": true,
     "rebootAfterInstall": false,
     "reportHeartbeat": false,
     "updateMode": "UpdateWithInstall",

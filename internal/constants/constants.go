@@ -77,4 +77,7 @@ const (
 
 	// The name of the file that contains the immediate goal states that reached the terminal status
 	ImmediateGoalStatesInTerminalStatusFileName = "immediateGoalStatesInTerminalStatusFile.status"
+
+	// The name of the policy file the extension uses to validate the command + scripts before execution.
+	PolicyFileName = "waagent_runtime_policy.json"
 )
