@@ -215,6 +215,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	// If policy file exists, load the policy. If not, then don't load.
 	var ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings]
 	policyPath := filepath.Join(h.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
+	var rceps *types.RCv2ExtensionPolicySettings
 
 	if _, err := os.Stat(policyPath); err == nil {
 		ExtensionPolicyManagerPtr, err = extensionpolicysettings.NewExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings](policyPath)
@@ -226,18 +227,31 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to load extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 		} else {
-			settings, err := ExtensionPolicyManagerPtr.GetSettings()
+			rceps, err = ExtensionPolicyManagerPtr.GetSettings()
 
 			if err != nil {
 				return "", "", errors.Wrap(err, "failed to get extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 			}
-			ctx.Log("message", "successfully loaded extension policy settings", "settings", settings)
+			ctx.Log("message", "successfully loaded extension policy settings", "settings", rceps)
 		}
-	} else if !os.IsNotExist(err) {
+	} else if os.IsNotExist(err) {
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
 		ExtensionPolicyManagerPtr = nil
 	} else {
 		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+	}
+
+	// Limit scripts by type before downloading them.
+	if ExtensionPolicyManagerPtr != nil && rceps != nil {
+		allowedScriptType, err := types.StringToAllowedScriptTypeFlag(rceps.LimitScripts)
+		if err != nil { // We should not hit this because we already validte the policy settings earlier.
+			return "", "", errors.Wrap(err, "failed to parse allowed script types"), constants.ExitCode_ExtensionPolicyInvalid
+		}
+		// Compare the script type of the command with the allowed script types in the policy.
+		err = types.CompareScriptTypeToAllowedScriptType(cfg.ScriptType(), allowedScriptType)
+		if err != nil {
+			return "", "", errors.Wrap(err, "script type is not allowed by policy"), constants.ExitCode_ScriptTypeNotAllowedByPolicy
+		}
 	}
 
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
@@ -262,6 +276,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions OR managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity and provide outputBlobUri / errorBlobUri and corresponding clientId in outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). In case of system-assigned identity, do not use outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). For more info, refer https://aka.ms/RunCommandManagedLinux"
 
+	// disable output blob if the policy settings has disableOutputBlobs set to true.
 	var outputBlobSASRef *storage.Blob
 	var outputBlobAppendClient *appendblob.Client
 	var outputBlobAppendCreateOrReplaceError error
@@ -951,6 +966,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 		scenario = "public-scriptUri"
 	}
 
+	// Filter the inline script type here.
 	ctx.Log("event", "prepare command", "scriptFile", scriptFilePath)
 
 	// We need to kill previous extension process if exists before starting a new one.

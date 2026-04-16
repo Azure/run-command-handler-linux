@@ -41,7 +41,7 @@ const (
 	ExitCode_GetExtensionPolicySettingsFailed  = -301
 	ExitCode_ExtensionPolicyInvalid            = -302
 	ExitCode_CommandNotAllowedByPolicy         = -303
-	ExitCode_ScriptNotAllowedByPolicy          = -304
+	ExitCode_ScriptTypeNotAllowedByPolicy      = -304
 
 	// Unknown errors (-400s):
 )

@@ -1,6 +1,7 @@
 package handlersettings
 
 import (
+	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/pkg/errors"
 )
 
@@ -21,6 +22,14 @@ func (s HandlerSettings) Script() string {
 
 func (s HandlerSettings) ScriptURI() string {
 	return s.PublicSettings.Source.ScriptURI
+}
+
+func (s HandlerSettings) CommandId() string {
+	return s.PublicSettings.Source.CommandId // Only applicable when the ScriptType is a CommandId.
+}
+
+func (s HandlerSettings) ScriptType() types.ScriptType {
+	return s.PublicSettings.Source.ScriptType
 }
 
 func (s HandlerSettings) ScriptSAS() string {
@@ -69,7 +78,7 @@ func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, error) {
 func (s HandlerSettings) validate() error {
 	// If installAsService is false, then the source has to be specified
 	if !s.PublicSettings.InstallAsService {
-		if s.PublicSettings.Source == nil || (s.PublicSettings.Source.Script == "") == (s.PublicSettings.Source.ScriptURI == "") {
+		if s.PublicSettings.Source == nil || (s.PublicSettings.Source.Script == "") == (s.PublicSettings.Source.ScriptURI == "") { // Lourdes: check here also for scriptType?
 			return errSourceNotSpecified
 		}
 	}
@@ -149,8 +158,10 @@ type RunCommandManagedIdentity struct {
 }
 
 type ScriptSource struct {
-	Script    string `json:"script"`
-	ScriptURI string `json:"scriptUri"`
+	Script     string           `json:"script"`
+	ScriptURI  string           `json:"scriptUri"`
+	CommandId  string           `json:"commandId"`
+	ScriptType types.ScriptType `json:"scriptType"`
 }
 
 type ParameterDefinition struct {
