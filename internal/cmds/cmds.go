@@ -17,9 +17,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-extension-platform/pkg/extensionerrors"
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/azure-extension-platform/pkg/extensionpolicysettings"
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
+	"github.com/Azure/azure-extension-platform/pkg/hashutils"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -29,6 +31,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/exec"
+	"github.com/Azure/run-command-handler-linux/internal/extensionpolicysettingsrc"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/immediatecmds"
@@ -218,22 +221,11 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	var rceps *types.RCv2ExtensionPolicySettings
 
 	if _, err := os.Stat(policyPath); err == nil {
-		ExtensionPolicyManagerPtr, err = extensionpolicysettings.NewExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings](policyPath)
+		err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ExtensionPolicyManagerPtr, policyPath, rceps)
 		if err != nil {
-			return "", "", errors.Wrap(err, "failed to create extension policy settings manager"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+			return "", "", errors.Wrap(err, "failed to initialize extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 		}
-
-		err = ExtensionPolicyManagerPtr.LoadExtensionPolicySettings()
-		if err != nil {
-			return "", "", errors.Wrap(err, "failed to load extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
-		} else {
-			rceps, err = ExtensionPolicyManagerPtr.GetSettings()
-
-			if err != nil {
-				return "", "", errors.Wrap(err, "failed to get extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
-			}
-			ctx.Log("message", "successfully loaded extension policy settings", "settings", rceps)
-		}
+		ctx.Log("message", "successfully initialized extension policy settings")
 	} else if os.IsNotExist(err) {
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
 		ExtensionPolicyManagerPtr = nil
@@ -241,21 +233,18 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
 
-	// Limit scripts by type before downloading them.
+	// Validate handler settings against policy settings.
 	if ExtensionPolicyManagerPtr != nil && rceps != nil {
-		allowedScriptType, err := types.StringToAllowedScriptTypeFlag(rceps.LimitScripts)
-		if err != nil { // We should not hit this because we already validte the policy settings earlier.
-			return "", "", errors.Wrap(err, "failed to parse allowed script types"), constants.ExitCode_ExtensionPolicyInvalid
-		}
-		// Compare the script type of the command with the allowed script types in the policy.
-		err = types.CompareScriptTypeToAllowedScriptType(cfg.ScriptType(), allowedScriptType)
-		if err != nil {
-			return "", "", errors.Wrap(err, "script type is not allowed by policy"), constants.ExitCode_ScriptTypeNotAllowedByPolicy
+		if err = extensionpolicysettingsrc.InitialValidateHandlerSettingsAgainstPolicy(&cfg, rceps); err != nil {
+			return "", "", err, constants.ExitCode_HandlerSettingsViolatePolicy
 		}
 	}
 
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
-	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
+	scriptFilePath, err := downloadScript(ctx, dir, &cfg, rceps)
+	if err != nil && errors.Is(err, extensionerrors.ErrItemNotInAllowlist) {
+		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist"), constants.ExitCode_DownloadedScriptBlockedByPolicy
+	}
 	if err != nil {
 		errMessage := fmt.Sprintf("Failed to download script: %v due to: %v", download.GetUriForLogging(cfg.ScriptURI()), err)
 		extensionEvents.LogErrorEvent("enable", errMessage)
@@ -276,7 +265,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions OR managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity and provide outputBlobUri / errorBlobUri and corresponding clientId in outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). In case of system-assigned identity, do not use outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). For more info, refer https://aka.ms/RunCommandManagedLinux"
 
-	// disable output blob if the policy settings has disableOutputBlobs set to true.
+	// TO-DO: disable output blob if the policy settings has disableOutputBlobs set to true.
 	var outputBlobSASRef *storage.Blob
 	var outputBlobAppendClient *appendblob.Client
 	var outputBlobAppendCreateOrReplaceError error
@@ -892,7 +881,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 
 // downloadScript downloads the script file specified in cfg into dir (creates if does
 // not exist) and takes storage credentials specified in cfg into account.
-func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings) (string, error) {
+func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings, rceps *types.RCv2ExtensionPolicySettings) (string, error) {
 	// - prepare the output directory for files and the command output
 	// - create the directory if missing
 	ctx.Log("event", "creating output directory", "path", dir)
@@ -917,6 +906,14 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 		}
 		scriptFilePath = file
 		ctx.Log("event", "download complete", "output", dir)
+
+		if rceps != nil {
+			// Assume the downloaded script type is already allowed, since this was already validated earlier in enable().
+			err = extensionpolicysettings.ValidateFileHashInAllowlist(scriptFilePath, rceps.DownloadedScriptsAllowlist, hashutils.HashTypeSHA256)
+			if err != nil {
+				return scriptFilePath, errors.Wrapf(err, "file %s blocked by policy", scriptFilePath)
+			}
+		}
 	}
 	return scriptFilePath, nil
 }

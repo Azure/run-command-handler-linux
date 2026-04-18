@@ -119,6 +119,9 @@ func (rceps RCv2ExtensionPolicySettings) ValidateFormat() error {
 	return nil
 }
 
+// This function compares a script type (of type ScriptType, defined in this file) to the allowed script types
+// (of type AllowedScriptTypeFlag, also defined in this file) listed in the policy. These values and mappings
+// are specific to Run Command, hence why they are defined here and not in the shared library.
 func CompareScriptTypeToAllowedScriptType(scriptType ScriptType, allowedScriptTypes AllowedScriptTypeFlag) error {
 	switch scriptType {
 	case InlineScript:
