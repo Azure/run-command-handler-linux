@@ -6,14 +6,13 @@ import (
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionpolicysettings"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
-	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/pkg/errors"
 )
 
-func InitializeExtensionPolicySettings(ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings],
+func InitializeExtensionPolicySettings(ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings],
 	policyPath string,
-	rceps *types.RCv2ExtensionPolicySettings) error {
-	ExtensionPolicyManagerPtr, err := extensionpolicysettings.NewExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings](policyPath)
+	rceps *RCv2ExtensionPolicySettings) error {
+	ExtensionPolicyManagerPtr, err := extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings](policyPath)
 	if err != nil {
 		return errors.Wrap(err, "failed to create extension policy settings manager")
 	}
@@ -31,14 +30,14 @@ func InitializeExtensionPolicySettings(ExtensionPolicyManagerPtr *extensionpolic
 	return nil
 }
 
-func InitialValidateHandlerSettingsAgainstPolicy(settings *handlersettings.HandlerSettings, policy *types.RCv2ExtensionPolicySettings) error {
+func InitialValidateHandlerSettingsAgainstPolicy(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
 	if policy == nil {
 		return fmt.Errorf("no policy provided")
 	}
 	if err := ValidateScriptTypeAgainstPolicy(settings.ScriptType(), policy.LimitScripts); err != nil {
 		return err
 	}
-	if settings.ScriptType() == types.CommandIdScript {
+	if settings.ScriptType() == handlersettings.CommandIdScript {
 		if err := ValidateCommandId(settings, policy); err != nil {
 			return err
 		}
@@ -54,17 +53,17 @@ func InitialValidateHandlerSettingsAgainstPolicy(settings *handlersettings.Handl
 	return nil
 }
 
-func ValidateScriptTypeAgainstPolicy(scriptType types.ScriptType, allowedScriptTypesString string) error {
-	allowedScriptTypes, _ := types.StringToAllowedScriptTypeFlag(allowedScriptTypesString)
+func ValidateScriptTypeAgainstPolicy(scriptType handlersettings.ScriptType, allowedScriptTypesString string) error {
+	allowedScriptTypes, _ := StringToAllowedScriptTypeFlag(allowedScriptTypesString)
 	// Compare the script type of the command with the allowed script types in the policy.
-	err := types.CompareScriptTypeToAllowedScriptType(scriptType, allowedScriptTypes)
+	err := CompareScriptTypeToAllowedScriptType(scriptType, allowedScriptTypes)
 	if err != nil {
 		return errors.Wrapf(err, "script type %s is not allowed by policy", scriptType)
 	}
 	return nil
 }
 
-func ValidateCommandId(settings *handlersettings.HandlerSettings, policy *types.RCv2ExtensionPolicySettings) error {
+func ValidateCommandId(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
 	settingsCommandId := settings.CommandId()
 	allowedCommandIds := policy.CommandIdAllowlist
 
@@ -75,7 +74,7 @@ func ValidateCommandId(settings *handlersettings.HandlerSettings, policy *types.
 	return extensionpolicysettings.ValidateValueInAllowlist(settingsCommandId, allowedCommandIds)
 }
 
-func ValidateRunAsUser(settings *handlersettings.HandlerSettings, policy *types.RCv2ExtensionPolicySettings) error {
+func ValidateRunAsUser(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
 	settingsRunAsUser := strings.ToLower(strings.TrimSpace(settings.RunAsUser))
 	policyRunAsUser := strings.ToLower(strings.TrimSpace(policy.RunAsUser))
 
@@ -85,7 +84,7 @@ func ValidateRunAsUser(settings *handlersettings.HandlerSettings, policy *types.
 	return nil
 }
 
-func ValidateOutputBlob(settings *handlersettings.HandlerSettings, policy *types.RCv2ExtensionPolicySettings) {
+func ValidateOutputBlob(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) {
 	if policy.DisableOutputBlobs {
 		// Log a warning that output blobs are disabled by policy. The command will still execute, but no output blobs will be created.
 		if settings.OutputBlobURI != "" {

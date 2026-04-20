@@ -1,23 +1,10 @@
-package types
+package extensionpolicysettingsrc
 
 import (
 	"fmt"
 	"strings"
-)
 
-// ScriptType refers to the type of script being executed in a run command.
-// This type defintion matches the ScriptType definition in CRP in the Run Command Handler,
-// and should always be kept in sync with the ScriptType definition in RCv2 Windows.
-// None is defined in the case where no script is passed down, which is a valid scenario.
-type ScriptType string
-
-const (
-	InlineScript     ScriptType = "inline"
-	DownloadedScript ScriptType = "downloaded"
-	GalleryScript    ScriptType = "gallery"
-	DiagnosticScript ScriptType = "diagnostic"
-	CommandIdScript  ScriptType = "commandId"
-	NoneScript       ScriptType = "none"
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 )
 
 // This refers *specifically* to file types that require signature verification
@@ -36,13 +23,13 @@ const (
 type AllowedScriptTypeFlag uint32
 
 const (
-	AllowedScriptNone AllowedScriptTypeFlag = 0
-	AllowedCommandId  AllowedScriptTypeFlag = 1 << iota
+	AllowedCommandId = 1 << iota
 	Gallery
 	Diagnostic
 	Inline
 	AllowedDownloaded
-	AllowAll = AllowedCommandId | Gallery | Diagnostic | Inline | AllowedDownloaded
+	AllowAll          = AllowedCommandId | Gallery | Diagnostic | Inline | AllowedDownloaded
+	AllowedScriptNone = 0
 )
 
 func StringToAllowedScriptTypeFlag(s string) (AllowedScriptTypeFlag, error) {
@@ -54,6 +41,7 @@ func StringToAllowedScriptTypeFlag(s string) (AllowedScriptTypeFlag, error) {
 
 	var flag AllowedScriptTypeFlag
 	for _, part := range parts {
+		part = strings.TrimSpace(part)
 		switch part {
 		case "inline":
 			flag |= Inline
@@ -69,7 +57,7 @@ func StringToAllowedScriptTypeFlag(s string) (AllowedScriptTypeFlag, error) {
 			flag |= AllowAll
 		// TO-DO: consider the case where 'none' scripts are allowed to run.
 		default:
-			return 0, fmt.Errorf("policy blocks invalid script type: %s", part)
+			return 0, fmt.Errorf("Unknown script type in policy: %s", part)
 		}
 	}
 	return flag, nil
@@ -107,13 +95,13 @@ func (rceps RCv2ExtensionPolicySettings) ValidateFormat() error {
 	// 3. If DownloadedScriptsAllowlist is not empty, limit scripts must allow "downloaded" scripts.
 	if len(rceps.DownloadedScriptsAllowlist) > 0 {
 		if (flag & AllowedDownloaded) == 0 {
-			return fmt.Errorf("LimitScripts must allow 'downloaded' scripts if DownloadedScriptsAllowlist is not empty")
+			return fmt.Errorf("DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts")
 		}
 	}
 	// 4. If CommandIdAllowlist is not empty, limit scripts must allow "commandId" scripts.
 	if len(rceps.CommandIdAllowlist) > 0 {
 		if (flag & AllowedCommandId) == 0 {
-			return fmt.Errorf("LimitScripts must allow 'commandId' scripts if CommandIdAllowlist is not empty")
+			return fmt.Errorf("CommandIdAllowlist not empty, but LimitScripts does not allow 'commandId' scripts")
 		}
 	}
 	return nil
@@ -122,25 +110,25 @@ func (rceps RCv2ExtensionPolicySettings) ValidateFormat() error {
 // This function compares a script type (of type ScriptType, defined in this file) to the allowed script types
 // (of type AllowedScriptTypeFlag, also defined in this file) listed in the policy. These values and mappings
 // are specific to Run Command, hence why they are defined here and not in the shared library.
-func CompareScriptTypeToAllowedScriptType(scriptType ScriptType, allowedScriptTypes AllowedScriptTypeFlag) error {
+func CompareScriptTypeToAllowedScriptType(scriptType handlersettings.ScriptType, allowedScriptTypes AllowedScriptTypeFlag) error {
 	switch scriptType {
-	case InlineScript:
+	case handlersettings.InlineScript:
 		if (allowedScriptTypes & Inline) == 0 {
 			return fmt.Errorf("inline scripts are not allowed by policy")
 		}
-	case DownloadedScript:
+	case handlersettings.DownloadedScript:
 		if (allowedScriptTypes & AllowedDownloaded) == 0 {
 			return fmt.Errorf("downloaded scripts are not allowed by policy")
 		}
-	case GalleryScript:
+	case handlersettings.GalleryScript:
 		if (allowedScriptTypes & Gallery) == 0 {
 			return fmt.Errorf("gallery scripts are not allowed by policy")
 		}
-	case DiagnosticScript:
+	case handlersettings.DiagnosticScript:
 		if (allowedScriptTypes & Diagnostic) == 0 {
 			return fmt.Errorf("diagnostic scripts are not allowed by policy")
 		}
-	case CommandIdScript:
+	case handlersettings.CommandIdScript:
 		if (allowedScriptTypes & AllowedCommandId) == 0 {
 			return fmt.Errorf("commandId scripts are not allowed by policy")
 		}

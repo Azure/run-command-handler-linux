@@ -216,9 +216,9 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	// Load extension policy settings.
 	// If policy file exists, load the policy. If not, then don't load.
-	var ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[types.RCv2ExtensionPolicySettings]
+	var ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[extensionpolicysettingsrc.RCv2ExtensionPolicySettings]
 	policyPath := filepath.Join(h.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
-	var rceps *types.RCv2ExtensionPolicySettings
+	var rceps *extensionpolicysettingsrc.RCv2ExtensionPolicySettings
 
 	if _, err := os.Stat(policyPath); err == nil {
 		err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ExtensionPolicyManagerPtr, policyPath, rceps)
@@ -881,7 +881,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 
 // downloadScript downloads the script file specified in cfg into dir (creates if does
 // not exist) and takes storage credentials specified in cfg into account.
-func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings, rceps *types.RCv2ExtensionPolicySettings) (string, error) {
+func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSettings, rceps *extensionpolicysettingsrc.RCv2ExtensionPolicySettings) (string, error) {
 	// - prepare the output directory for files and the command output
 	// - create the directory if missing
 	ctx.Log("event", "creating output directory", "path", dir)

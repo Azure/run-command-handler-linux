@@ -1,7 +1,6 @@
 package handlersettings
 
 import (
-	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/pkg/errors"
 )
 
@@ -10,6 +9,25 @@ type HandlerSettings struct {
 	PublicSettings
 	ProtectedSettings
 }
+
+// ScriptType refers to the type of script being executed in a run command.
+// This type defintion matches the ScriptType definition in CRP in the Run Command Handler,
+// and should always be kept in sync with the ScriptType definition in RCv2 Windows.
+// None is defined in the case where no script is passed down, which is a valid scenario.
+//
+//	Note: although this is a property that was introduced due to Extension Policy Settings,
+//	it is defined here to avoid a circular dependency between handlersettings and extensionpolicysettingsrc.
+//	CRP has been modified to also pass down the ScriptType, so it is appropriately defined here.
+type ScriptType string
+
+const (
+	InlineScript     ScriptType = "inline"
+	DownloadedScript ScriptType = "downloaded"
+	GalleryScript    ScriptType = "gallery"
+	DiagnosticScript ScriptType = "diagnostic"
+	CommandIdScript  ScriptType = "commandId"
+	NoneScript       ScriptType = "none"
+)
 
 // Gets the InstallAsService field from the RunCommand's properties
 func (s HandlerSettings) InstallAsService() bool {
@@ -28,7 +46,7 @@ func (s HandlerSettings) CommandId() string {
 	return s.PublicSettings.Source.CommandId // Only applicable when the ScriptType is a CommandId.
 }
 
-func (s HandlerSettings) ScriptType() types.ScriptType {
+func (s HandlerSettings) ScriptType() ScriptType {
 	return s.PublicSettings.Source.ScriptType
 }
 
@@ -158,10 +176,10 @@ type RunCommandManagedIdentity struct {
 }
 
 type ScriptSource struct {
-	Script     string           `json:"script"`
-	ScriptURI  string           `json:"scriptUri"`
-	CommandId  string           `json:"commandId"`
-	ScriptType types.ScriptType `json:"scriptType"`
+	Script     string     `json:"script"`
+	ScriptURI  string     `json:"scriptUri"`
+	CommandId  string     `json:"commandId"`
+	ScriptType ScriptType `json:"scriptType"`
 }
 
 type ParameterDefinition struct {
