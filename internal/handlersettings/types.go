@@ -96,7 +96,7 @@ func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, error) {
 func (s HandlerSettings) validate() error {
 	// If installAsService is false, then the source has to be specified
 	if !s.PublicSettings.InstallAsService {
-		if s.PublicSettings.Source == nil || (s.PublicSettings.Source.Script == "") == (s.PublicSettings.Source.ScriptURI == "") { // Lourdes: check here also for scriptType?
+		if s.PublicSettings.Source == nil || (s.PublicSettings.Source.Script == "") == (s.PublicSettings.Source.ScriptURI == "") {
 			return errSourceNotSpecified
 		}
 	}
