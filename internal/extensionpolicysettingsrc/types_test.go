@@ -4,19 +4,14 @@ import (
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTypeDefinitions_AreStable(t *testing.T) {
 	t.Run("file type values are stable", func(t *testing.T) {
-		if got := string(All); got != "all" {
-			t.Fatalf("All = %q, want %q", got, "all")
-		}
-		if got := string(NoFiles); got != "none" {
-			t.Fatalf("NoFiles = %q, want %q", got, "none")
-		}
-		if got := string(Scripts); got != "scripts" {
-			t.Fatalf("Scripts = %q, want %q", got, "scripts")
-		}
+		require.Equal(t, "all", string(All))
+		require.Equal(t, "none", string(NoFiles))
+		require.Equal(t, "scripts", string(Scripts))
 	})
 
 	t.Run("allowed script flag values are stable", func(t *testing.T) {
@@ -35,9 +30,9 @@ func TestTypeDefinitions_AreStable(t *testing.T) {
 		}
 
 		for _, tt := range tests {
-			if tt.got != tt.want {
-				t.Fatalf("%s = %d, want %d", tt.name, tt.got, tt.want)
-			}
+			t.Run(tt.name, func(t *testing.T) {
+				require.Equal(t, tt.want, tt.got)
+			})
 		}
 	})
 
@@ -56,9 +51,9 @@ func TestTypeDefinitions_AreStable(t *testing.T) {
 		}
 
 		for _, tt := range tests {
-			if tt.got != tt.want {
-				t.Fatalf("%s = %q, want %q", tt.name, tt.got, tt.want)
-			}
+			t.Run(tt.name, func(t *testing.T) {
+				require.Equal(t, tt.want, tt.got)
+			})
 		}
 	})
 }
@@ -76,12 +71,12 @@ func TestStringToAllowedScriptTypeFlag(t *testing.T) {
 			want:  Inline,
 		},
 		{
-			name:  "inline plus gallery",
+			name:  "inline, gallery",
 			input: "inline,gallery",
 			want:  Inline | Gallery,
 		},
 		{
-			name:  "allowed command id plus gallery plus inline",
+			name:  "allowed command ID, gallery, inline",
 			input: "allowedcommandid,gallery,inline",
 			want:  AllowedCommandId | Gallery | Inline,
 		},
@@ -96,7 +91,7 @@ func TestStringToAllowedScriptTypeFlag(t *testing.T) {
 			want:  AllowAll,
 		},
 		{
-			name:  "whitespace and capitalization",
+			name:  "whitespace and capitalization test",
 			input: "  InLiNe , GALLERY , allowedCommandId  ",
 			want:  Inline | Gallery | AllowedCommandId,
 		},
@@ -112,21 +107,13 @@ func TestStringToAllowedScriptTypeFlag(t *testing.T) {
 			got, err := StringToAllowedScriptTypeFlag(tt.input)
 
 			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("expected error %q, got nil", tt.wantErr)
-				}
-				if err.Error() != tt.wantErr {
-					t.Fatalf("error = %q, want %q", err.Error(), tt.wantErr)
-				}
+				require.Error(t, err)
+				require.Equal(t, tt.wantErr, err.Error())
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.want {
-				t.Fatalf("got %d, want %d", got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -148,14 +135,14 @@ func TestValidateFormat(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid limit scripts value",
+			name: "invalid value for limit scripts",
 			input: RCv2ExtensionPolicySettings{
 				LimitScripts: "inline,notARealType",
 			},
 			wantErr: "at least one of the values in LimitScripts is not a valid script type: inline,notARealType",
 		},
 		{
-			name: "downloaded allowlist present but downloaded blocked",
+			name: "downloaded allowlist present, but downloaded scripts are blocked",
 			input: RCv2ExtensionPolicySettings{
 				LimitScripts:               "inline,gallery",
 				DownloadedScriptsAllowlist: []string{"hash1"},
@@ -163,7 +150,7 @@ func TestValidateFormat(t *testing.T) {
 			wantErr: "DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts",
 		},
 		{
-			name: "command id allowlist present but command id blocked",
+			name: "command ID allowlist present, but command IDs are blocked",
 			input: RCv2ExtensionPolicySettings{
 				LimitScripts:       "inline,gallery",
 				CommandIdAllowlist: []string{"cmd1"},
@@ -177,18 +164,12 @@ func TestValidateFormat(t *testing.T) {
 			err := tt.input.ValidateFormat()
 
 			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("expected error %q, got nil", tt.wantErr)
-				}
-				if err.Error() != tt.wantErr {
-					t.Fatalf("error = %q, want %q", err.Error(), tt.wantErr)
-				}
+				require.Error(t, err)
+				require.Equal(t, tt.wantErr, err.Error())
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -200,45 +181,45 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 		allowed    AllowedScriptTypeFlag
 		wantErr    string
 	}{
-		// {
-		// 	name:       "none allowed gallery denied",
-		// 	scriptType: handlersettings.GalleryScript,
-		// 	allowed:    AllowedScriptNone,
-		// 	wantErr:    "gallery scripts are not allowed by policy",
-		// },
 		{
-			name:       "allow all inline",
+			name:       "none allowed, gallery denied",
+			scriptType: handlersettings.GalleryScript,
+			allowed:    AllowedScriptNone,
+			wantErr:    "gallery scripts are not allowed by policy",
+		},
+		{
+			name:       "allow all, allow inline",
 			scriptType: handlersettings.InlineScript,
 			allowed:    AllowAll,
 		},
 		{
-			name:       "allow all downloaded",
+			name:       "allow all, allow downloaded",
 			scriptType: handlersettings.DownloadedScript,
 			allowed:    AllowAll,
 		},
 		{
-			name:       "allow all gallery",
+			name:       "allow all, allow gallery",
 			scriptType: handlersettings.GalleryScript,
 			allowed:    AllowAll,
 		},
 		{
-			name:       "allow all diagnostic",
+			name:       "allow all, allow diagnostic",
 			scriptType: handlersettings.DiagnosticScript,
 			allowed:    AllowAll,
 		},
 		{
-			name:       "allow all command id",
+			name:       "allow all, allow command id",
 			scriptType: handlersettings.CommandIdScript,
 			allowed:    AllowAll,
 		},
 		{
-			name:       "diagnostic only inline denied",
+			name:       "diagnostic only, inline denied",
 			scriptType: handlersettings.InlineScript,
 			allowed:    Diagnostic,
 			wantErr:    "inline scripts are not allowed by policy",
 		},
 		{
-			name:       "allowed downloaded permits downloaded",
+			name:       "allowed downloaded, allow downloaded",
 			scriptType: handlersettings.DownloadedScript,
 			allowed:    AllowedDownloaded,
 		},
@@ -249,7 +230,7 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 			wantErr:    "unknown script type: made-up",
 		},
 		{
-			name:       "none script currently treated as unknown",
+			name:       "'none' script currently treated as unknown",
 			scriptType: handlersettings.NoneScript,
 			allowed:    AllowAll,
 			wantErr:    "unknown script type: none",
@@ -261,18 +242,12 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 			err := CompareScriptTypeToAllowedScriptType(tt.scriptType, tt.allowed)
 
 			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("expected error %q, got nil", tt.wantErr)
-				}
-				if err.Error() != tt.wantErr {
-					t.Fatalf("error = %q, want %q", err.Error(), tt.wantErr)
-				}
+				require.Error(t, err)
+				require.Equal(t, tt.wantErr, err.Error())
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.NoError(t, err)
 		})
 	}
 }
