@@ -551,7 +551,7 @@ func Test_downloadScriptUri(t *testing.T) {
 			PublicSettings: handlersettings.PublicSettings{
 				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/bytes/10"},
 			},
-		})
+		}, nil)
 	require.Nil(t, err)
 
 	// check the downloaded file
@@ -744,7 +744,7 @@ func Test_downloadScriptUri_BySASFailsSucceedsByManagedIdentity(t *testing.T) {
 					ClientId: "00b64c6a-6dbf-41e0-8707-74132d5cf53f",
 				},
 			},
-		})
+		}, nil)
 	require.Nil(t, err)
 	files.UseMockSASDownloadFailure = false
 }
