@@ -86,6 +86,7 @@ func (rceps RCv2ExtensionPolicySettings) ValidateFormat() error {
 	flag, err := StringToAllowedScriptTypeFlag(string(rceps.LimitScripts))
 	// Requirements:
 	// 1. If RequireSigning is not "none", FileRootCert must be present and non-empty.
+	// 	TO-DO: implement RequireSigning and FileRootCert validation once signature verification is implemented for RCv2.
 	// 2. LimitScripts must be a valid AllowedScriptType value. so map/check the value to the AllowedScriptTypeFlag bitmask.
 	if rceps.LimitScripts != "" {
 		if err != nil {
@@ -107,9 +108,10 @@ func (rceps RCv2ExtensionPolicySettings) ValidateFormat() error {
 	return nil
 }
 
-// This function compares a script type (of type ScriptType, defined in this file) to the allowed script types
-// (of type AllowedScriptTypeFlag, also defined in this file) listed in the policy. These values and mappings
-// are specific to Run Command, hence why they are defined here and not in the shared library.
+// This function compares a script type (of string type ScriptType, defined in this file) to the allowed script types
+// (of type AllowedScriptTypeFlag, also defined in this file) listed in the policy.
+// Depending on the string case (the value of scriptType), it checks if the corresponding bit is enabled in the allowed script types bitmask.
+// These values and mappings are specific to Run Command, hence why they are defined here and not in the shared library.
 func CompareScriptTypeToAllowedScriptType(scriptType handlersettings.ScriptType, allowedScriptTypes AllowedScriptTypeFlag) error {
 	switch scriptType {
 	case handlersettings.InlineScript:

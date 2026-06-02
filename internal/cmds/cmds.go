@@ -221,7 +221,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	var rceps *extensionpolicysettingsrc.RCv2ExtensionPolicySettings
 
 	if _, err := os.Stat(policyPath); err == nil {
-		err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ExtensionPolicyManagerPtr, policyPath, rceps)
+		ExtensionPolicyManagerPtr, rceps, err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(policyPath)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed to initialize extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 		}

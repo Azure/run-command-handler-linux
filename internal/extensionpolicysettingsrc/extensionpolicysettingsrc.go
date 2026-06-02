@@ -9,25 +9,26 @@ import (
 	"github.com/pkg/errors"
 )
 
-func InitializeExtensionPolicySettings(ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings],
-	policyPath string,
-	rceps *RCv2ExtensionPolicySettings) error {
+func InitializeExtensionPolicySettings(policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error) {
+	var ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings]
+	var rceps *RCv2ExtensionPolicySettings
+
 	ExtensionPolicyManagerPtr, err := extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings](policyPath)
 	if err != nil {
-		return errors.Wrap(err, "failed to create extension policy settings manager")
+		return nil, nil, errors.Wrap(err, "failed to create extension policy settings manager")
 	}
 
 	err = ExtensionPolicyManagerPtr.LoadExtensionPolicySettings()
 	if err != nil {
-		return errors.Wrap(err, "failed to load extension policy settings")
+		return nil, nil, errors.Wrap(err, "failed to load extension policy settings")
 	} else {
 		rceps, err = ExtensionPolicyManagerPtr.GetSettings()
 
 		if err != nil {
-			return errors.Wrap(err, "failed to get extension policy settings")
+			return nil, nil, errors.Wrap(err, "failed to get extension policy settings")
 		}
 	}
-	return nil
+	return ExtensionPolicyManagerPtr, rceps, nil
 }
 
 func InitialValidateHandlerSettingsAgainstPolicy(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
@@ -47,9 +48,9 @@ func InitialValidateHandlerSettingsAgainstPolicy(settings *handlersettings.Handl
 			return err
 		}
 	}
-	if policy.DisableOutputBlobs {
-		ValidateOutputBlob(settings, policy)
-	}
+
+	// TO-DO: Validate Disable Outputblob and RequireSigning once those features are implemented for RCv2.
+
 	return nil
 }
 
@@ -71,7 +72,11 @@ func ValidateCommandId(settings *handlersettings.HandlerSettings, policy *RCv2Ex
 		// if list is empty, all commandIds are allowed
 		return nil
 	}
-	return extensionpolicysettings.ValidateValueInAllowlist(settingsCommandId, allowedCommandIds)
+	err := extensionpolicysettings.ValidateValueInAllowlist(settingsCommandId, allowedCommandIds)
+	if err != nil {
+		return errors.Wrapf(err, "command ID %s is not allowed by policy", settingsCommandId)
+	}
+	return nil
 }
 
 func ValidateRunAsUser(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
@@ -82,15 +87,4 @@ func ValidateRunAsUser(settings *handlersettings.HandlerSettings, policy *RCv2Ex
 		return fmt.Errorf("RunAsUser '%s' in settings does not match RunAsUser '%s' in policy", settingsRunAsUser, policyRunAsUser)
 	}
 	return nil
-}
-
-func ValidateOutputBlob(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) {
-	if policy.DisableOutputBlobs {
-		// Log a warning that output blobs are disabled by policy. The command will still execute, but no output blobs will be created.
-		if settings.OutputBlobURI != "" {
-			fmt.Println("Warning: Output blobs are disabled by policy. The provided output blob URI will be ignored and no output blobs will be created for this command.")
-		} else {
-			fmt.Println("Warning: Output blobs are disabled by policy. No output blobs will be created for this command.")
-		}
-	}
 }

@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -17,6 +19,7 @@ import (
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/internal/extensionpolicysettingsrc"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
@@ -1444,4 +1447,78 @@ func mustReadFile(t *testing.T, p string) string {
 		t.Fatalf("read %s: %v", p, err)
 	}
 	return string(b)
+}
+
+// Test_downloadScript_BlockedByAllowlist verifies that downloadScript returns an error
+// when the policy allows downloaded scripts (alloweddownloaded) but the script's
+// SHA256 hash is not in the DownloadedScriptsAllowlist.
+func Test_downloadScript_BlockedByAllowlist(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(scriptContent)
+	}))
+	defer srv.Close()
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts: "alloweddownloaded",
+		// A wrong hash — the script's actual hash is not this.
+		DownloadedScriptsAllowlist: []string{"0000000000000000000000000000000000000000000000000000000000000000"},
+	}
+
+	_, err = downloadScript(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/script.sh"},
+			},
+		},
+		policy,
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "blocked by policy")
+	require.Contains(t, err.Error(), "item is not in the allowlist")
+}
+
+// Test_downloadScript_AllowedByAllowlist verifies that downloadScript succeeds
+// when the policy allows downloaded scripts and the script's SHA256 hash IS
+// present in the DownloadedScriptsAllowlist.
+func Test_downloadScript_AllowedByAllowlist(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	// Content uses Unix LF only and has no BOM, so PostProcessFile leaves bytes
+	// unchanged, making the pre-computed hash match the on-disk file hash.
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(scriptContent)
+	}))
+	defer srv.Close()
+
+	// Compute the SHA256 hash that ValidateFileHashInAllowlist will compare against.
+	h := sha256.New()
+	h.Write(scriptContent)
+	correctHash := hex.EncodeToString(h.Sum(nil))
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts:               "alloweddownloaded",
+		DownloadedScriptsAllowlist: []string{correctHash},
+	}
+
+	_, err = downloadScript(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/script.sh"},
+			},
+		},
+		policy,
+	)
+	require.NoError(t, err)
 }
