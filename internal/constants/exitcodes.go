@@ -36,7 +36,6 @@ const (
 	ExitCode_ImmediateTaskFailed                          = -223
 	ExitCode_CouldNotRehydrateMrSeq                       = -224
 	ExitCode_LoadExtensionPolicySettingsFailed            = -300
-	ExitCode_GetExtensionPolicySettingsFailed             = -301
 	ExitCode_ExtensionPolicyInvalid                       = -302
 	ExitCode_HandlerSettingsViolateExtensionPolicy        = -303
 	ExitCode_DownloadedScriptBlockedByExtensionPolicy     = -304
