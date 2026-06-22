@@ -230,7 +230,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
 		ExtensionPolicyManagerPtr = nil
 	} else {
-		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+		return "", "", errors.Wrap(err, "failed to stat extension policy settings file in enable"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
 
 	// Validate handler settings against policy settings.
