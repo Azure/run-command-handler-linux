@@ -1,12 +1,12 @@
 package extensionpolicysettingsrc
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,27 +23,8 @@ func makeSettings(scriptType handlersettings.ScriptType, commandID string, runAs
 	}
 }
 
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	os.Stdout = w
-	fn()
-	_ = w.Close()
-	os.Stdout = old
-
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	_ = r.Close()
-
-	return string(out)
-}
-
 func TestInitializeExtensionPolicySettings_InvalidPath_ReturnsError(t *testing.T) {
-	_, _, err := InitializeExtensionPolicySettings("/definitely/not/found/policy.json")
+	_, _, err := InitializeExtensionPolicySettings(nopCtx(), "/definitely/not/found/policy.json")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to")
 }
@@ -56,7 +37,7 @@ func TestInitializeExtensionPolicySettings_ValidFile_ReturnsNil(t *testing.T) {
 	err := os.WriteFile(policyPath, []byte("{}"), 0600)
 	require.NoError(t, err)
 
-	_, _, err = InitializeExtensionPolicySettings(policyPath)
+	_, _, err = InitializeExtensionPolicySettings(nopCtx(), policyPath)
 	require.NoError(t, err)
 }
 
@@ -70,7 +51,7 @@ func TestInitializeExtensionPolicySettings_CurrentBehavior_DoesNotPopulateOutput
 
 	out := &RCv2ExtensionPolicySettings{}
 
-	_, out, err = InitializeExtensionPolicySettings(policyPath)
+	_, out, err = InitializeExtensionPolicySettings(nopCtx(), policyPath)
 	require.NoError(t, err)
 
 	require.Equal(t, "inline", out.LimitScripts)
@@ -81,7 +62,7 @@ func TestInitializeExtensionPolicySettings_CurrentBehavior_DoesNotPopulateOutput
 func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 	t.Run("nil policy", func(t *testing.T) {
 		settings := makeSettings(handlersettings.InlineScript, "", "", "")
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, nil)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no policy provided")
 	})
@@ -94,7 +75,7 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 			LimitScripts: "gallery",
 		}
 
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, policy)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "script type inline is not allowed by policy")
 	})
@@ -108,7 +89,7 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 			CommandIdAllowlist: []string{"safeCommand"},
 		}
 
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, policy)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.Error(t, err)
 	})
 
@@ -119,7 +100,7 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 			RunAsUser:    "alice",
 		}
 
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, policy)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "does not match")
 	})
@@ -133,7 +114,7 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 			DisableOutputBlobs: true,
 		}
 
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, policy)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.Contains(t, err.Error(), "script type commandId is not allowed by policy")
 	})
 
@@ -146,7 +127,7 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 			DisableOutputBlobs: true,
 		}
 
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, policy)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.NoError(t, err)
 	})
 
@@ -159,7 +140,7 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 			DisableOutputBlobs: true,
 		}
 
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, policy)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.NoError(t, err)
 	})
 
@@ -172,26 +153,26 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 			DisableOutputBlobs: true,
 		}
 
-		err := InitialValidateHandlerSettingsAgainstPolicy(settings, policy)
+		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.NoError(t, err)
 	})
 }
 
 func TestValidateScriptTypeAgainstPolicy(t *testing.T) {
 	t.Run("allowed", func(t *testing.T) {
-		err := ValidateScriptTypeAgainstPolicy(handlersettings.InlineScript, "inline")
+		err := ValidateScriptTypeAgainstPolicy(nopCtx(), handlersettings.InlineScript, "inline")
 		require.NoError(t, err)
 	})
 
 	t.Run("blocked", func(t *testing.T) {
-		err := ValidateScriptTypeAgainstPolicy(handlersettings.GalleryScript, "inline")
+		err := ValidateScriptTypeAgainstPolicy(nopCtx(), handlersettings.GalleryScript, "inline")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "script type gallery is not allowed by policy")
 	})
 
 	// This tests edge case where policy has an invalid script type token.
 	t.Run("invalid policy token is treated as blocked", func(t *testing.T) {
-		err := ValidateScriptTypeAgainstPolicy(handlersettings.InlineScript, "notARealScriptType")
+		err := ValidateScriptTypeAgainstPolicy(nopCtx(), handlersettings.InlineScript, "notARealScriptType")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "script type inline is not allowed by policy")
 	})
@@ -203,7 +184,7 @@ func TestValidateCommandId(t *testing.T) {
 		policy := &RCv2ExtensionPolicySettings{
 			CommandIdAllowlist: nil,
 		}
-		err := ValidateCommandId(settings, policy)
+		err := ValidateCommandId(nopCtx(), settings, policy)
 		require.NoError(t, err)
 	})
 
@@ -212,7 +193,7 @@ func TestValidateCommandId(t *testing.T) {
 		policy := &RCv2ExtensionPolicySettings{
 			CommandIdAllowlist: []string{"safeCommand", "other"},
 		}
-		err := ValidateCommandId(settings, policy)
+		err := ValidateCommandId(nopCtx(), settings, policy)
 		require.NoError(t, err)
 	})
 
@@ -221,7 +202,7 @@ func TestValidateCommandId(t *testing.T) {
 		policy := &RCv2ExtensionPolicySettings{
 			CommandIdAllowlist: []string{"safeCommand", "other"},
 		}
-		err := ValidateCommandId(settings, policy)
+		err := ValidateCommandId(nopCtx(), settings, policy)
 		require.Contains(t, err.Error(), "command ID restartVM is not allowed by policy")
 		require.Contains(t, err.Error(), "item is not in the allowlist")
 	})
@@ -233,7 +214,7 @@ func TestValidateRunAsUser(t *testing.T) {
 		policy := &RCv2ExtensionPolicySettings{
 			RunAsUser: "alice",
 		}
-		err := ValidateRunAsUser(settings, policy)
+		err := ValidateRunAsUser(nopCtx(), settings, policy)
 		require.NoError(t, err)
 	})
 
@@ -242,8 +223,12 @@ func TestValidateRunAsUser(t *testing.T) {
 		policy := &RCv2ExtensionPolicySettings{
 			RunAsUser: "alice",
 		}
-		err := ValidateRunAsUser(settings, policy)
+		err := ValidateRunAsUser(nopCtx(), settings, policy)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "RunAsUser 'bob' in settings does not match RunAsUser 'alice' in policy")
+		require.Contains(t, err.Error(), "runAsUser 'bob' in settings does not match runAsUser 'alice' in policy")
 	})
+}
+
+func nopCtx() *log.Context {
+	return log.NewContext(log.NewNopLogger())
 }

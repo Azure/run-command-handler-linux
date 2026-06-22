@@ -221,9 +221,9 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	var rceps *extensionpolicysettingsrc.RCv2ExtensionPolicySettings
 
 	if _, err := os.Stat(policyPath); err == nil {
-		ExtensionPolicyManagerPtr, rceps, err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(policyPath)
+		ExtensionPolicyManagerPtr, rceps, err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
 		if err != nil {
-			return "", "", errors.Wrap(err, "failed to initialize extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+			return "", "", errors.Wrap(err, "failed in enable to initialize extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 		}
 		ctx.Log("message", "successfully initialized extension policy settings")
 	} else if os.IsNotExist(err) {
@@ -235,15 +235,15 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	// Validate handler settings against policy settings.
 	if ExtensionPolicyManagerPtr != nil && rceps != nil {
-		if err = extensionpolicysettingsrc.InitialValidateHandlerSettingsAgainstPolicy(&cfg, rceps); err != nil {
-			return "", "", err, constants.ExitCode_HandlerSettingsViolatePolicy
+		if err = extensionpolicysettingsrc.ValidateHandlerSettingsAgainstPolicy(ctx, &cfg, rceps); err != nil {
+			return "", "", err, constants.ExitCode_HandlerSettingsViolateExtensionPolicy
 		}
 	}
 
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg, rceps)
 	if err != nil && errors.Is(err, extensionerrors.ErrItemNotInAllowlist) {
-		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist"), constants.ExitCode_DownloadedScriptBlockedByPolicy
+		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist"), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
 	}
 	if err != nil {
 		errMessage := fmt.Sprintf("Failed to download script: %v due to: %v", download.GetUriForLogging(cfg.ScriptURI()), err)

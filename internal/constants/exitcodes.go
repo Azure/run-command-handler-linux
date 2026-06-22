@@ -35,13 +35,11 @@ const (
 	ExitCode_ImmediateTaskTimeout                         = -222
 	ExitCode_ImmediateTaskFailed                          = -223
 	ExitCode_CouldNotRehydrateMrSeq                       = -224
-
-	// Extension Policy Settings Errors (-300s):
-	ExitCode_LoadExtensionPolicySettingsFailed = -300
-	ExitCode_GetExtensionPolicySettingsFailed  = -301
-	ExitCode_ExtensionPolicyInvalid            = -302
-	ExitCode_HandlerSettingsViolatePolicy      = -303
-	ExitCode_DownloadedScriptBlockedByPolicy   = -304
+	ExitCode_LoadExtensionPolicySettingsFailed            = -300
+	ExitCode_GetExtensionPolicySettingsFailed             = -301
+	ExitCode_ExtensionPolicyInvalid                       = -302
+	ExitCode_HandlerSettingsViolateExtensionPolicy        = -303
+	ExitCode_DownloadedScriptBlockedByExtensionPolicy     = -304
 
 	// Unknown errors (-400s):
 )

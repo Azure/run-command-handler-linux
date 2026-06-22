@@ -5,46 +5,51 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionpolicysettings"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
-func InitializeExtensionPolicySettings(policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error) {
-	var ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings]
-	var rceps *RCv2ExtensionPolicySettings
-
-	ExtensionPolicyManagerPtr, err := extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings](policyPath)
+func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error) {
+	extensionPolicyManager, err := extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings](policyPath)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create extension policy settings manager")
+		err = errors.Wrap(err, "failed to create extension policy settings manager")
+		ctx.Log("message", "failed to create extension policy settings manager. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
+		return nil, nil, err
 	}
 
-	err = ExtensionPolicyManagerPtr.LoadExtensionPolicySettings()
+	err = extensionPolicyManager.LoadExtensionPolicySettings()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to load extension policy settings")
-	} else {
-		rceps, err = ExtensionPolicyManagerPtr.GetSettings()
-
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to get extension policy settings")
-		}
+		err = errors.Wrap(err, "failed to load extension policy settings")
+		ctx.Log("message", "failed to load extension policy settings. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
+		return nil, nil, err
 	}
-	return ExtensionPolicyManagerPtr, rceps, nil
+
+	rceps, err := extensionPolicyManager.GetSettings() //rceps is the pointer to the actual policy struct
+	if err != nil {
+		err = errors.Wrap(err, "failed to get extension policy settings after loading")
+		ctx.Log("message", "failed to get extension policy settings. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
+		return nil, nil, err
+	}
+	return extensionPolicyManager, rceps, nil
 }
 
-func InitialValidateHandlerSettingsAgainstPolicy(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
+func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
 	if policy == nil {
+		ctx.Log("message", "no policy provided for extension policy settings")
 		return fmt.Errorf("no policy provided")
 	}
-	if err := ValidateScriptTypeAgainstPolicy(settings.ScriptType(), policy.LimitScripts); err != nil {
+	if err := ValidateScriptTypeAgainstPolicy(ctx, settings.ScriptType(), policy.LimitScripts); err != nil {
 		return err
 	}
 	if settings.ScriptType() == handlersettings.CommandIdScript {
-		if err := ValidateCommandId(settings, policy); err != nil {
+		if err := ValidateCommandId(ctx, settings, policy); err != nil {
 			return err
 		}
 	}
 	if policy.RunAsUser != "" {
-		if err := ValidateRunAsUser(settings, policy); err != nil {
+		if err := ValidateRunAsUser(ctx, settings, policy); err != nil {
 			return err
 		}
 	}
@@ -54,37 +59,42 @@ func InitialValidateHandlerSettingsAgainstPolicy(settings *handlersettings.Handl
 	return nil
 }
 
-func ValidateScriptTypeAgainstPolicy(scriptType handlersettings.ScriptType, allowedScriptTypesString string) error {
+func ValidateScriptTypeAgainstPolicy(ctx *log.Context, scriptType handlersettings.ScriptType, allowedScriptTypesString string) error {
 	allowedScriptTypes, _ := StringToAllowedScriptTypeFlag(allowedScriptTypesString)
 	// Compare the script type of the command with the allowed script types in the policy.
 	err := CompareScriptTypeToAllowedScriptType(scriptType, allowedScriptTypes)
 	if err != nil {
+		ctx.Log("message", "script type not allowed by policy", "error", err, "scriptType", scriptType)
 		return errors.Wrapf(err, "script type %s is not allowed by policy", scriptType)
 	}
 	return nil
 }
 
-func ValidateCommandId(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
+func ValidateCommandId(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
 	settingsCommandId := settings.CommandId()
 	allowedCommandIds := policy.CommandIdAllowlist
 
 	if len(allowedCommandIds) == 0 {
 		// if list is empty, all commandIds are allowed
+		ctx.Log("message", "allowedCommandID list empty, allowing all commands")
 		return nil
 	}
 	err := extensionpolicysettings.ValidateValueInAllowlist(settingsCommandId, allowedCommandIds)
 	if err != nil {
+		ctx.Log("message", "command ID is not allowed by policy", "error", err, "commandId", settingsCommandId)
 		return errors.Wrapf(err, "command ID %s is not allowed by policy", settingsCommandId)
 	}
 	return nil
 }
 
-func ValidateRunAsUser(settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
+func ValidateRunAsUser(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
 	settingsRunAsUser := strings.ToLower(strings.TrimSpace(settings.RunAsUser))
 	policyRunAsUser := strings.ToLower(strings.TrimSpace(policy.RunAsUser))
 
 	if strings.Compare(settingsRunAsUser, policyRunAsUser) != 0 {
-		return fmt.Errorf("RunAsUser '%s' in settings does not match RunAsUser '%s' in policy", settingsRunAsUser, policyRunAsUser)
+		err := fmt.Errorf("runAsUser '%s' in settings does not match runAsUser '%s' in policy", settingsRunAsUser, policyRunAsUser)
+		ctx.Log("message", "runAsUser settings does not match runAsUser in policy", "error", err, "settingsRunAsUser", settingsRunAsUser, "policyRunAsUser", policyRunAsUser)
+		return err
 	}
 	return nil
 }

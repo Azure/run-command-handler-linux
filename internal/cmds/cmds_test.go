@@ -1466,7 +1466,7 @@ func Test_downloadScript_BlockedByAllowlist(t *testing.T) {
 
 	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
 		LimitScripts: "alloweddownloaded",
-		// A wrong hash — the script's actual hash is not this.
+		// A mismatch hash
 		DownloadedScriptsAllowlist: []string{"0000000000000000000000000000000000000000000000000000000000000000"},
 	}
 
