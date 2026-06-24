@@ -1620,6 +1620,9 @@ func Test_enable_e2e_extension_policy_settings_pass(t *testing.T) {
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
+
+	// Instance view is reported as the string value of "message", so it's easier to check for expected substrings.
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Succeeded\",\"executionMessage\":\"Execution completed"), "execution message should indicate success")
 }
 
 func Test_enable_e2e_extension_policy_settings_block_statussuccess(t *testing.T) {
@@ -1653,8 +1656,11 @@ func Test_enable_e2e_extension_policy_settings_block_statussuccess(t *testing.T)
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 }
 
+// This test sets treatFailureAsDeploymentFailure to true, so failure to execute the script is reflected as a
+// failed status.
 func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
 	ctx := log.NewContext(log.NewNopLogger())
 	extName, seqNum := "happyPolicyRun", 0
@@ -1671,7 +1677,7 @@ func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
 		LimitScripts:               "alloweddownloaded",
 		DownloadedScriptsAllowlist: []string{"000000000000"},
 	}
-	// Policy will be marshaled and written to a file in the config folder.
+	// treatFailureAsDeploymentFailure set to true
 	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", true, policy)
 
 	scriptWasExecuted := false
@@ -1686,4 +1692,5 @@ func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
 	require.Equal(t, types.StatusError, report[0].Status.Status, "status report should indicate failure")
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 }

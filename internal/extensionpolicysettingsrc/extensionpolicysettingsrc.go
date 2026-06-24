@@ -12,6 +12,11 @@ import (
 )
 
 func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error) {
+	if policyPath == "" {
+		err := fmt.Errorf("policy path is empty")
+		ctx.Log("message", "policy path is empty. "+constants.ContactICMForServiceErrorsMessage, "error", err)
+		return nil, nil, err
+	}
 	extensionPolicyManager, err := extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings](policyPath)
 	if err != nil {
 		err = errors.Wrap(err, "failed to create extension policy settings manager")

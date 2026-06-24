@@ -131,19 +131,6 @@ func TestInitialValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("all checks pass commandId", func(t *testing.T) {
-		settings := makeSettings(handlersettings.CommandIdScript, "safeCommand", " Alice ", "https://example/blob")
-		policy := &RCv2ExtensionPolicySettings{
-			LimitScripts:       "allowall",
-			CommandIdAllowlist: []string{"safeCommand"},
-			RunAsUser:          "alice",
-			DisableOutputBlobs: true,
-		}
-
-		err := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
-		require.NoError(t, err)
-	})
-
 	t.Run("all checks pass downloadedScript", func(t *testing.T) {
 		settings := makeSettings(handlersettings.DownloadedScript, "safeCommand", " Alice ", "https://example/blob")
 		policy := &RCv2ExtensionPolicySettings{

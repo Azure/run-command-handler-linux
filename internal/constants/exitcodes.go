@@ -10,7 +10,6 @@ const (
 	ExitCode_RunAsLookupUserFailed                    = -102
 	ExitCode_HandlerSettingsViolateExtensionPolicy    = -103
 	ExitCode_DownloadedScriptBlockedByExtensionPolicy = -104
-	ExitCode_ExtensionPolicyInvalid                   = -226
 
 	// Service Errors (-200s):
 	ExitCode_CreateDataDirectoryFailed                    = -200
@@ -39,4 +38,7 @@ const (
 	ExitCode_ImmediateTaskFailed                          = -223
 	ExitCode_CouldNotRehydrateMrSeq                       = -224
 	ExitCode_LoadExtensionPolicySettingsFailed            = -225
+	ExitCode_ExtensionPolicyInvalid                       = -226
+
+	// Unknown errors (-300s):
 )
