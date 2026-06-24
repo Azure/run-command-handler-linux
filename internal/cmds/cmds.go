@@ -216,25 +216,25 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	// Load extension policy settings.
 	// If policy file exists, load the policy. If not, then don't load.
-	var ExtensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[extensionpolicysettingsrc.RCv2ExtensionPolicySettings]
+	var extensionPolicyManagerPtr *extensionpolicysettings.ExtensionPolicySettingsManager[extensionpolicysettingsrc.RCv2ExtensionPolicySettings]
 	policyPath := filepath.Join(h.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
 	var rceps *extensionpolicysettingsrc.RCv2ExtensionPolicySettings
 
 	if _, err := os.Stat(policyPath); err == nil {
-		ExtensionPolicyManagerPtr, rceps, err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
+		extensionPolicyManagerPtr, rceps, err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
 		if err != nil {
 			return "", "", errors.Wrap(err, "failed in enable to initialize extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 		}
 		ctx.Log("message", "successfully initialized extension policy settings")
 	} else if os.IsNotExist(err) {
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
-		ExtensionPolicyManagerPtr = nil
+		extensionPolicyManagerPtr = nil
 	} else {
 		return "", "", errors.Wrap(err, "failed to stat extension policy settings file in enable"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
 
 	// Validate handler settings against policy settings.
-	if ExtensionPolicyManagerPtr != nil && rceps != nil {
+	if extensionPolicyManagerPtr != nil && rceps != nil {
 		if err = extensionpolicysettingsrc.ValidateHandlerSettingsAgainstPolicy(ctx, &cfg, rceps); err != nil {
 			return "", "", err, constants.ExitCode_HandlerSettingsViolateExtensionPolicy
 		}
@@ -963,7 +963,6 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 		scenario = "public-scriptUri"
 	}
 
-	// Filter the inline script type here.
 	ctx.Log("event", "prepare command", "scriptFile", scriptFilePath)
 
 	// We need to kill previous extension process if exists before starting a new one.
