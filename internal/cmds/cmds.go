@@ -243,8 +243,12 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg, rceps)
 	if err != nil && errors.Is(err, extensionerrors.ErrItemNotInAllowlist) {
-		os.Truncate(scriptFilePath, 0)
-		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist. File has been emptied."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
+		ctx.Log("message", "downloaded script file is not in the allowlist, attempting to truncate", "scriptFilePath", scriptFilePath)
+		if truncateErr := os.Truncate(scriptFilePath, 0); truncateErr != nil {
+			err = errors.Wrap(truncateErr, "failed to truncate downloaded script file")
+			return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
+		}
+		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist. File has been truncated."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
 	}
 	if err != nil {
 		errMessage := fmt.Sprintf("Failed to download script: %v due to: %v", download.GetUriForLogging(cfg.ScriptURI()), err)
