@@ -221,9 +221,9 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	var rceps *extensionpolicysettingsrc.RCv2ExtensionPolicySettings
 
 	if _, err := os.Stat(policyPath); err == nil {
-		extensionPolicyManagerPtr, rceps, err = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
+		extensionPolicyManagerPtr, rceps, err, exitCode = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
 		if err != nil {
-			return "", "", errors.Wrap(err, "failed in enable to initialize extension policy settings"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+			return "", "", errors.Wrap(err, "failed in enable to initialize extension policy settings"), exitCode
 		}
 		ctx.Log("message", "successfully initialized extension policy settings")
 	} else if os.IsNotExist(err) {
@@ -235,8 +235,8 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	// Validate handler settings against policy settings.
 	if extensionPolicyManagerPtr != nil && rceps != nil {
-		if err = extensionpolicysettingsrc.ValidateHandlerSettingsAgainstPolicy(ctx, &cfg, rceps); err != nil {
-			return "", "", err, constants.ExitCode_HandlerSettingsViolateExtensionPolicy
+		if err, exitCode = extensionpolicysettingsrc.ValidateHandlerSettingsAgainstPolicy(ctx, &cfg, rceps); err != nil {
+			return "", "", err, exitCode
 		}
 	}
 

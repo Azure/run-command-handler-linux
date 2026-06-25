@@ -11,57 +11,58 @@ import (
 	"github.com/pkg/errors"
 )
 
-func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error) {
+func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error, int) {
 	if policyPath == "" {
 		err := fmt.Errorf("policy path is empty")
 		ctx.Log("message", "policy path is empty. "+constants.ContactICMForServiceErrorsMessage, "error", err)
-		return nil, nil, err
+		return nil, nil, err, constants.ExitCode_InitializeCalledWithNoPolicyPath
 	}
 	extensionPolicyManager, err := extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings](policyPath)
 	if err != nil {
-		err = errors.Wrap(err, "failed to create extension policy settings manager")
+		// Manager only fails to be created if policy path is empty, so this shouldn't fail.
+		err = errors.Wrap(err, "failed to create extension policy settings manager. Ensure the policy path is valid")
 		ctx.Log("message", "failed to create extension policy settings manager. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
-		return nil, nil, err
+		return nil, nil, err, constants.ExitCode_FailedToCreateExtensionPolicySettingsManager
 	}
 
 	err = extensionPolicyManager.LoadExtensionPolicySettings()
 	if err != nil {
 		err = errors.Wrap(err, "failed to load extension policy settings")
 		ctx.Log("message", "failed to load extension policy settings. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
-		return nil, nil, err
+		return nil, nil, err, constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
 
 	rceps, err := extensionPolicyManager.GetSettings() //rceps is the pointer to the actual policy struct
 	if err != nil {
 		err = errors.Wrap(err, "failed to get extension policy settings after loading")
 		ctx.Log("message", "failed to get extension policy settings. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
-		return nil, nil, err
+		return nil, nil, err, constants.ExitCode_FailedToGetExtensionPolicySettings
 	}
-	return extensionPolicyManager, rceps, nil
+	return extensionPolicyManager, rceps, nil, 0
 }
 
-func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
+func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) (error, int) {
 	if policy == nil {
 		ctx.Log("message", "no policy provided for extension policy settings")
-		return fmt.Errorf("no policy provided")
+		return fmt.Errorf("no policy provided"), constants.ExitCode_ValidateCalledWithNilPolicy
 	}
 	if err := ValidateScriptTypeAgainstPolicy(ctx, settings.ScriptType(), policy.LimitScripts); err != nil {
-		return err
+		return err, constants.ExitCode_ScriptTypeNotAllowedByExtensionPolicy
 	}
 	if settings.ScriptType() == handlersettings.CommandIdScript {
 		if err := ValidateCommandId(ctx, settings, policy); err != nil {
-			return err
+			return err, constants.ExitCode_CommandIdNotAllowedByExtensionPolicy
 		}
 	}
 	if policy.RunAsUser != "" {
 		if err := ValidateRunAsUser(ctx, settings, policy); err != nil {
-			return err
+			return err, constants.ExitCode_RunAsUserNotAllowedByExtensionPolicy
 		}
 	}
 
 	// TO-DO: Validate Disable Outputblob and RequireSigning once those features are implemented for RCv2.
 
-	return nil
+	return nil, 0
 }
 
 func ValidateScriptTypeAgainstPolicy(ctx *log.Context, scriptType handlersettings.ScriptType, allowedScriptTypesString string) error {
