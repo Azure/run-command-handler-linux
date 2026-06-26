@@ -223,14 +223,14 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	if _, err := os.Stat(policyPath); err == nil {
 		extensionPolicyManagerPtr, rceps, err, exitCode = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
 		if err != nil {
-			return "", "", errors.Wrap(err, "failed in enable to initialize extension policy settings"), exitCode
+			return "", "", errors.Wrap(err, "failed to initialize extension policy settings"), exitCode
 		}
 		ctx.Log("message", "successfully initialized extension policy settings")
 	} else if os.IsNotExist(err) {
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
 		extensionPolicyManagerPtr = nil
 	} else {
-		return "", "", errors.Wrap(err, "failed to stat extension policy settings file in enable"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
 
 	// Validate handler settings against policy settings.
@@ -243,13 +243,9 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg, rceps)
 	if err != nil && errors.Is(err, extensionerrors.ErrItemNotInAllowlist) {
-		ctx.Log("message", "downloaded script file is not in the allowlist, attempting to truncate", "scriptFilePath", scriptFilePath)
-		if truncateErr := os.Truncate(scriptFilePath, 0); truncateErr != nil {
-			err = errors.Wrap(truncateErr, "failed to truncate downloaded script file")
-			return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
-		}
-		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist. File has been truncated."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
+		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
 	}
+
 	if err != nil {
 		errMessage := fmt.Sprintf("Failed to download script: %v due to: %v", download.GetUriForLogging(cfg.ScriptURI()), err)
 		extensionEvents.LogErrorEvent("enable", errMessage)
@@ -913,9 +909,15 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 		ctx.Log("event", "download complete", "output", dir)
 
 		if rceps != nil {
-			// Assume the downloaded script type is already allowed, since this was already validated earlier in enable().
+			// Assume the downloaded script TYPE is already allowed, since this was already validated earlier in enable().
 			err = extensionpolicysettings.ValidateFileHashInAllowlist(scriptFilePath, rceps.DownloadedScriptsAllowlist, hashutils.HashTypeSHA256)
 			if err != nil {
+				ctx.Log("message", "downloaded script file is not in the allowlist, attempting to delete", "scriptFilePath", scriptFilePath)
+				if delErr := os.Remove(scriptFilePath); delErr != nil {
+					ctx.Log("message", "failed to delete downloaded script file", "scriptFilePath", scriptFilePath, "error", delErr)
+				} else {
+					ctx.Log("message", "successfully deleted downloaded script file", "scriptFilePath", scriptFilePath)
+				}
 				return scriptFilePath, errors.Wrapf(err, "file %s blocked by policy", scriptFilePath)
 			}
 		}

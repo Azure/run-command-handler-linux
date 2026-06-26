@@ -13,7 +13,7 @@ import (
 
 func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error, int) {
 	if policyPath == "" {
-		err := fmt.Errorf("policy path is empty")
+		err := fmt.Errorf("policy path to initialize extension policy settings is empty")
 		ctx.Log("message", "policy path is empty. "+constants.ContactICMForServiceErrorsMessage, "error", err)
 		return nil, nil, err, constants.ExitCode_InitializeCalledWithNoPolicyPath
 	}
@@ -27,7 +27,7 @@ func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*ex
 
 	err = extensionPolicyManager.LoadExtensionPolicySettings()
 	if err != nil {
-		err = errors.Wrap(err, "failed to load extension policy settings")
+		err = errors.Wrap(err, "failed to load extension policy settings from file. Ensure the policy format is valid and the file is accessible")
 		ctx.Log("message", "failed to load extension policy settings. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
 		return nil, nil, err, constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
@@ -44,7 +44,7 @@ func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*ex
 func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) (error, int) {
 	if policy == nil {
 		ctx.Log("message", "no policy provided for extension policy settings")
-		return fmt.Errorf("no policy provided"), constants.ExitCode_ValidateCalledWithNilPolicy
+		return fmt.Errorf("no policy provided to validate handler settings"), constants.ExitCode_ValidateCalledWithNilPolicy
 	}
 	if err := ValidateScriptTypeAgainstPolicy(ctx, settings.ScriptType(), policy.LimitScripts); err != nil {
 		return err, constants.ExitCode_ScriptTypeNotAllowedByExtensionPolicy
