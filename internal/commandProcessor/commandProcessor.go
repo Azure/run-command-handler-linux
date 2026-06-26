@@ -46,7 +46,7 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 	}
 
 	// Store handler settings locally before moving forward...
-	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.ImmediateDownloadFolder)
+	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.ImmediateDownloadFolder, constants.DataDir)
 }
 
 func ProcessHandlerCommand(cmd types.Cmd) error {
@@ -65,10 +65,10 @@ func ProcessHandlerCommand(cmd types.Cmd) error {
 		return errors.Wrap(err, "failed on pre steps")
 	}
 
-	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.DownloadFolder)
+	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.DownloadFolder, constants.DataDir)
 }
 
-func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string) error {
+func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string, dataDir string) error {
 	ctx.Log("message", fmt.Sprintf("processing command for extensionName: %v and seqNum: %v", extensionName, seqNum))
 	instView := types.RunCommandInstanceView{
 		ExecutionState:   types.Running,
@@ -80,7 +80,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		EndTime:          "",
 	}
 
-	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, constants.DataDir)
+	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, dataDir)
 	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
 
 	// execute the subcommand

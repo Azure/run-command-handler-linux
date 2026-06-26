@@ -5,9 +5,13 @@ const (
 	ExitCode_Okay = 0
 
 	// User errors (-100s):
-	ExitCode_ScriptBlobDownloadFailed  = -100
-	ExitCode_BlobCreateOrReplaceFailed = -101
-	ExitCode_RunAsLookupUserFailed     = -102
+	ExitCode_ScriptBlobDownloadFailed                 = -100
+	ExitCode_BlobCreateOrReplaceFailed                = -101
+	ExitCode_RunAsLookupUserFailed                    = -102
+	ExitCode_ScriptTypeNotAllowedByExtensionPolicy    = -103
+	ExitCode_CommandIdNotAllowedByExtensionPolicy     = -104
+	ExitCode_RunAsUserNotAllowedByExtensionPolicy     = -105
+	ExitCode_DownloadedScriptBlockedByExtensionPolicy = -106
 
 	// Service Errors (-200s):
 	ExitCode_CreateDataDirectoryFailed                    = -200
@@ -35,6 +39,12 @@ const (
 	ExitCode_ImmediateTaskTimeout                         = -222
 	ExitCode_ImmediateTaskFailed                          = -223
 	ExitCode_CouldNotRehydrateMrSeq                       = -224
+	ExitCode_LoadExtensionPolicySettingsFailed            = -225
+	ExitCode_InitializeCalledWithNoPolicyPath             = -226
+	ExitCode_FailedToCreateExtensionPolicySettingsManager = -227
+	ExitCode_FailedToGetExtensionPolicySettings           = -228
+	ExitCode_ExtensionPolicyInvalid                       = -229
+	ExitCode_ValidateCalledWithNilPolicy                  = -230
 
 	// Unknown errors (-300s):
 )

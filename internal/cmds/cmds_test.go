@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -16,7 +18,9 @@ import (
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
+	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/internal/extensionpolicysettingsrc"
 	"github.com/Azure/run-command-handler-linux/internal/files"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
@@ -551,7 +555,7 @@ func Test_downloadScriptUri(t *testing.T) {
 			PublicSettings: handlersettings.PublicSettings{
 				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/bytes/10"},
 			},
-		})
+		}, nil)
 	require.Nil(t, err)
 
 	// check the downloaded file
@@ -744,7 +748,7 @@ func Test_downloadScriptUri_BySASFailsSucceedsByManagedIdentity(t *testing.T) {
 					ClientId: "00b64c6a-6dbf-41e0-8707-74132d5cf53f",
 				},
 			},
-		})
+		}, nil)
 	require.Nil(t, err)
 	files.UseMockSASDownloadFailure = false
 }
@@ -1444,4 +1448,249 @@ func mustReadFile(t *testing.T, p string) string {
 		t.Fatalf("read %s: %v", p, err)
 	}
 	return string(b)
+}
+
+// Test_downloadScript_BlockedByAllowlist verifies that downloadScript returns an error
+// when the policy allows downloaded scripts (alloweddownloaded) but the script's
+// SHA256 hash is not in the DownloadedScriptsAllowlist.
+func Test_downloadScript_BlockedByAllowlist(t *testing.T) {
+	dir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+	srv := make_server_with_content(scriptContent)
+	defer srv.Close()
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts: "alloweddownloaded",
+		// A mismatch hash
+		DownloadedScriptsAllowlist: []string{"0000000000000000000000000000000000000000000000000000000000000000"},
+	}
+
+	_, err = downloadScript(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/script.sh"},
+			},
+		},
+		policy,
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "blocked by policy")
+	require.Contains(t, err.Error(), "item is not in the allowlist")
+}
+
+// Test_downloadScript_AllowedByAllowlist verifies that downloadScript succeeds
+// when the policy allows downloaded scripts and the script's SHA256 hash IS
+// present in the DownloadedScriptsAllowlist.
+func Test_downloadScript_AllowedByAllowlist(t *testing.T) {
+	dir, err := os.MkdirTemp("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(dir)
+
+	// Content uses Unix LF only and has no BOM, so PostProcessFile leaves bytes
+	// unchanged, making the pre-computed hash match the on-disk file hash.
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+	srv := make_server_with_content(scriptContent)
+	defer srv.Close()
+
+	// Compute the SHA256 hash that ValidateFileHashInAllowlist will compare against.
+	correctHash := hash_bytes_256(scriptContent)
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts:               "alloweddownloaded",
+		DownloadedScriptsAllowlist: []string{correctHash},
+	}
+
+	_, err = downloadScript(log.NewContext(log.NewNopLogger()),
+		dir,
+		&handlersettings.HandlerSettings{
+			PublicSettings: handlersettings.PublicSettings{
+				Source: &handlersettings.ScriptSource{ScriptURI: srv.URL + "/script.sh"},
+			},
+		},
+		policy,
+	)
+	require.NoError(t, err)
+}
+
+func setupPolicyE2E(t *testing.T, dataDir, extName string, seqNum int, scriptURI string, treatFailureAsDeploymentFailure bool, policy *extensionpolicysettingsrc.RCv2ExtensionPolicySettings,
+) types.HandlerEnvironment {
+	t.Helper()
+	configFolder := create_folder(t, dataDir, "config")
+	statusFolder := create_folder(t, dataDir, constants.StatusFileDirectory)
+	eventsFolder := create_folder(t, dataDir, constants.ExtensionEventsDirectory)
+
+	fakeEnv := types.HandlerEnvironment{}
+	update_handler_env(&fakeEnv, statusFolder, configFolder, eventsFolder)
+
+	// Write the extension .settings file (mirrors enable_extension), but with a
+	// downloaded-script source so the allowlist check applies.
+	settingsCommon := settings.SettingsCommon{
+		ExtensionName:           &extName,
+		ProtectedSettingsBase64: "",
+		SettingsCertThumbprint:  "",
+		PublicSettings: map[string]interface{}{
+			"source": map[string]interface{}{
+				"scriptUri":  scriptURI,
+				"scriptType": string(handlersettings.DownloadedScript),
+			},
+			"treatFailureAsDeploymentFailure": treatFailureAsDeploymentFailure,
+		},
+	}
+	handlerSettings := handlersettings.HandlerSettingsFile{
+		RuntimeSettings: []handlersettings.RunTimeSettingsFile{
+			{HandlerSettings: settingsCommon},
+		},
+	}
+	settingsFilePath := filepath.Join(configFolder, extName+"."+strconv.Itoa(seqNum)+".settings")
+	file, err := os.Create(settingsFilePath)
+	require.Nil(t, err, "could not create settings file")
+	err = json.NewEncoder(file).Encode(handlerSettings)
+	require.Nil(t, err, "could not serialize settings file")
+	require.Nil(t, file.Close(), "could not close settings file")
+
+	// Write the real policy file that will be parsed in enable()
+	policyBytes, err := json.Marshal(policy)
+	require.Nil(t, err, "could not marshal policy settings")
+	err = os.WriteFile(filepath.Join(configFolder, constants.PolicyFileName), policyBytes, 0600)
+	require.Nil(t, err, "could not write policy settings file")
+
+	return fakeEnv
+}
+
+func hash_bytes_256(b []byte) string {
+	h := sha256.New()
+	h.Write(b)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func make_server_with_content(content []byte) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(content)
+	}))
+}
+
+func readStatusReport(t *testing.T, env types.HandlerEnvironment, extName string, seqNum int) types.StatusReport {
+	t.Helper()
+	statusPath := filepath.Join(env.HandlerEnvironment.StatusFolder,
+		extName+"."+strconv.Itoa(seqNum)+constants.StatusFileExtension)
+	require.FileExists(t, statusPath)
+
+	content, err := os.ReadFile(statusPath)
+	require.Nil(t, err)
+
+	var report types.StatusReport
+	require.Nil(t, json.Unmarshal(content, &report))
+	return report
+}
+
+func Test_enable_e2e_extension_policy_settings_pass(t *testing.T) {
+	ctx := log.NewContext(log.NewNopLogger())
+	extName, seqNum := "happyPolicyRun", 0
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+	correctHash := hash_bytes_256(scriptContent)
+
+	srv := make_server_with_content(scriptContent)
+	defer srv.Close()
+
+	dataDir, err := os.MkdirTemp("", "policy-pass")
+	require.Nil(t, err)
+	defer os.RemoveAll(dataDir)
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts:               "alloweddownloaded",
+		DownloadedScriptsAllowlist: []string{correctHash},
+	}
+	// Policy will be marshaled and written to a file in the config folder.
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, policy)
+
+	scriptWasExecuted := false
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+		scriptWasExecuted = true
+		return nil, 0
+	}
+
+	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
+	require.Nil(t, err, "enable command should succeed")
+	require.True(t, scriptWasExecuted, "allowed script should be executed")
+
+	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
+
+	// Instance view is reported as the string value of "message", so it's easier to check for expected substrings.
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Succeeded\",\"executionMessage\":\"Execution completed"), "execution message should indicate success")
+}
+
+func Test_enable_e2e_extension_policy_settings_block_statussuccess(t *testing.T) {
+	ctx := log.NewContext(log.NewNopLogger())
+	extName, seqNum := "happyPolicyRun", 0
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+
+	srv := make_server_with_content(scriptContent)
+	defer srv.Close()
+
+	dataDir, err := os.MkdirTemp("", "policy-pass")
+	require.Nil(t, err)
+	defer os.RemoveAll(dataDir)
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts:               "alloweddownloaded",
+		DownloadedScriptsAllowlist: []string{"000000000000"},
+	}
+	// Policy will be marshaled and written to a file in the config folder.
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, policy)
+
+	scriptWasExecuted := false
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+		scriptWasExecuted = true
+		return nil, 0
+	}
+
+	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
+	require.Nil(t, err, "enable command should succeed")
+	require.False(t, scriptWasExecuted, "disallowed script should not be executed")
+
+	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
+}
+
+// This test sets treatFailureAsDeploymentFailure to true, so failure to execute the script is reflected as a
+// failed status.
+func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
+	ctx := log.NewContext(log.NewNopLogger())
+	extName, seqNum := "happyPolicyRun", 0
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+
+	srv := make_server_with_content(scriptContent)
+	defer srv.Close()
+
+	dataDir, err := os.MkdirTemp("", "policy-pass")
+	require.Nil(t, err)
+	defer os.RemoveAll(dataDir)
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts:               "alloweddownloaded",
+		DownloadedScriptsAllowlist: []string{"000000000000"},
+	}
+	// treatFailureAsDeploymentFailure set to true
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", true, policy)
+
+	scriptWasExecuted := false
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+		scriptWasExecuted = true
+		return nil, 0
+	}
+
+	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
+	require.Nil(t, err, "enable command should succeed")
+	require.False(t, scriptWasExecuted, "disallowed script should not be executed")
+
+	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+	require.Equal(t, types.StatusError, report[0].Status.Status, "status report should indicate failure")
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 }
