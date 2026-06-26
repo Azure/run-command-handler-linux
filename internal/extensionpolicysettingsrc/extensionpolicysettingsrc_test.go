@@ -27,13 +27,13 @@ func makeSettings(scriptType handlersettings.ScriptType, commandID string, runAs
 func TestInitializeExtensionPolicySettings_EmptyPath_ReturnsError(t *testing.T) {
 	_, _, err, exitCode := InitializeExtensionPolicySettings(nopCtx(), "")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "policy path is empty")
+	require.Contains(t, err.Error(), "policy path to initialize extension policy settings is empty")
 	require.Equal(t, constants.ExitCode_InitializeCalledWithNoPolicyPath, exitCode)
 }
 func TestInitializeExtensionPolicySettings_InvalidPath_ReturnsError(t *testing.T) {
 	_, _, err, exitCode := InitializeExtensionPolicySettings(nopCtx(), "/definitely/not/found/policy.json")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to load extension policy settings")
+	require.Contains(t, err.Error(), "failed to load extension policy settings from file. Ensure the policy format is valid and the file is accessible")
 	require.Equal(t, constants.ExitCode_LoadExtensionPolicySettingsFailed, exitCode)
 }
 
@@ -47,7 +47,7 @@ func TestInitializeExtensionPolicySettings_InvalidPolicyFails(t *testing.T) {
 
 	_, _, err, exitCode := InitializeExtensionPolicySettings(nopCtx(), policyPath)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to")
+	require.Contains(t, err.Error(), "failed to load extension policy settings from file. Ensure the policy format is valid and the file is accessible")
 	require.Equal(t, constants.ExitCode_LoadExtensionPolicySettingsFailed, exitCode)
 }
 
@@ -88,7 +88,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 		settings := makeSettings(handlersettings.InlineScript, "", "", "")
 		err, exitCode := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, nil)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "no policy provided")
+		require.Contains(t, err.Error(), "no policy provided to validate handler settings")
 		require.Equal(t, constants.ExitCode_ValidateCalledWithNilPolicy, exitCode)
 	})
 
