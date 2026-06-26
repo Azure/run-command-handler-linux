@@ -223,7 +223,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	if _, err := os.Stat(policyPath); err == nil {
 		extensionPolicyManagerPtr, rceps, err, exitCode = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
 		if err != nil {
-			return "", "", errors.Wrap(err, "failed to initialize extension policy settings"), exitCode
+			return "", "", err, exitCode
 		}
 		ctx.Log("message", "successfully initialized extension policy settings")
 	} else if os.IsNotExist(err) {
