@@ -1516,7 +1516,7 @@ func Test_downloadScript_AllowedByAllowlist(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func setupPolicyE2E(t *testing.T, dataDir, extName string, seqNum int, scriptURI string, treatFailureAsDeploymentFailure bool, policy *extensionpolicysettingsrc.RCv2ExtensionPolicySettings,
+func setupPolicyE2E(t *testing.T, dataDir, extName string, seqNum int, scriptURI string, treatFailureAsDeploymentFailure bool, outputBlobURI string, errorBlobURI string, policy *extensionpolicysettingsrc.RCv2ExtensionPolicySettings,
 ) types.HandlerEnvironment {
 	t.Helper()
 	configFolder := create_folder(t, dataDir, "config")
@@ -1537,6 +1537,8 @@ func setupPolicyE2E(t *testing.T, dataDir, extName string, seqNum int, scriptURI
 				"scriptUri":  scriptURI,
 				"scriptType": string(handlersettings.DownloadedScript),
 			},
+			"OutputBlobURI":                   outputBlobURI,
+			"ErrorBlobURI":                    errorBlobURI,
 			"treatFailureAsDeploymentFailure": treatFailureAsDeploymentFailure,
 		},
 	}
@@ -1606,7 +1608,7 @@ func Test_enable_e2e_extension_policy_settings_pass(t *testing.T) {
 		DownloadedScriptsAllowlist: []string{correctHash},
 	}
 	// Policy will be marshaled and written to a file in the config folder.
-	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, policy)
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, "", "", policy)
 
 	scriptWasExecuted := false
 	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
@@ -1642,7 +1644,7 @@ func Test_enable_e2e_extension_policy_settings_block_statussuccess(t *testing.T)
 		DownloadedScriptsAllowlist: []string{"000000000000"},
 	}
 	// Policy will be marshaled and written to a file in the config folder.
-	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, policy)
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, "", "", policy)
 
 	scriptWasExecuted := false
 	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
@@ -1678,7 +1680,7 @@ func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
 		DownloadedScriptsAllowlist: []string{"000000000000"},
 	}
 	// treatFailureAsDeploymentFailure set to true
-	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", true, policy)
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", true, "", "", policy)
 
 	scriptWasExecuted := false
 	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
@@ -1693,4 +1695,41 @@ func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
 	require.Equal(t, types.StatusError, report[0].Status.Status, "status report should indicate failure")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
+}
+
+func Test_enable_e2e_extension_policy_settings_block_statussuccess_disableOutputBlobs(t *testing.T) {
+	ctx := log.NewContext(log.NewNopLogger())
+	extName, seqNum := "badPolicyRun", 0
+	scriptContent := []byte("#!/bin/bash\necho hello\n")
+
+	srv := make_server_with_content(scriptContent)
+	defer srv.Close()
+
+	dataDir, err := os.MkdirTemp("", "policy-pass")
+	require.Nil(t, err)
+	defer os.RemoveAll(dataDir)
+
+	policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+		LimitScripts:               "alloweddownloaded",
+		DownloadedScriptsAllowlist: []string{"000000000000"},
+		DisableOutputBlobs:         true,
+	}
+	// Policy will be marshaled and written to a file in the config folder.
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, "https://example.com/outputBlob", "", policy)
+
+	scriptWasExecuted := false
+	RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+		scriptWasExecuted = true
+		return nil, 0
+	}
+
+	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
+	require.Nil(t, err, "enable command should succeed")
+	require.False(t, scriptWasExecuted, "script should not be executed because output blobs are disabled")
+
+	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
+	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "output blobs are disabled in policy, but settings specify"), "execution message should indicate failure")
+
 }
