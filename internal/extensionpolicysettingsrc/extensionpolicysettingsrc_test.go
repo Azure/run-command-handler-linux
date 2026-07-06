@@ -319,6 +319,15 @@ func TestValidateDisableOutputBlobs(t *testing.T) {
 		err := ValidateDisableOutputBlobs(nopCtx(), settings, policy)
 		require.NoError(t, err)
 	})
+
+	t.Run("output blobs disabled in policy, whitespace pass", func(t *testing.T) {
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "       ", "        ")
+		policy := &RCv2ExtensionPolicySettings{
+			DisableOutputBlobs: true,
+		}
+		err := ValidateDisableOutputBlobs(nopCtx(), settings, policy)
+		require.NoError(t, err)
+	})
 }
 
 func nopCtx() *log.Context {

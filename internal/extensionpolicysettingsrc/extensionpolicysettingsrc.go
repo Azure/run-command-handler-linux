@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/azure-extension-platform/pkg/extensionpolicysettings"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -112,9 +113,12 @@ func ValidateRunAsUser(ctx *log.Context, settings *handlersettings.HandlerSettin
 
 func ValidateDisableOutputBlobs(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
 	if policy.DisableOutputBlobs {
-		if settings.OutputBlobURI != "" || settings.ErrorBlobURI != "" {
-			err := fmt.Errorf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", settings.OutputBlobURI, settings.ErrorBlobURI)
-			ctx.Log("message", "output blobs are disabled in policy, but settings specify output or error blob URIs", "error", err, "outputBlobURI", settings.OutputBlobURI, "errorBlobURI", settings.ErrorBlobURI)
+		trimmedOutputBlobURI := strings.TrimSpace(settings.OutputBlobURI)
+		trimmedErrorBlobURI := strings.TrimSpace(settings.ErrorBlobURI)
+
+		if trimmedOutputBlobURI != "" || trimmedErrorBlobURI != "" {
+			err := fmt.Errorf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", download.GetUriForLogging(settings.OutputBlobURI), download.GetUriForLogging(settings.ErrorBlobURI))
+			ctx.Log("message", "output blobs are disabled in policy, but settings specify output or error blob URIs", "error", err, "outputBlobURI", download.GetUriForLogging(settings.OutputBlobURI), "errorBlobURI", download.GetUriForLogging(settings.ErrorBlobURI))
 			return err
 		}
 	}
