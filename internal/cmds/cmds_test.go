@@ -1694,3 +1694,52 @@ func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
 	require.Equal(t, types.StatusError, report[0].Status.Status, "status report should indicate failure")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 }
+
+// This test verifies that an invalid policy file does not block execution,
+// and the extension proceeds with no policy applied.
+func Test_enable_e2e_extension_policy_settings_corrupt_policy_continues(t *testing.T) {
+	// Two primary scenarios for corrupt policy: empty file and invalid JSON.
+	corruptPolicies := map[string][]byte{
+		"empty file":   {},
+		"invalid json": []byte("{ this is not valid json"),
+	}
+
+	for name, corruptContent := range corruptPolicies {
+		t.Run(name, func(t *testing.T) {
+			ctx := log.NewContext(log.NewNopLogger())
+			extName, seqNum := "corruptPolicyRun", 0
+			scriptContent := []byte("#!/bin/bash\necho hello\n")
+
+			srv := make_server_with_content(scriptContent)
+			defer srv.Close()
+
+			dataDir, err := os.MkdirTemp("", "policy-corrupt")
+			require.Nil(t, err)
+			defer os.RemoveAll(dataDir)
+
+			// Create a valid environment first, then overwrite the policy file with corrupt content.
+			policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
+				LimitScripts: "alloweddownloaded",
+			}
+			fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, policy)
+
+			// Corrupt the policy file so that loading/parsing it fails.
+			policyFilePath := filepath.Join(fakeEnv.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
+			require.Nil(t, os.WriteFile(policyFilePath, corruptContent, 0600), "could not write corrupt policy file")
+
+			scriptWasExecuted := false
+			RunCmd = func(ctx *log.Context, dir, scriptFilePath string, cfg *handlersettings.HandlerSettings, metadata types.RCMetadata) (error, int) {
+				scriptWasExecuted = true
+				return nil, 0
+			}
+
+			err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
+			require.Nil(t, err, "enable command should succeed despite corrupt policy")
+			require.True(t, scriptWasExecuted, "script should still be executed when policy is corrupt")
+
+			report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+			require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
+			require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Succeeded\",\"executionMessage\":\"Execution completed"), "execution message should indicate success")
+		})
+	}
+}
