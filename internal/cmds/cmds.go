@@ -266,7 +266,8 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions OR managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity and provide outputBlobUri / errorBlobUri and corresponding clientId in outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). In case of system-assigned identity, do not use outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). For more info, refer https://aka.ms/RunCommandManagedLinux"
 
-	// TO-DO: disable output blob if the policy settings has disableOutputBlobs set to true.
+	// DisableOutputBlobs (policy settings) should have already been validated in ValidateHandlerSettingsAgainstPolicy,
+	// so we don't need to check it again. If a blob URI was passed in, we assume disableOutputBlobs == false.
 	var outputBlobSASRef *storage.Blob
 	var outputBlobAppendClient *appendblob.Client
 	var outputBlobAppendCreateOrReplaceError error

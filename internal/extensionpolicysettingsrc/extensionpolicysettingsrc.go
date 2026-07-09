@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/azure-extension-platform/pkg/extensionpolicysettings"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/pkg/download"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -59,8 +60,13 @@ func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlerset
 			return err, constants.ExitCode_RunAsUserNotAllowedByExtensionPolicy
 		}
 	}
+	if policy.DisableOutputBlobs {
+		if err := ValidateDisableOutputBlobs(ctx, settings, policy); err != nil {
+			return err, constants.ExitCode_OutputBlobSpecifiedButNotAllowedByExtensionPolicy
+		}
+	}
 
-	// TO-DO: Validate Disable Outputblob and RequireSigning once those features are implemented for RCv2.
+	// TO-DO: Validate RequireSigning once that feature is implemented for RCv2.
 
 	return nil, 0
 }
@@ -101,6 +107,20 @@ func ValidateRunAsUser(ctx *log.Context, settings *handlersettings.HandlerSettin
 		err := fmt.Errorf("runAsUser '%s' in settings does not match runAsUser '%s' in policy", settingsRunAsUser, policyRunAsUser)
 		ctx.Log("message", "runAsUser settings does not match runAsUser in policy", "error", err, "settingsRunAsUser", settingsRunAsUser, "policyRunAsUser", policyRunAsUser)
 		return err
+	}
+	return nil
+}
+
+func ValidateDisableOutputBlobs(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) error {
+	if policy.DisableOutputBlobs {
+		trimmedOutputBlobURI := strings.TrimSpace(settings.OutputBlobURI)
+		trimmedErrorBlobURI := strings.TrimSpace(settings.ErrorBlobURI)
+
+		if trimmedOutputBlobURI != "" || trimmedErrorBlobURI != "" {
+			err := fmt.Errorf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", download.GetUriForLogging(settings.OutputBlobURI), download.GetUriForLogging(settings.ErrorBlobURI))
+			ctx.Log("message", "output blobs are disabled in policy, but settings specify output or error blob URIs", "error", err, "outputBlobURI", download.GetUriForLogging(settings.OutputBlobURI), "errorBlobURI", download.GetUriForLogging(settings.ErrorBlobURI))
+			return err
+		}
 	}
 	return nil
 }

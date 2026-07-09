@@ -5,13 +5,14 @@ const (
 	ExitCode_Okay = 0
 
 	// User errors (-100s):
-	ExitCode_ScriptBlobDownloadFailed                 = -100
-	ExitCode_BlobCreateOrReplaceFailed                = -101
-	ExitCode_RunAsLookupUserFailed                    = -102
-	ExitCode_ScriptTypeNotAllowedByExtensionPolicy    = -103
-	ExitCode_CommandIdNotAllowedByExtensionPolicy     = -104
-	ExitCode_RunAsUserNotAllowedByExtensionPolicy     = -105
-	ExitCode_DownloadedScriptBlockedByExtensionPolicy = -106
+	ExitCode_ScriptBlobDownloadFailed                          = -100
+	ExitCode_BlobCreateOrReplaceFailed                         = -101
+	ExitCode_RunAsLookupUserFailed                             = -102
+	ExitCode_ScriptTypeNotAllowedByExtensionPolicy             = -103
+	ExitCode_CommandIdNotAllowedByExtensionPolicy              = -104
+	ExitCode_RunAsUserNotAllowedByExtensionPolicy              = -105
+	ExitCode_DownloadedScriptBlockedByExtensionPolicy          = -106
+	ExitCode_OutputBlobSpecifiedButNotAllowedByExtensionPolicy = -107
 
 	// Service Errors (-200s):
 	ExitCode_CreateDataDirectoryFailed                    = -200
