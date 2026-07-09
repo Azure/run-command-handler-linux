@@ -5,13 +5,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"fmt"
+
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
-func makeSettings(scriptType handlersettings.ScriptType, commandID string, runAsUser string, outputBlobURI string) *handlersettings.HandlerSettings {
+func makeSettings(scriptType handlersettings.ScriptType, commandID string, runAsUser string, outputBlobURI string, errorBlobURI string) *handlersettings.HandlerSettings {
 	return &handlersettings.HandlerSettings{
 		PublicSettings: handlersettings.PublicSettings{
 			Source: &handlersettings.ScriptSource{
@@ -20,6 +22,7 @@ func makeSettings(scriptType handlersettings.ScriptType, commandID string, runAs
 			},
 			RunAsUser:     runAsUser,
 			OutputBlobURI: outputBlobURI,
+			ErrorBlobURI:  errorBlobURI,
 		},
 	}
 }
@@ -85,7 +88,7 @@ func TestInitializeExtensionPolicySettings_PopulatesOutputStruct(t *testing.T) {
 // Test that validation passes and fails as expected.
 func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 	t.Run("nil policy", func(t *testing.T) {
-		settings := makeSettings(handlersettings.InlineScript, "", "", "")
+		settings := makeSettings(handlersettings.InlineScript, "", "", "", "")
 		err, exitCode := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no policy provided to validate handler settings")
@@ -95,7 +98,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 	// This test mimicks running an inline script, but policy only allows gallery scripts.
 	// Validation fails.
 	t.Run("script type blocked by policy", func(t *testing.T) {
-		settings := makeSettings(handlersettings.InlineScript, "", "", "")
+		settings := makeSettings(handlersettings.InlineScript, "", "", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			LimitScripts: "gallery",
 		}
@@ -109,7 +112,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 	// This test mimicks running a commandId that is not in the allowlist.
 	// Additionally, only commandId types are allowed.
 	t.Run("command ID not in allowlist", func(t *testing.T) {
-		settings := makeSettings(handlersettings.CommandIdScript, "restartVM", "", "")
+		settings := makeSettings(handlersettings.CommandIdScript, "restartVM", "", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			LimitScripts:       "allowedcommandid",
 			CommandIdAllowlist: []string{"safeCommand"},
@@ -121,7 +124,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 	})
 
 	t.Run("runAs mismatch", func(t *testing.T) {
-		settings := makeSettings(handlersettings.InlineScript, "", "bob", "")
+		settings := makeSettings(handlersettings.InlineScript, "", "bob", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			LimitScripts: "inline",
 			RunAsUser:    "alice",
@@ -134,7 +137,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 	})
 
 	t.Run("enforce limitScripts must be set. If not set, all commands fail", func(t *testing.T) {
-		settings := makeSettings(handlersettings.CommandIdScript, "safeCommand", " Alice ", "https://example/blob")
+		settings := makeSettings(handlersettings.CommandIdScript, "safeCommand", " Alice ", "https://example/blob", "https://example/errorBlob")
 		policy := &RCv2ExtensionPolicySettings{
 			LimitScripts:       "",
 			CommandIdAllowlist: []string{"safeCommand"},
@@ -147,8 +150,8 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 		require.Equal(t, constants.ExitCode_ScriptTypeNotAllowedByExtensionPolicy, exitCode)
 	})
 
-	t.Run("all checks pass commandId", func(t *testing.T) {
-		settings := makeSettings(handlersettings.CommandIdScript, "safeCommand", " Alice ", "https://example/blob")
+	t.Run("output blobs disabled, output blob provided", func(t *testing.T) {
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "https://example/blob", "")
 		policy := &RCv2ExtensionPolicySettings{
 			LimitScripts:       "allowall",
 			CommandIdAllowlist: []string{"safeCommand"},
@@ -157,12 +160,41 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 		}
 
 		err, exitCode := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), fmt.Sprintf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", settings.OutputBlobURI, settings.ErrorBlobURI))
+		require.Equal(t, constants.ExitCode_OutputBlobSpecifiedButNotAllowedByExtensionPolicy, exitCode)
+	})
+
+	t.Run("all checks pass commandId", func(t *testing.T) {
+		settings := makeSettings(handlersettings.CommandIdScript, "safeCommand", " Alice ", "https://example/blob", "https://example/errorBlob")
+		policy := &RCv2ExtensionPolicySettings{
+			LimitScripts:       "allowall",
+			CommandIdAllowlist: []string{"safeCommand"},
+			RunAsUser:          "alice",
+			DisableOutputBlobs: false,
+		}
+
+		err, exitCode := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.NoError(t, err)
 		require.Equal(t, 0, exitCode)
 	})
 
 	t.Run("all checks pass downloadedScript", func(t *testing.T) {
-		settings := makeSettings(handlersettings.DownloadedScript, "safeCommand", " Alice ", "https://example/blob")
+		settings := makeSettings(handlersettings.DownloadedScript, "safeCommand", " Alice ", "https://example/blob", "https://example/errorBlob")
+		policy := &RCv2ExtensionPolicySettings{
+			LimitScripts:       "alloweddownloaded",
+			CommandIdAllowlist: []string{"safeCommand"},
+			RunAsUser:          "alice",
+			DisableOutputBlobs: false,
+		}
+
+		err, exitCode := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
+		require.NoError(t, err)
+		require.Equal(t, 0, exitCode)
+	})
+
+	t.Run("all checks pass disable output blobs", func(t *testing.T) {
+		settings := makeSettings(handlersettings.DownloadedScript, "safeCommand", " Alice ", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			LimitScripts:       "alloweddownloaded",
 			CommandIdAllowlist: []string{"safeCommand"},
@@ -174,6 +206,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, exitCode)
 	})
+
 }
 
 func TestValidateScriptTypeAgainstPolicy(t *testing.T) {
@@ -198,7 +231,7 @@ func TestValidateScriptTypeAgainstPolicy(t *testing.T) {
 
 func TestValidateCommandId(t *testing.T) {
 	t.Run("empty allowlist allows all", func(t *testing.T) {
-		settings := makeSettings(handlersettings.CommandIdScript, "anything", "", "")
+		settings := makeSettings(handlersettings.CommandIdScript, "anything", "", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			CommandIdAllowlist: nil,
 		}
@@ -207,7 +240,7 @@ func TestValidateCommandId(t *testing.T) {
 	})
 
 	t.Run("value present in allowlist", func(t *testing.T) {
-		settings := makeSettings(handlersettings.CommandIdScript, "safeCommand", "", "")
+		settings := makeSettings(handlersettings.CommandIdScript, "safeCommand", "", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			CommandIdAllowlist: []string{"safeCommand", "other"},
 		}
@@ -216,7 +249,7 @@ func TestValidateCommandId(t *testing.T) {
 	})
 
 	t.Run("value missing from allowlist", func(t *testing.T) {
-		settings := makeSettings(handlersettings.CommandIdScript, "restartVM", "", "")
+		settings := makeSettings(handlersettings.CommandIdScript, "restartVM", "", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			CommandIdAllowlist: []string{"safeCommand", "other"},
 		}
@@ -228,7 +261,7 @@ func TestValidateCommandId(t *testing.T) {
 
 func TestValidateRunAsUser(t *testing.T) {
 	t.Run("match with whitespace and case differences", func(t *testing.T) {
-		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "")
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			RunAsUser: "alice",
 		}
@@ -237,13 +270,63 @@ func TestValidateRunAsUser(t *testing.T) {
 	})
 
 	t.Run("mismatch", func(t *testing.T) {
-		settings := makeSettings(handlersettings.InlineScript, "", "bob", "")
+		settings := makeSettings(handlersettings.InlineScript, "", "bob", "", "")
 		policy := &RCv2ExtensionPolicySettings{
 			RunAsUser: "alice",
 		}
 		err := ValidateRunAsUser(nopCtx(), settings, policy)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "runAsUser 'bob' in settings does not match runAsUser 'alice' in policy")
+	})
+}
+
+func TestValidateDisableOutputBlobs(t *testing.T) {
+	t.Run("output blobs disabled in policy, outputblob provided", func(t *testing.T) {
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "https://example/blob", "")
+		policy := &RCv2ExtensionPolicySettings{
+			DisableOutputBlobs: true,
+		}
+		err := ValidateDisableOutputBlobs(nopCtx(), settings, policy)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), fmt.Sprintf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", settings.OutputBlobURI, settings.ErrorBlobURI))
+	})
+
+	t.Run("output blobs disabled in policy, error blob provided", func(t *testing.T) {
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "", "https://example/errorBlob")
+		policy := &RCv2ExtensionPolicySettings{
+			DisableOutputBlobs: true,
+		}
+		err := ValidateDisableOutputBlobs(nopCtx(), settings, policy)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), fmt.Sprintf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", settings.OutputBlobURI, settings.ErrorBlobURI))
+	})
+
+	t.Run("output blobs disabled in policy, both output and error blobs provided", func(t *testing.T) {
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "https://example/blob", "https://example/errorBlob")
+		policy := &RCv2ExtensionPolicySettings{
+			DisableOutputBlobs: true,
+		}
+		err := ValidateDisableOutputBlobs(nopCtx(), settings, policy)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), fmt.Sprintf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", settings.OutputBlobURI, settings.ErrorBlobURI))
+	})
+
+	t.Run("output blobs disabled in policy, pass", func(t *testing.T) {
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "", "")
+		policy := &RCv2ExtensionPolicySettings{
+			DisableOutputBlobs: true,
+		}
+		err := ValidateDisableOutputBlobs(nopCtx(), settings, policy)
+		require.NoError(t, err)
+	})
+
+	t.Run("output blobs disabled in policy, whitespace pass", func(t *testing.T) {
+		settings := makeSettings(handlersettings.InlineScript, "", " Alice ", "       ", "        ")
+		policy := &RCv2ExtensionPolicySettings{
+			DisableOutputBlobs: true,
+		}
+		err := ValidateDisableOutputBlobs(nopCtx(), settings, policy)
+		require.NoError(t, err)
 	})
 }
 
