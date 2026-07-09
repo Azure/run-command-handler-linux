@@ -1723,7 +1723,7 @@ func Test_enable_e2e_extension_policy_settings_corrupt_policy_continues(t *testi
 			policy := &extensionpolicysettingsrc.RCv2ExtensionPolicySettings{
 				LimitScripts: "alloweddownloaded",
 			}
-			fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, policy)
+			fakeEnv := setupPolicyE2E(t, dataDir, extName, seqNum, srv.URL+"/script.sh", false, "", "", policy)
 
 			// Corrupt the policy file so that loading/parsing it fails.
 			policyFilePath := filepath.Join(fakeEnv.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
