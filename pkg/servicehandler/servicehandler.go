@@ -109,7 +109,7 @@ func (handler *Handler) Register(ctx *log.Context, unitConfigContent string) err
 func (handler *Handler) DeRegister(ctx *log.Context) error {
 	// We need to make sure the version that the VM Agent is trying to uninstall is the correct one.
 	// Failing to check this can cause to uninstall the service during the update workflow.
-	targetVersion := os.Getenv(constants.ExtensionVersionEnvName)
+	targetVersion := os.Getenv(constants.VersionEnvName)
 	ctx.Log("message", "trying to uninstall extension with version: "+targetVersion)
 
 	installedVersion, err := handler.GetInstalledVersion(ctx)
