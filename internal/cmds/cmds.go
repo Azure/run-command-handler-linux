@@ -223,9 +223,12 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	if _, err := os.Stat(policyPath); err == nil {
 		extensionPolicyManagerPtr, rceps, err, exitCode = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
 		if err != nil {
-			return "", "", err, exitCode
+			// TODO: In the future, fail the command if the policy file was invalid and return the exitCode.
+			// For now, log the error and continue with the command execution.
+			ctx.Log("error", "failed to initialize extension policy settings. Executing command with no policy applied for now.", "error", err, "errorCode", exitCode)
+		} else {
+			ctx.Log("message", "successfully initialized extension policy settings")
 		}
-		ctx.Log("message", "successfully initialized extension policy settings")
 	} else if os.IsNotExist(err) {
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
 		extensionPolicyManagerPtr = nil
