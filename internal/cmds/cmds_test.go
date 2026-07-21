@@ -244,6 +244,125 @@ func Test_update_e2e_cmd(t *testing.T) {
 	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
 }
 
+func Test_update_e2e_cmd_test_extension(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
+	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
+	oldVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8")
+	newVersionDirectory := filepath.Join(tempDir, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.9")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
+
+	fakeEnv := types.HandlerEnvironment{}
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.VersionEnvName, "1.3.8")
+
+	// Create two extensions
+	enable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk", true, 0)
+	enable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk", true, 0)
+
+	// Now, pretend that the extension was updated
+	// Step 1: WALA calls Disable on our two extensions
+	disable_extension(t, fakeEnv, oldVersionDirectory, "happyChipmunk")
+	disable_extension(t, fakeEnv, oldVersionDirectory, "crazyChipmunk")
+
+	// Step 2: WALA will call update
+	os.Setenv(constants.VersionEnvName, "1.3.9")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.8")
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
+	update_handler(t, fakeEnv, tempDir)
+
+	// Now, WALA will uninstall the old extension
+	uninstall_handler(t, fakeEnv, tempDir)
+
+	// Then, WALA will install the new extension
+	install_handler(t, fakeEnv, tempDir)
+
+	// Now call enable and verify we did NOT re-execute the script
+	enable_extension(t, fakeEnv, newVersionDirectory, "happyChipmunk", false, 0)
+	enable_extension(t, fakeEnv, newVersionDirectory, "crazyChipmunk", false, 0)
+}
+
+// This test simulates an update where BOTH immediate run command (IRC) service and  traditional RC are
+// updated, but the IRC update fails. Even though IRC fails to update, the traditional run command
+// state (.mrseq/.status files) should STILL be migrated to the new version directory so that its
+// already-executed sequence numbers are preserved and RC doesn't re-run.
+func Test_update_immediateRunCommandFails_traditionalStillUpdates(t *testing.T) {
+	tempDir, _ := os.MkdirTemp("", "deletecmd")
+	defer os.RemoveAll(tempDir)
+
+	DataDir, _ = os.MkdirTemp("", "datadir")
+	defer os.RemoveAll(DataDir)
+
+	handlerName := "Microsoft.CPlat.Core.RunCommandHandlerLinux"
+	oldVersionDirectory := filepath.Join(tempDir, handlerName+"-1.3.27")
+	newVersionDirectory := filepath.Join(tempDir, handlerName+"-1.3.28")
+	err := os.Mkdir(oldVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create old version subdirectory")
+	err = os.Mkdir(newVersionDirectory, 0755)
+	require.Nil(t, err, "Could not create new version subdirectory")
+	oldStatusPath := create_folder(t, oldVersionDirectory, constants.StatusFileDirectory)
+	newStatusPath := create_folder(t, newVersionDirectory, constants.StatusFileDirectory)
+	oldEventsPath := create_folder(t, oldVersionDirectory, constants.ExtensionEventsDirectory)
+	newEventsPath := create_folder(t, newVersionDirectory, constants.ExtensionEventsDirectory)
+
+	fakeEnv := types.HandlerEnvironment{}
+	update_handler_env(&fakeEnv, oldStatusPath, oldVersionDirectory, oldEventsPath)
+
+	// We start on the old version
+	os.Setenv(constants.ExtensionPathEnvName, oldVersionDirectory)
+	os.Setenv(constants.VersionEnvName, "1.3.27")
+
+	// Enable a traditional (non-immediate) run command, then disable it (as WALA would before update)
+	extName := "traditionalChipmunk"
+	enable_extension(t, fakeEnv, oldVersionDirectory, extName, true, 0)
+	disable_extension(t, fakeEnv, oldVersionDirectory, extName)
+
+	// Sanity check: the traditional run command has migratable state on the old version
+	require.FileExists(t, filepath.Join(oldVersionDirectory, extName+constants.MrSeqFileExtension))
+	require.FileExists(t, filepath.Join(oldStatusPath, extName+".0.status"))
+
+	// Step: WALA will call update while moving to the new version
+	os.Setenv(constants.VersionEnvName, "1.3.28")
+	os.Setenv(constants.ExtensionPathEnvName, newVersionDirectory)
+	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.27")
+	update_handler_env(&fakeEnv, newStatusPath, newVersionDirectory, newEventsPath)
+
+	// Simulate the immediate run command update failing.
+	originalImmediateUpdate := immediateUpdate
+	immediateUpdate = func(ctx *log.Context, h types.HandlerEnvironment, name string, seqNum int, extensionEvents *extensionevents.ExtensionEventManager) (int, error) {
+		return constants.ExitCode_UpgradeInstalledServiceFailed, errors.New("simulated immediate run command update failure")
+	}
+	defer func() { immediateUpdate = originalImmediateUpdate }()
+
+	// Call update directly (the update_handler helper asserts success, which we cannot guarantee here).
+	fakeInstanceView := types.RunCommandInstanceView{}
+	metadata := types.NewRCMetadata("", 0, constants.DownloadFolder, tempDir)
+	_, _, updateErr, _ := CmdUpdate.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, types.CmdUpdateTemplate)
+
+	// The immediate run command update failed, so update() surfaces that error...
+	require.Error(t, updateErr, "immediate run command update was expected to fail")
+
+	// ...but the traditional run command state should STILL have been migrated to the new version.
+	require.FileExists(t, filepath.Join(newVersionDirectory, extName+constants.MrSeqFileExtension),
+		"traditional run command .mrseq should be migrated even when immediate run command update fails")
+	require.FileExists(t, filepath.Join(newStatusPath, extName+".0.status"),
+		"traditional run command .status should be migrated even when immediate run command update fails")
+}
+
 func Test_update_e23_non_problematic_version(t *testing.T) {
 	tempDir, _ := os.MkdirTemp("", "deletecmd")
 	defer os.RemoveAll(tempDir)

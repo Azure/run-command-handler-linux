@@ -45,7 +45,13 @@ func ExtractFromServiceDefinition(content string, ctx *log.Context) (string, err
 	ctx.Log("message", "extracting version from service definition "+content)
 	firstSplit := strings.Split(string(content), fmt.Sprintf("ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandExtensionName))
 	if len(firstSplit) < 2 {
-		return "", errors.New("wrong service definition found. Missing field " + fmt.Sprintf("ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandExtensionName))
+		// If parsing didn't succeed, try parsing with the test extension name
+		firstSplit = strings.Split(string(content), fmt.Sprintf("ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandTestExtensionName))
+
+		// If parsing still didn't succeed, return an error.
+		if len(firstSplit) < 2 {
+			return "", errors.New("wrong service definition found. Missing field " + fmt.Sprintf("ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandTestExtensionName))
+		}
 	}
 
 	secondSplit := strings.Split(firstSplit[1], "/bin/immediate-run-command-handler")

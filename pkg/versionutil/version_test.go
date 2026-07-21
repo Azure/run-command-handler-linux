@@ -63,8 +63,23 @@ func TestFailToExtractVersion(t *testing.T) {
 	}
 }
 
+func TestSuccessfulVersionExtractionForTestHandler(t *testing.T) {
+	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
+	versionsToTest := []string{"0.0.0", "1.0.0", "1.3.5", "1.3.7", "2.2.0", "1000.1000.1000"}
+	for _, installedVersion := range versionsToTest {
+		extractedVersion, err := ExtractFromServiceDefinition(getServiceDefinitionWithHandlerAndVersion("Microsoft.Azure.Extensions.Edp.RunCommandHandlerLinuxTest", installedVersion), ctx)
+		require.Nil(t, err, "provided service definition should be valid")
+		require.Equal(t, installedVersion, extractedVersion)
+	}
+}
+
 func getServiceDefinitionWithVersion(version string) string {
-	definition := strings.ReplaceAll(systemdUnitConfigurationTemplateTest, "%run_command_version_placeholder%", version)
+	return getServiceDefinitionWithHandlerAndVersion("Microsoft.CPlat.Core.RunCommandHandlerLinux", version)
+}
+
+func getServiceDefinitionWithHandlerAndVersion(handlerName string, version string) string {
+	definition := strings.ReplaceAll(systemdUnitConfigurationTemplateTest, "Microsoft.CPlat.Core.RunCommandHandlerLinux", handlerName)
+	definition = strings.ReplaceAll(definition, "%run_command_version_placeholder%", version)
 	definition = strings.ReplaceAll(definition, "%run_command_waagent_location%", constants.WaAgentDirectory)
 	return definition
 }
