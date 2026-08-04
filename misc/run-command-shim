@@ -13,12 +13,11 @@ fi
 # in multiconfig case $ConfigExtensionName and $ConfigSequenceNumber should be set by the agent
 readonly EXTENSION_NAME=$ConfigExtensionName
 readonly SEQNO=$ConfigSequenceNumber
-readonly LOCKFILE="./run-command-handler.lock"
+
 echo "ConfigExtensionName: $EXTENSION_NAME"
 echo "ConfigSequenceNumber: $SEQNO"
 echo Architecture: $ARCHITECTURE
 echo Binary: $HANDLER_BIN
-LOCK_ACQUIRED=0
 
 if [ "$#" -ne 1 ]; then
     echo "Incorrect usage."
@@ -45,47 +44,41 @@ if [[ "$cmd" == "enable" ]]; then
     commandToExecute="nohup $bin $cmd &"
 fi
 
-### Retry logic to acquire lock and execute the command
+### Retry logic to check if RunCommand binary is open for write and execute the command
 set +e # disable exit on non-zero return code
 retry_attempts=0
 
-# Create lock file if it does not exist
-if [ ! -f "$LOCKFILE" ]; then
-    touch "$LOCKFILE"
-    echo "Lock file $LOCKFILE has been created."
-fi
-
 set -x
-while (( retry_attempts < 10 )); do
-    # Acquire the exclusive (-x) and non-blocking (-n) lock on the lock file and execute $commandToExecute(side note: flock is part of util-linux package and is available by default on most Linux distros)
-    flock -x -n "$LOCKFILE" -c "$commandToExecute"
-    flock_status=$? # Capture the exit status of the flock command
-
-    if [ $flock_status -eq 1 ]; then
-        echo "Lock already held by another process. Retrying..."
-        ((++retry_attempts))
-        echo "sleeping for 3 seconds before retry, attempt ${retry_attempts} of 10"
-        sleep 3
-        continue
-    elif [ $flock_status -eq 0 ]; then
-        LOCK_ACQUIRED=1
-        echo "Lock acquired on file $LOCKFILE and executed command $commandToExecute successfully. Exiting."
-        break
-    else
-        echo "Failed to execute command $commandToExecute with flock on file $LOCKFILE. Exiting with exit code $flock_status"         
-        break
-    fi
-done
+if command -v fuser &>/dev/null; then
+    while (( retry_attempts < 10 )); do
+        # Use fuser to detect if the run command binary is open for write to help detect potential conflicts like 'text file busy' errors that prevents execution of Run Command binary.
+        fuser_output=$(fuser -vw "$bin" 2>&1)
+        fuser_status=$?
+        
+        # Use 10 retries with 3 seconds sleep between retries to allow for any potential conflicts to resolve before executing the Run Command binary.
+        if [ $fuser_status -eq 0 ]; then
+            echo "RunCommand binary $bin is open for write. User(s) with write access:"
+            echo "$fuser_output"
+            echo "Binary is open for write. Allowing execution via best-effort path after all retries have been exhausted..."
+            ((++retry_attempts))
+            echo "sleeping for 3 seconds before retry, attempt ${retry_attempts} of 10"
+            sleep 3
+            continue
+        else
+            echo "Binary $bin is not open for write. All good. Proceeding with execution..."         
+            break
+        fi
+    done
+else
+    echo "INFO: Not an error. fuser command not found. Install 'psmic' package to use fuser for checking if the Run Command binary is open for write to detect potential conflicts like 'text file busy' errors while executing Run Command binary. Proceeding with best-effort execution..."
+fi
 set +x
 ### End of retry logic
 
-# Do not return error if lock not acquired even after retries expire, make a best effort attempt to start run-command-handler
-if [ "$LOCK_ACQUIRED" -eq 0 ]; then
-    echo "Lock was not acquired on $LOCKFILE after retries. Making best-effort attempt to start run-command-handler..."
-    set -x
-    $commandToExecute
-    set +x
-fi
-set -e
+set -x
+echo "Starting run-command-handler..."
+$commandToExecute
+echo "run-command-handler finished."
+set +x
 
-# Exiting the script releases the lock on $LOCKFILE by closing the file descriptor associated with the lock.
+set -e
