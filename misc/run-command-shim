@@ -34,14 +34,14 @@ bin="$(readlink -f "$SCRIPT_DIR/$HANDLER_BIN")"
 cmd="$1"
 
 # For commands other than 'enable', execute the handler process as a child process
-commandToExecute="$bin $cmd"
+commandToExecute="'$bin' '$cmd'"
 
 if [[ "$cmd" == "enable" ]]; then
     # for 'enable' command, double fork
     # to detach from the handler process tree to avoid getting terminated 
     # after the 15-minute extension enabling timeout.
     # & will execute the binary on the background and will not block current shell execution
-    commandToExecute="nohup $bin $cmd &"
+    commandToExecute="nohup '$bin' '$cmd' &"
 fi
 
 ### Retry logic to check if RunCommand binary is open for write and execute the command
@@ -49,14 +49,14 @@ set +e # disable exit on non-zero return code
 retry_attempts=0
 
 set -x
-if command -v fuser &>/dev/null; then
+if command -v fuser &>/dev/null; then # check if fuser command is available
     while (( retry_attempts < 10 )); do
         # Use fuser to detect if the run command binary is open for write to help detect potential conflicts like 'text file busy' errors that prevents execution of Run Command binary.
         fuser_output=$(fuser -vw "$bin" 2>&1)
         fuser_status=$?
         
         # Use 10 retries with 3 seconds sleep between retries to allow for any potential conflicts to resolve before executing the Run Command binary.
-        if [ $fuser_status -eq 0 ]; then
+        if [ $fuser_status -eq 0 ]; then # atleast one process was found which has opened the binary in write mode.
             echo "RunCommand binary $bin is open for write. User(s) with write access:"
             echo "$fuser_output"
             echo "Binary is open for write. Allowing execution via best-effort path after all retries have been exhausted..."
@@ -64,18 +64,19 @@ if command -v fuser &>/dev/null; then
             echo "sleeping for 3 seconds before retry, attempt ${retry_attempts} of 10"
             sleep 3
             continue
-        else
+        elif [ $fuser_status -eq 1 ]; then
             echo "Binary $bin is not open for write. All good. Proceeding with execution..."         
+            break
+        else
+            echo "Unexpected fuser error with error code $fuser_status while checking if $bin is open for write using fuser command. Proceeding with best-effort execution..."
             break
         fi
     done
 else
     echo "INFO: Not an error. fuser command not found. Install 'psmic' package to use fuser for checking if the Run Command binary is open for write to detect potential conflicts like 'text file busy' errors while executing Run Command binary. Proceeding with best-effort execution..."
 fi
-set +x
 ### End of retry logic
 
-set -x
 echo "Starting run-command-handler..."
 $commandToExecute
 echo "run-command-handler finished."
