@@ -68,6 +68,7 @@ if command -v fuser &>/dev/null; then # check if fuser command is available
             echo "Binary $bin is not open for write. All good. Proceeding with execution..."         
             break
         else
+            echo "$fuser_output"
             echo "Unexpected fuser error with error code $fuser_status while checking if $bin is open for write using fuser command. Proceeding with best-effort execution..."
             break
         fi
