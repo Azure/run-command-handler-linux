@@ -50,7 +50,7 @@ func ExtractFromServiceDefinition(content string, ctx *log.Context) (string, err
 
 		// If parsing still didn't succeed, return an error.
 		if len(firstSplit) < 2 {
-			return "", errors.New("wrong service definition found. Missing field " + fmt.Sprintf("ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandTestExtensionName))
+			return "", errors.New("wrong service definition found. Missing field " + fmt.Sprintf("ExecStart=%s/%s- and ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandExtensionName, constants.WaAgentDirectory, constants.RunCommandTestExtensionName))
 		}
 	}
 
