@@ -43,7 +43,7 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 			}
 
 			if downloadErrors != nil {
-				downloadErrors = errors.Wrapf(downloadErrors, fmt.Sprintf("Attempt %d: %s ", n+1, err.Error()))
+				downloadErrors = errors.Wrap(downloadErrors, fmt.Sprintf("Attempt %d: %s ", n+1, err.Error()))
 			} else {
 				downloadErrors = err
 			}

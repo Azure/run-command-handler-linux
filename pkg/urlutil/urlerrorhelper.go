@@ -1,7 +1,7 @@
 package urlutil
 
 import (
-	"fmt"
+	"errors"
 	"net/url"
 	"strings"
 )
@@ -14,7 +14,7 @@ func RemoveUrlFromErr(err error) error {
 			strSegments[i] = "[REDACTED]"
 		}
 	}
-	return fmt.Errorf(strings.Join(strSegments, " "))
+	return errors.New(strings.Join(strSegments, " "))
 }
 
 func IsValidUrl(urlstring string) bool {

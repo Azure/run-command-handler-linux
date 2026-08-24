@@ -61,20 +61,20 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if sourceScriptFileOpenError != nil {
 			errMessage := "Failed to open source script. Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage+fmt.Sprintf(" Source script file is '%s'", scriptPath))
-			return constants.ExitCode_RunAsOpenSourceScriptFileFailed, errors.Wrapf(sourceScriptFileOpenError, errMessage)
+			return constants.ExitCode_RunAsOpenSourceScriptFileFailed, errors.Wrap(sourceScriptFileOpenError, errMessage)
 		}
 
 		destScriptFile, destScriptCreateError := os.Create(runAsScriptFilePath)
 		if destScriptCreateError != nil {
 			errMessage := "Failed to create script for Run As in Run As directory. Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage+fmt.Sprintf(" Destination runAs script file is '%s'", runAsScriptFilePath))
-			return constants.ExitCode_RunAsCreateRunAsScriptFileFailed, errors.Wrapf(destScriptCreateError, errMessage)
+			return constants.ExitCode_RunAsCreateRunAsScriptFileFailed, errors.Wrap(destScriptCreateError, errMessage)
 		}
 		_, runAsScriptCopyError := io.Copy(destScriptFile, sourceScriptFile)
 		if runAsScriptCopyError != nil {
 			errMessage := fmt.Sprintf("Failed to copy script file '%s' to Run As path '%s'. Contact ICM team AzureRT\\Extensions for this service error.", scriptPath, runAsScriptFilePath)
 			ctx.Log("message", errMessage)
-			return constants.ExitCode_RunAsCopySourceScriptToRunAsScriptFileFailed, errors.Wrapf(runAsScriptCopyError, errMessage)
+			return constants.ExitCode_RunAsCopySourceScriptToRunAsScriptFileFailed, errors.Wrap(runAsScriptCopyError, errMessage)
 		}
 		sourceScriptFile.Close()
 		destScriptFile.Close()
@@ -84,28 +84,28 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if lookupUserError != nil {
 			errMessage := fmt.Sprintf("Failed to lookup RunAs user '%s'. Looks like user does not exist. For RunAs to work properly, contact admin of VM and make sure RunAs user is added on the VM and user has access to resources accessed by the Run Command (Directories, Files, Network etc.). Refer: https://aka.ms/RunCommandManagedLinux", cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return constants.ExitCode_RunAsLookupUserFailed, errors.Wrapf(lookupUserError, errMessage)
+			return constants.ExitCode_RunAsLookupUserFailed, errors.Wrap(lookupUserError, errMessage)
 		}
 
 		lookedUpUserUid, lookedUpUserUidErr := strconv.Atoi(lookedUpUser.Uid)
 		if lookedUpUserUidErr != nil {
 			errMessage := "Failed to determine RunAs user's Uid and Guid . Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage)
-			return constants.ExitCode_RunAsLookupUserUidFailed, errors.Wrapf(lookedUpUserUidErr, errMessage)
+			return constants.ExitCode_RunAsLookupUserUidFailed, errors.Wrap(lookedUpUserUidErr, errMessage)
 		}
 
 		runAsScriptChownError := os.Chown(runAsScriptFilePath, lookedUpUserUid, os.Getegid())
 		if runAsScriptChownError != nil {
 			errMessage := fmt.Sprintf("Failed to change owner of file '%s' to RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return constants.ExitCode_RunAsScriptFileChangeOwnerFailed, errors.Wrapf(runAsScriptChownError, errMessage)
+			return constants.ExitCode_RunAsScriptFileChangeOwnerFailed, errors.Wrap(runAsScriptChownError, errMessage)
 		}
 
 		runAsScriptChmodError := os.Chmod(runAsScriptFilePath, 0550)
 		if runAsScriptChmodError != nil {
 			errMessage := fmt.Sprintf("Failed to change permissions to execute for file '%s' for RunAs user '%s'. Contact ICM team AzureRT\\Extensions for this service error.", runAsScriptFilePath, cfg.PublicSettings.RunAsUser)
 			ctx.Log("message", errMessage)
-			return constants.ExitCode_RunAsScriptFileChangePermissionsFailed, errors.Wrapf(runAsScriptChmodError, errMessage)
+			return constants.ExitCode_RunAsScriptFileChangePermissionsFailed, errors.Wrap(runAsScriptChmodError, errMessage)
 		}
 
 		// echo pipes the RunAsPassword to sudo -S for RunAsUser instead of prompting the password interactively from user and blocking.
@@ -141,7 +141,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		}
 	}
 
-	return exitCode, errors.Wrapf(err, "failed to execute command")
+	return exitCode, errors.Wrap(err, "failed to execute command")
 }
 
 func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, error) {

@@ -734,7 +734,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 				errMessage := "Failed to open '%s' file '%s' for reading. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, sourceFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrapf(sourceFileOpenError, errMessage)
+				return fileNamesMigrated, errors.Wrap(sourceFileOpenError, errMessage)
 			}
 			defer sourceFile.Close()
 
@@ -743,7 +743,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 				errMessage := "Failed to create '%s' file '%s'. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, destinationFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrapf(destFileCreateError, errMessage)
+				return fileNamesMigrated, errors.Wrap(destFileCreateError, errMessage)
 			}
 			defer destFile.Close()
 
@@ -753,7 +753,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 					fileExtensionSuffix, sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", errMessage)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrapf(copyError, errMessage)
+				return fileNamesMigrated, errors.Wrap(copyError, errMessage)
 			} else {
 				message := fmt.Sprintf("File '%s' was copied successfully to '%s'", sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", message)
