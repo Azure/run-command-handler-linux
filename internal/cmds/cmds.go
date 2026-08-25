@@ -83,22 +83,21 @@ var (
 	// Used by unit tests to mock out executing the command
 	ExecCmdInDir = exec.ExecCmdInDir
 
+	// Used by unit tests to mock out the immediate run command update step
+	immediateUpdate = immediatecmds.Update
+
 	ErrAlreadyProcessed = errors.New("the script configuration has already been processed, will not run again")
 )
 
 func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
 	extensionEvents := createExtensionEventManager(ctx, h)
-	exitCode, err := immediatecmds.Update(ctx, h, metadata.ExtName, metadata.SeqNum, extensionEvents)
-	if err != nil {
-		return "", "", err, exitCode
-	}
 
 	// Figure out the directories from which and to where we're upgrading. We cannot entirely rely on the environment variables from the Guest Agent
 	upgradeFromVersionDirectory, upgradeToVersionDirectory, upgradeFromVersion := determineUpgradeVersionDirectories(ctx, extensionEvents)
 
 	if compareVersions(constants.FirstVersionNoRehydration, upgradeFromVersion) > 0 {
 		// Rehydrate any mrseq files from the corresponding status file.
-		err = rehydrateMrSeqFilesForProblematicUpgrades(ctx, upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
+		err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
 		if err != nil {
 			// If we fail on update, then there's a risk we could re-execute the customer's script. Don't take that chance.
 			// By failing Update, the extension goal state will fail. WALA will try us again on the next goal state.
@@ -112,6 +111,11 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	copyError := CopyStateForUpdate(ctx, upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
 	if copyError != nil {
 		return "", "", errors.Wrap(copyError, "Migrating *.mrseq or .status files failed during update."), constants.ExitCode_CopyStateForUpdateFailed
+	}
+
+	exitCode, err := immediateUpdate(ctx, h, metadata.ExtName, metadata.SeqNum, extensionEvents)
+	if err != nil {
+		return "", "", err, exitCode
 	}
 
 	ctx.Log("event", "update")
