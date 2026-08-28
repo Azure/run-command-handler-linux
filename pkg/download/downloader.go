@@ -119,6 +119,7 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 
 	if len(requestId) > 0 {
 		errString += fmt.Sprintf(" (Service request ID: %s)", requestId)
+
 	}
-	return response.StatusCode, nil, fmt.Errorf(errString)
+	return response.StatusCode, nil, errors.New(errString)
 }
