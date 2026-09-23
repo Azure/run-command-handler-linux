@@ -21,12 +21,12 @@ type HandlerSettings struct {
 type ScriptType string
 
 const (
-	InlineScript     ScriptType = "inline"
-	DownloadedScript ScriptType = "downloaded"
-	GalleryScript    ScriptType = "gallery"
-	DiagnosticScript ScriptType = "diagnostic"
-	CommandIdScript  ScriptType = "commandId"
-	NoneScript       ScriptType = "none"
+	InlineScript     ScriptType = "Inline"
+	DownloadedScript ScriptType = "Downloaded"
+	GalleryScript    ScriptType = "Gallery"
+	DiagnosticScript ScriptType = "Diagnostic"
+	CommandIdScript  ScriptType = "CommandId"
+	NoneScript       ScriptType = "None"
 )
 
 // Gets the InstallAsService field from the RunCommand's properties
