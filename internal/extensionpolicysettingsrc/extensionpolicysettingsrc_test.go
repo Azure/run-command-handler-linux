@@ -105,7 +105,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 
 		err, exitCode := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "script type inline is not allowed by policy")
+		require.Contains(t, err.Error(), "script type Inline is not allowed by policy")
 		require.Equal(t, constants.ExitCode_ScriptTypeNotAllowedByExtensionPolicy, exitCode)
 	})
 
@@ -146,7 +146,7 @@ func TestValidateHandlerSettingsAgainstPolicy(t *testing.T) {
 		}
 
 		err, exitCode := ValidateHandlerSettingsAgainstPolicy(nopCtx(), settings, policy)
-		require.Contains(t, err.Error(), "script type commandId is not allowed by policy")
+		require.Contains(t, err.Error(), "script type CommandId is not allowed by policy")
 		require.Equal(t, constants.ExitCode_ScriptTypeNotAllowedByExtensionPolicy, exitCode)
 	})
 
@@ -218,14 +218,14 @@ func TestValidateScriptTypeAgainstPolicy(t *testing.T) {
 	t.Run("blocked", func(t *testing.T) {
 		err := ValidateScriptTypeAgainstPolicy(nopCtx(), handlersettings.GalleryScript, "inline")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "script type gallery is not allowed by policy")
+		require.Contains(t, err.Error(), "script type Gallery is not allowed by policy")
 	})
 
 	// This tests edge case where policy has an invalid script type token.
 	t.Run("invalid policy token is treated as blocked", func(t *testing.T) {
 		err := ValidateScriptTypeAgainstPolicy(nopCtx(), handlersettings.InlineScript, "notARealScriptType")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "script type inline is not allowed by policy")
+		require.Contains(t, err.Error(), "script type Inline is not allowed by policy")
 	})
 }
 

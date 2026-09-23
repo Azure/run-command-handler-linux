@@ -231,7 +231,8 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			// For now, log the error and continue with the command execution.
 			ctx.Log("error", "failed to initialize extension policy settings. Executing command with no policy applied for now.", "error", err, "errorCode", exitCode)
 		} else {
-			ctx.Log("message", "successfully initialized extension policy settings")
+			rcepsToLoggable := fmt.Sprintf("%+v", rceps)
+			ctx.Log("message", "successfully initialized extension policy settings: ", "policy", rcepsToLoggable)
 		}
 	} else if os.IsNotExist(err) {
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)

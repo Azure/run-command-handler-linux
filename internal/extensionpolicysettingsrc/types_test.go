@@ -42,12 +42,12 @@ func TestTypeDefinitions_AreStable(t *testing.T) {
 			got  handlersettings.ScriptType
 			want handlersettings.ScriptType
 		}{
-			{name: "InlineScript", got: handlersettings.InlineScript, want: "inline"},
-			{name: "DownloadedScript", got: handlersettings.DownloadedScript, want: "downloaded"},
-			{name: "GalleryScript", got: handlersettings.GalleryScript, want: "gallery"},
-			{name: "DiagnosticScript", got: handlersettings.DiagnosticScript, want: "diagnostic"},
-			{name: "CommandIdScript", got: handlersettings.CommandIdScript, want: "commandId"},
-			{name: "NoneScript", got: handlersettings.NoneScript, want: "none"},
+			{name: "InlineScript", got: handlersettings.InlineScript, want: "Inline"},
+			{name: "DownloadedScript", got: handlersettings.DownloadedScript, want: "Downloaded"},
+			{name: "GalleryScript", got: handlersettings.GalleryScript, want: "Gallery"},
+			{name: "DiagnosticScript", got: handlersettings.DiagnosticScript, want: "Diagnostic"},
+			{name: "CommandIdScript", got: handlersettings.CommandIdScript, want: "CommandId"},
+			{name: "NoneScript", got: handlersettings.NoneScript, want: "None"},
 		}
 
 		for _, tt := range tests {
@@ -233,7 +233,7 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 			name:       "'none' script currently treated as unknown",
 			scriptType: handlersettings.NoneScript,
 			allowed:    AllowAll,
-			wantErr:    "unknown script type: none",
+			wantErr:    "unknown script type: None",
 		},
 	}
 
