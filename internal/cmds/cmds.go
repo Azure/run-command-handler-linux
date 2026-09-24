@@ -917,7 +917,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 		scriptFilePath = file
 		ctx.Log("event", "download complete", "output", dir)
 
-		if rceps != nil {
+		if rceps != nil && cfg.ScriptType() != handlersettings.GalleryScript {
 			// Assume the downloaded script TYPE is already allowed, since this was already validated earlier in enable().
 			err = extensionpolicysettings.ValidateFileHashInAllowlist(scriptFilePath, rceps.DownloadedScriptsAllowlist, hashutils.HashTypeSHA256)
 			if err != nil {
