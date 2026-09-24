@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"path/filepath"
+
 	"github.com/Azure/azure-extension-platform/pkg/handlerenv"
 	"github.com/Azure/azure-extension-platform/pkg/logging"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
@@ -85,6 +87,9 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 
 	// execute the subcommand
 	stdout, stderr, cmdInvokeError, exitCode := cmd.Functions.Invoke(ctx, hEnv, &instView, metadata, cmd)
+
+	// after the subcommand, delete the policy file if it exists, regardless of the execution outcome
+	deleteRuntimePolicySettingsFile(ctx, hEnv)
 
 	instView.Output = stdout
 	instView.Error = stderr
@@ -218,4 +223,13 @@ func storeConfigSettingsFileForLocalExecution(ctx *log.Context, hs handlersettin
 	}
 
 	return nil
+}
+
+func deleteRuntimePolicySettingsFile(ctx *log.Context, hEnv types.HandlerEnvironment) {
+	policyFilePath := filepath.Join(hEnv.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
+	ctx.Log("message", "removing runtime policy settings file if it exists")
+	err := os.Remove(policyFilePath)
+	if err != nil && !os.IsNotExist(err) {
+		ctx.Log("warning", "failed to remove runtime policy settings file", "error", err)
+	}
 }
