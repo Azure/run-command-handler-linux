@@ -1647,7 +1647,7 @@ func setupPolicyE2E(t *testing.T, dataDir, extName string, seqNum int, scriptURI
 
 	// Write the extension .settings file (mirrors enable_extension), but with a
 	// downloaded-script source so the allowlist check applies.
-	writeDownloadedScriptSettings(t, configFolder, extName, seqNum, scriptURI, treatFailureAsDeploymentFailure, outputBlobURI, errorBlobURI)
+	writeDownloadedScriptSettings(t, configFolder, extName, seqNum, scriptURI, treatFailureAsDeploymentFailure, outputBlobURI, errorBlobURI, scriptType)
 
 	// Write the real policy file that will be parsed in enable()
 	policyBytes, err := json.Marshal(policy)
@@ -1660,7 +1660,7 @@ func setupPolicyE2E(t *testing.T, dataDir, extName string, seqNum int, scriptURI
 
 // writeDownloadedScriptSettings writes an extension .settings file whose source is a
 // downloaded script (so allowlist policy checks apply) for the given sequence number.
-func writeDownloadedScriptSettings(t *testing.T, configFolder, extName string, seqNum int, scriptURI string, treatFailureAsDeploymentFailure bool, outputBlobURI string, errorBlobURI string) {
+func writeDownloadedScriptSettings(t *testing.T, configFolder, extName string, seqNum int, scriptURI string, treatFailureAsDeploymentFailure bool, outputBlobURI string, errorBlobURI string, scriptType handlersettings.ScriptType) {
 	t.Helper()
 	settingsCommon := settings.SettingsCommon{
 		ExtensionName:           &extName,
@@ -1971,7 +1971,7 @@ func Test_enable_e2e_runtimePolicyFile_deletedAfterExecution_thenRunsWithoutPoli
 		LimitScripts:               "alloweddownloaded",
 		DownloadedScriptsAllowlist: []string{"000000000000"},
 	}
-	fakeEnv := setupPolicyE2E(t, dataDir, extName, blockedSeqNum, srv.URL+"/script.sh", false, "", "", policy)
+	fakeEnv := setupPolicyE2E(t, dataDir, extName, blockedSeqNum, srv.URL+"/script.sh", false, "", "", policy, handlersettings.DownloadedScript)
 
 	policyFilePath := filepath.Join(fakeEnv.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
 	require.FileExists(t, policyFilePath, "runtime policy file should exist before execution")
@@ -1996,7 +1996,7 @@ func Test_enable_e2e_runtimePolicyFile_deletedAfterExecution_thenRunsWithoutPoli
 	// Phase 2: with no policy file present, the same script should run successfully. This also
 	// exercises cleanup deleting a policy file that does not exist (it must not crash).
 	allowedSeqNum := 1
-	writeDownloadedScriptSettings(t, fakeEnv.HandlerEnvironment.ConfigFolder, extName, allowedSeqNum, srv.URL+"/script.sh", false, "", "")
+	writeDownloadedScriptSettings(t, fakeEnv.HandlerEnvironment.ConfigFolder, extName, allowedSeqNum, srv.URL+"/script.sh", false, "", "", handlersettings.DownloadedScript)
 
 	scriptWasExecuted = false
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, allowedSeqNum, constants.DownloadFolder, dataDir)
