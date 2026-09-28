@@ -108,9 +108,9 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 			return constants.ExitCode_RunAsScriptFileChangePermissionsFailed, errors.Wrap(runAsScriptChmodError, errMessage)
 		}
 
-		// echo pipes the RunAsPassword to sudo -S for RunAsUser instead of prompting the password interactively from user and blocking.
-		// echo <cfg.protectedSettings.RunAsPassword> | sudo -S -u <cfg.publicSettings.RunAsUser> <command>
-		cmd = fmt.Sprintf("echo %s | sudo -S -u %s %s", cfg.ProtectedSettings.RunAsPassword, cfg.PublicSettings.RunAsUser, runAsScriptFilePath+commandArgs)
+		// Execute the command as RunAsUser. -n for non-interactive mode (do not prompt for password)
+		// sudo -n -u <cfg.publicSettings.RunAsUser> <command>
+		cmd = fmt.Sprintf("sudo -n -u %s %s", cfg.PublicSettings.RunAsUser, runAsScriptFilePath+commandArgs)
 		ctx.Log("message", "RunAs cmd is "+cmd)
 	}
 
