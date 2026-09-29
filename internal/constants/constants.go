@@ -79,7 +79,7 @@ const (
 	ImmediateGoalStatesInTerminalStatusFileName = "immediateGoalStatesInTerminalStatusFile.status"
 
 	// The name of the policy file the extension uses to validate the command + scripts before execution.
-	PolicyFileName = "waagent_runtime_policy.json"
+	PolicyFileName = "runtime_policy.json"
 
 	// Name of our ICM queue for service errors. Right now, this is only displayed in logs for extension policy errors.
 	ICMQueueName = "AzureRT\\Extensions"
