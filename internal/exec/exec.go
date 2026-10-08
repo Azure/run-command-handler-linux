@@ -48,7 +48,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 
 		// Gets suffix "download/<runcommandName>/0/script.sh"
 		downloadPathSuffix := scriptPath[len(constants.DataDir):]
-		// formats into something like "/home/<RunAsUserName>/waagent/run-command-handler-runas/download/<runcommandName>/0/script.sh", This filepath doesn't exist yet.
+		// formats into something like "/home/<RunAsUserName>/waagent/run-command-handler-runas/download/<runcommandName>/0/script.sh", This filepath shouldn't exist yet.
 		runAsScriptFilePath := filepath.Join(fmt.Sprintf(constants.RunAsDir, cfg.PublicSettings.RunAsUser), downloadPathSuffix)
 		runAsScriptDirectoryPath := filepath.Dir(runAsScriptFilePath) // Get directory of runAsScript that doesn't exist yet
 
@@ -152,10 +152,12 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 }
 
 func createRunAsScriptFile(path string) (*os.File, error) {
+	// os.Remove does not follow symlinks, so it is safe to use here.
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 
+	// do not follow symlinks to avoid symlink attacks.
 	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0500)
 }
 
