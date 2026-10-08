@@ -55,6 +55,43 @@ func TestExec_failure_timeout(t *testing.T) {
 	require.EqualValues(t, -1, ec)
 }
 
+func TestCreateRunAsScriptFile_replacesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "script.sh")
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0600))
+
+	file, err := createRunAsScriptFile(path)
+	require.NoError(t, err)
+	_, err = file.Write([]byte("new"))
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(contents))
+}
+
+func TestCreateRunAsScriptFile_doesNotFollowExistingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "target")
+	scriptPath := filepath.Join(dir, "script.sh")
+	require.NoError(t, os.WriteFile(targetPath, []byte("protected"), 0600))
+	require.NoError(t, os.Symlink(targetPath, scriptPath))
+
+	file, err := createRunAsScriptFile(scriptPath)
+	require.NoError(t, err)
+	_, err = file.Write([]byte("script"))
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	targetContents, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	require.Equal(t, "protected", string(targetContents))
+	scriptInfo, err := os.Lstat(scriptPath)
+	require.NoError(t, err)
+	require.Zero(t, scriptInfo.Mode()&os.ModeSymlink)
+}
+
 // func TestExec_runasuser(t *testing.T) {
 // 	if os.Geteuid() != 0 {
 // 		fmt.Println("SKIP: Should be run under root. Use sudo.")
