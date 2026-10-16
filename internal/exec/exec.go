@@ -54,7 +54,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 
 		// Create runAsScriptDirectoryPath and its intermediate directories if they do not exist
 		// 0770 - Owner and group have read, write, and execute permissions; others have no permissions.
-		os.MkdirAll(runAsScriptDirectoryPath, 0770)
+		os.MkdirAll(runAsScriptDirectoryPath, 0777)
 
 		/// Copy source script at scriptPath to runAsScriptDirectoryPath
 		// Get reference to source script by opening it
