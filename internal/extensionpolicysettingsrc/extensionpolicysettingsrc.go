@@ -8,34 +8,44 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
+type policyManager = extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings]
+
+var (
+	newPolicyManager        = extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings]
+	loadPolicySettings      = (*policyManager).LoadExtensionPolicySettings
+	getPolicySettings       = (*policyManager).GetSettings
+	validatePolicyAllowlist = extensionpolicysettings.ValidateValueInAllowlist
+)
+
 func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*extensionpolicysettings.ExtensionPolicySettingsManager[RCv2ExtensionPolicySettings], *RCv2ExtensionPolicySettings, error, int) {
 	if policyPath == "" {
-		err := fmt.Errorf("policy path to initialize extension policy settings is empty")
+		err := errorutil.WithCode(errorutil.Internal_emptyPolicyPath, fmt.Errorf("policy path to initialize extension policy settings is empty"))
 		ctx.Log("message", "policy path is empty. "+constants.ContactICMForServiceErrorsMessage, "error", err)
 		return nil, nil, err, constants.ExitCode_InitializeCalledWithNoPolicyPath
 	}
-	extensionPolicyManager, err := extensionpolicysettings.NewExtensionPolicySettingsManager[RCv2ExtensionPolicySettings](policyPath)
+	extensionPolicyManager, err := newPolicyManager(policyPath)
 	if err != nil {
 		// Manager only fails to be created if policy path is empty, so this shouldn't fail.
-		err = errors.Wrap(err, "failed to create extension policy settings manager. Ensure the policy path is valid")
+		err = errorutil.WithCode(errorutil.Internal_failedToCreatePolicyManager, errors.Wrap(err, "failed to create extension policy settings manager. Ensure the policy path is valid"))
 		ctx.Log("message", "failed to create extension policy settings manager. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
 		return nil, nil, err, constants.ExitCode_FailedToCreateExtensionPolicySettingsManager
 	}
 
-	err = extensionPolicyManager.LoadExtensionPolicySettings()
+	err = loadPolicySettings(extensionPolicyManager)
 	if err != nil {
-		err = errors.Wrap(err, "failed to load extension policy settings from file. Ensure the policy format is valid and the file is accessible")
+		err = errorutil.WithCode(errorutil.ExtensionPolicySettings_policyLoadFailed, errors.Wrap(err, "failed to load extension policy settings from file. Ensure the policy format is valid and the file is accessible"))
 		ctx.Log("message", "failed to load extension policy settings. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
 		return nil, nil, err, constants.ExitCode_LoadExtensionPolicySettingsFailed
 	}
 
-	rceps, err := extensionPolicyManager.GetSettings() //rceps is the pointer to the actual policy struct
+	rceps, err := getPolicySettings(extensionPolicyManager) //rceps is the pointer to the actual policy struct
 	if err != nil {
-		err = errors.Wrap(err, "failed to get extension policy settings after loading")
+		err = errorutil.WithCode(errorutil.Internal_failedToGetPolicySettings, errors.Wrap(err, "failed to get extension policy settings after loading"))
 		ctx.Log("message", "failed to get extension policy settings. "+constants.ContactICMForServiceErrorsMessage, "error", err, "policyPath", policyPath)
 		return nil, nil, err, constants.ExitCode_FailedToGetExtensionPolicySettings
 	}
@@ -45,7 +55,7 @@ func InitializeExtensionPolicySettings(ctx *log.Context, policyPath string) (*ex
 func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlersettings.HandlerSettings, policy *RCv2ExtensionPolicySettings) (error, int) {
 	if policy == nil {
 		ctx.Log("message", "no policy provided for extension policy settings")
-		return fmt.Errorf("no policy provided to validate handler settings"), constants.ExitCode_ValidateCalledWithNilPolicy
+		return errorutil.WithCode(errorutil.Internal_nilPolicySettings, fmt.Errorf("no policy provided to validate handler settings")), constants.ExitCode_ValidateCalledWithNilPolicy
 	}
 	if err := ValidateScriptTypeAgainstPolicy(ctx, settings.ScriptType(), policy.LimitScripts); err != nil {
 		return err, constants.ExitCode_ScriptTypeNotAllowedByExtensionPolicy
@@ -72,7 +82,10 @@ func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlerset
 }
 
 func ValidateScriptTypeAgainstPolicy(ctx *log.Context, scriptType handlersettings.ScriptType, allowedScriptTypesString string) error {
-	allowedScriptTypes, _ := StringToAllowedScriptTypeFlag(allowedScriptTypesString)
+	allowedScriptTypes, parseErr := StringToAllowedScriptTypeFlag(allowedScriptTypesString)
+	if parseErr != nil && allowedScriptTypesString != "" {
+		return fmt.Errorf("script type %s is not allowed by policy: invalid allowed script types: %w", scriptType, parseErr)
+	}
 	// Compare the script type of the command with the allowed script types in the policy.
 	err := CompareScriptTypeToAllowedScriptType(scriptType, allowedScriptTypes)
 	if err != nil {
@@ -91,10 +104,10 @@ func ValidateCommandId(ctx *log.Context, settings *handlersettings.HandlerSettin
 		ctx.Log("message", "allowedCommandID list empty, allowing all commands")
 		return nil
 	}
-	err := extensionpolicysettings.ValidateValueInAllowlist(settingsCommandId, allowedCommandIds)
+	err := validatePolicyAllowlist(settingsCommandId, allowedCommandIds)
 	if err != nil {
 		ctx.Log("message", "command ID is not allowed by policy", "error", err, "commandId", settingsCommandId)
-		return errors.Wrapf(err, "command ID %s is not allowed by policy", settingsCommandId)
+		return errorutil.WithCode(errorutil.ExtensionPolicySettings_commandToExecuteNotAllowed, errors.Wrapf(err, "command ID %s is not allowed by policy", settingsCommandId))
 	}
 	return nil
 }
@@ -104,7 +117,7 @@ func ValidateRunAsUser(ctx *log.Context, settings *handlersettings.HandlerSettin
 	policyRunAsUser := strings.ToLower(strings.TrimSpace(policy.RunAsUser))
 
 	if strings.Compare(settingsRunAsUser, policyRunAsUser) != 0 {
-		err := fmt.Errorf("runAsUser '%s' in settings does not match runAsUser '%s' in policy", settingsRunAsUser, policyRunAsUser)
+		err := errorutil.WithCode(errorutil.ExtensionPolicySettings_runAsUserNotAllowed, fmt.Errorf("runAsUser '%s' in settings does not match runAsUser '%s' in policy", settingsRunAsUser, policyRunAsUser))
 		ctx.Log("message", "runAsUser settings does not match runAsUser in policy", "error", err, "settingsRunAsUser", settingsRunAsUser, "policyRunAsUser", policyRunAsUser)
 		return err
 	}
@@ -117,7 +130,7 @@ func ValidateDisableOutputBlobs(ctx *log.Context, settings *handlersettings.Hand
 		trimmedErrorBlobURI := strings.TrimSpace(settings.ErrorBlobURI)
 
 		if trimmedOutputBlobURI != "" || trimmedErrorBlobURI != "" {
-			err := fmt.Errorf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", download.GetUriForLogging(settings.OutputBlobURI), download.GetUriForLogging(settings.ErrorBlobURI))
+			err := errorutil.WithCode(errorutil.ExtensionPolicySettings_outputBlobsNotAllowed, fmt.Errorf("output blobs are disabled in policy, but settings specify outputBlobURI '%s' or errorBlobURI '%s'", download.GetUriForLogging(settings.OutputBlobURI), download.GetUriForLogging(settings.ErrorBlobURI)))
 			ctx.Log("message", "output blobs are disabled in policy, but settings specify output or error blob URIs", "error", err, "outputBlobURI", download.GetUriForLogging(settings.OutputBlobURI), "errorBlobURI", download.GetUriForLogging(settings.ErrorBlobURI))
 			return err
 		}

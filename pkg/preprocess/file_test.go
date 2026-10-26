@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +31,9 @@ func TestHasShebang(t *testing.T) {
 func TestIsTextFile_openError(t *testing.T) {
 	_, err := IsTextFile("/non/existing/path")
 	require.NotNil(t, err)
+	code, ok := errorutil.Code(err)
+	require.True(t, ok)
+	require.Equal(t, errorutil.Os_FailedToOpenTextFile, code)
 	require.Contains(t, err.Error(), "failed to open file")
 }
 

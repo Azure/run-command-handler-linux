@@ -7,10 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/pkg/errors"
 )
 
 const peekLen = 64 // look at first N bytes to figure out if it has shebang
+
+var openTextFile = func(path string) (io.ReadCloser, error) { return os.Open(path) }
 
 // textExtensions is predefined list of script and text
 // file extensions.
@@ -28,15 +31,15 @@ func IsTextFile(path string) (bool, error) {
 	if hasTextExtension(path) {
 		return true, nil
 	}
-	f, err := os.Open(path)
+	f, err := openTextFile(path)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to open file")
+		return false, errorutil.WithCode(errorutil.Os_FailedToOpenTextFile, errors.Wrap(err, "failed to open file"))
 	}
 	defer f.Close()
 	b := make([]byte, peekLen)
 	_, err = f.Read(b)
 	if err != nil && err != io.EOF {
-		return false, errors.Wrap(err, "failed to read file")
+		return false, errorutil.WithCode(errorutil.Os_FailedToReadTextFile, errors.Wrap(err, "failed to read file"))
 	}
 	return hasShebang(b), nil
 }

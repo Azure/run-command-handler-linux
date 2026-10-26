@@ -7,6 +7,8 @@ import (
 )
 
 type RCMetadata struct {
+	ClarificationError error
+
 	// Most recent sequence, which was previously traced by seqNumFile. This was
 	// incorrect. The correct way is mrseq.  This file is auto-preserved by the agent.
 	MostRecentSequence string

@@ -25,42 +25,30 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/ahmetb/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
-	currentExtensionVersionDirectory := "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8"
-	os.Setenv(constants.ExtensionPathEnvName, currentExtensionVersionDirectory)
-	os.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.7")
-	os.Setenv(constants.VersionEnvName, "1.3.8")
-
-	currentVersion := os.Getenv(constants.VersionEnvName)
-	previousVersion := os.Getenv(constants.ExtensionVersionUpdatingFromEnvName)
-	previousExtensionVersionDirectory := strings.ReplaceAll(currentExtensionVersionDirectory, currentVersion, previousVersion)
-
-	// Remove currentExtensionVersionDirectory if it exists
-	_, err := os.Stat(currentExtensionVersionDirectory)
-	if err == nil {
-		os.RemoveAll(currentExtensionVersionDirectory)
-	}
-
-	// Remove previousExtensionVersionDirectory if it exists
-	_, err = os.Stat(previousExtensionVersionDirectory)
-	if err == nil {
-		os.RemoveAll(previousExtensionVersionDirectory)
-	}
+	root := t.TempDir()
+	currentExtensionVersionDirectory := filepath.Join(root, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.8")
+	previousExtensionVersionDirectory := filepath.Join(root, "Microsoft.CPlat.Core.RunCommandHandlerLinux-1.3.7")
+	t.Setenv(constants.ExtensionPathEnvName, currentExtensionVersionDirectory)
+	t.Setenv(constants.ExtensionVersionUpdatingFromEnvName, "1.3.7")
+	t.Setenv(constants.VersionEnvName, "1.3.8")
 
 	// Create previousExtensionVersionDirectory
-	err = os.Mkdir(previousExtensionVersionDirectory, 0777)
+	err := os.Mkdir(previousExtensionVersionDirectory, 0777)
 	require.Nil(t, err)
 
 	// Create currentExtensionVersionDirectory
 	err = os.Mkdir(currentExtensionVersionDirectory, 0777)
 	require.Nil(t, err)
 
-	files, _ := ioutil.ReadDir(currentExtensionVersionDirectory)
+	files, err := ioutil.ReadDir(currentExtensionVersionDirectory)
+	require.NoError(t, err)
 	require.Equal(t, 0, len(files))
 
 	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "1.mrseq"), "0", t)
@@ -68,7 +56,7 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "2345.mrseq"), "0", t)
 	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "RC0804_0.mrseq"), "5", t)
 	createMrseqFile(filepath.Join(previousExtensionVersionDirectory, "asdfsad.mrseq"), "20", t)
-	os.Create(filepath.Join(previousExtensionVersionDirectory, "abc.txt")) // this should not be copied to currentExtensionVersionDirectory
+	require.NoError(t, os.WriteFile(filepath.Join(previousExtensionVersionDirectory, "abc.txt"), nil, 0644)) // this should not be copied to currentExtensionVersionDirectory
 
 	statusSubdirectory := "status"
 	previousStatusDirectory := filepath.Join(previousExtensionVersionDirectory, statusSubdirectory)
@@ -78,14 +66,12 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 
 	// Only two status files are available. The rest of the 3 status files should be created during Update operation which would have dummy status.
 	// Dummy status files would be created to prevent poll status timeouts for already executed Run Commands after upgrade.
-	os.Create(filepath.Join(previousStatusDirectory, "1.0.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "ABCD.1.status"))
-	os.Create(filepath.Join(previousStatusDirectory, "abc.cs")) // this should not be copied to currentExtensionVersionDirectory
+	require.NoError(t, os.WriteFile(filepath.Join(previousStatusDirectory, "1.0.status"), nil, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(previousStatusDirectory, "ABCD.1.status"), nil, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(previousStatusDirectory, "abc.cs"), nil, 0644)) // this should not be copied to currentExtensionVersionDirectory
 
-	tempDir, _ := os.MkdirTemp("", "deletecmd")
-	defer os.RemoveAll(tempDir)
 	handlerEnvironment := handlerenv.HandlerEnvironment{
-		EventsFolder: tempDir,
+		EventsFolder: t.TempDir(),
 	}
 
 	extensionLogger := logging.New(nil)
@@ -93,7 +79,8 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	err = CopyStateForUpdate(log.NewContext(log.NewNopLogger()), previousExtensionVersionDirectory, currentExtensionVersionDirectory, extensionEventManager)
 	require.Nil(t, err)
 
-	files, _ = ioutil.ReadDir(currentExtensionVersionDirectory)
+	files, err = ioutil.ReadDir(currentExtensionVersionDirectory)
+	require.NoError(t, err)
 	require.Equal(t, 6, len(files))
 	statusDirectoryCount := 0
 	mrseqFileCount := 0
@@ -110,19 +97,17 @@ func Test_CopyMrseqFiles_MrseqFilesAreCopied(t *testing.T) {
 	require.Equal(t, 5, mrseqFileCount)
 
 	currentStatusDirectory := filepath.Join(currentExtensionVersionDirectory, statusSubdirectory)
-	files, _ = ioutil.ReadDir(currentStatusDirectory)
+	files, err = ioutil.ReadDir(currentStatusDirectory)
+	require.NoError(t, err)
 	require.Equal(t, 5, len(files))
 	for _, file := range files {
 		require.True(t, strings.HasSuffix(file.Name(), ".status"))
 	}
 
-	// Clean up
-	os.RemoveAll(currentExtensionVersionDirectory)
-	os.RemoveAll(previousExtensionVersionDirectory)
 }
 
 func createMrseqFile(mrseqFilePath string, mrseqNum string, t *testing.T) {
-	os.Create(mrseqFilePath)
+	t.Helper()
 	err := os.WriteFile(mrseqFilePath, []byte(mrseqNum), 0644)
 	require.Nil(t, err)
 }
@@ -155,6 +140,7 @@ func Test_checkAndSaveSeqNum_fails(t *testing.T) {
 	// pass in invalid seqnum format
 	_, err := checkAndSaveSeqNum(log.NewNopLogger(), 0, "/non/existing/dir")
 	require.NotNil(t, err)
+	requireCommandCode(t, errorutil.Os_FailedToWriteSequenceNumber, err)
 	require.Contains(t, err.Error(), `failed to save sequence number`)
 }
 
@@ -343,8 +329,9 @@ func Test_update_immediateRunCommandFails_traditionalStillUpdates(t *testing.T) 
 
 	// Simulate the immediate run command update failing.
 	originalImmediateUpdate := immediateUpdate
+	updateFailure := errorutil.WithCode(errorutil.Os_FailedToMakeServiceBinaryExecutable, errors.New("simulated immediate run command update failure"))
 	immediateUpdate = func(ctx *log.Context, h types.HandlerEnvironment, name string, seqNum int, extensionEvents *extensionevents.ExtensionEventManager) (int, error) {
-		return constants.ExitCode_UpgradeInstalledServiceFailed, errors.New("simulated immediate run command update failure")
+		return constants.ExitCode_UpgradeInstalledServiceFailed, updateFailure
 	}
 	defer func() { immediateUpdate = originalImmediateUpdate }()
 
@@ -355,6 +342,8 @@ func Test_update_immediateRunCommandFails_traditionalStillUpdates(t *testing.T) 
 
 	// The immediate run command update failed, so update() surfaces that error...
 	require.Error(t, updateErr, "immediate run command update was expected to fail")
+	require.ErrorIs(t, updateErr, updateFailure)
+	requireCommandCode(t, errorutil.Os_FailedToMakeServiceBinaryExecutable, updateErr)
 
 	// ...but the traditional run command state should STILL have been migrated to the new version.
 	require.FileExists(t, filepath.Join(newVersionDirectory, extName+constants.MrSeqFileExtension),
@@ -589,7 +578,11 @@ func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir st
 		// Verify whether we should have run the script
 		require.Equal(t, shouldExecuteScript, wasCalled)
 	} else {
+		// Already processed is a control-flow sentinel, not a classified failure.
 		require.Equal(t, ErrAlreadyProcessed, err)
+		code, classified := errorutil.Code(err)
+		require.False(t, classified, "already-processed sentinel must remain unclassified")
+		require.Zero(t, code)
 	}
 
 	// Report status to create a status file
@@ -647,8 +640,9 @@ func Test_runCmd_fail(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Ensure that the script fails
+	executionFailure := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("the chipmunks have risen in revolt"))
 	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
-		return errors.New("the chipmunks have risen in revolt"), 42
+		return executionFailure, 42
 	}
 
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
@@ -656,6 +650,8 @@ func Test_runCmd_fail(t *testing.T) {
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: "non-existing-cmd"}},
 	}, metadata)
 	require.NotNil(t, err, "command terminated with exit status")
+	require.ErrorIs(t, err, executionFailure)
+	requireCommandCode(t, errorutil.CommandExecution_failureExitCode, err)
 	require.Contains(t, err.Error(), "failed to execute command")
 	require.NotEqual(t, constants.ExitCode_Okay, exitCode)
 }
@@ -712,6 +708,7 @@ func Test_downloadArtifacts_Invalid(t *testing.T) {
 		})
 
 	require.NotNil(t, err)
+	requireCommandCode(t, errorutil.Internal_invalidArtifactSpecification, err)
 	require.Contains(t, err.Error(), "RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")
 
 	// ArtifactIds don't match
@@ -738,6 +735,7 @@ func Test_downloadArtifacts_Invalid(t *testing.T) {
 		})
 
 	require.NotNil(t, err)
+	requireCommandCode(t, errorutil.Internal_inconsistentArtifactSpecification, err)
 	require.Contains(t, err.Error(), "RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")
 }
 
@@ -772,6 +770,7 @@ func Test_downloadArtifactsFail(t *testing.T) {
 		})
 
 	require.NotNil(t, err)
+	requireCommandCode(t, errorutil.FileDownload_doesNotExist, err)
 	require.Contains(t, err.Error(), "failed to download artifact")
 }
 
@@ -883,8 +882,9 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Ensure that the script fails
+	executionFailure := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("the chipmunks do not like the script"))
 	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
-		return errors.New("the chipmunks do not like the script"), 127
+		return executionFailure, 127
 	}
 
 	metadata := types.NewRCMetadata("extName", 0, constants.DownloadFolder, DataDir)
@@ -892,6 +892,8 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 		PublicSettings: handlersettings.PublicSettings{Source: &handlersettings.ScriptSource{Script: script}, TreatFailureAsDeploymentFailure: true},
 	}, metadata)
 	require.NotNil(t, err)
+	require.ErrorIs(t, err, executionFailure)
+	requireCommandCode(t, errorutil.CommandExecution_failureExitCode, err)
 	require.Contains(t, err.Error(), "failed to execute command: the chipmunks do not like the script")
 	require.NotEqual(t, constants.ExitCode_Okay, exitCode)
 }
@@ -1328,6 +1330,7 @@ func Test_rehydrateMrSeqFiles_OpenStatusDirFails(t *testing.T) {
 
 	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
 	require.NotNil(t, err, "expected error when opening missing status dir")
+	requireCommandCode(t, errorutil.Os_FailedToOpenRehydrationStatusDirectory, err)
 	require.True(t, strings.Contains(err.Error(), "Failed to open status directory"), "unexpected error message: %s", err.Error())
 }
 
@@ -1353,6 +1356,7 @@ func Test_rehydrateMrSeqFiles_ReadDirFails(t *testing.T) {
 
 	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
 	require.NotNil(t, err, "expected error when ReadDir fails")
+	requireCommandCode(t, errorutil.Os_FailedToReadRehydrationStatusDirectory, err)
 	require.True(t, strings.Contains(err.Error(), "could not read directory entries"), "unexpected error message: %s", err.Error())
 }
 
@@ -1549,6 +1553,7 @@ func Test_rehydrateMrSeqFiles_ReadExistingMrseqFails(t *testing.T) {
 
 	err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, from, to, events)
 	require.NotNil(t, err, "expected error due to unreadable mrseq")
+	requireCommandCode(t, errorutil.Os_FailedToReadRehydrationSequenceFile, err)
 	require.True(t, strings.Contains(err.Error(), "Could not read file"), "Unexpected error: %v", err.Error())
 }
 
@@ -1597,6 +1602,7 @@ func Test_downloadScript_BlockedByAllowlist(t *testing.T) {
 		policy,
 	)
 	require.Error(t, err)
+	requireCommandCode(t, errorutil.ExtensionPolicySettings_downloadedScriptNotAllowed, err)
 	require.Contains(t, err.Error(), "blocked by policy")
 	require.Contains(t, err.Error(), "item is not in the allowlist")
 }
@@ -1815,10 +1821,11 @@ func Test_enable_e2e_extension_policy_settings_block_statussuccess(t *testing.T)
 	}
 
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
-	require.Nil(t, err, "enable command should succeed")
+	require.Error(t, err, "policy rejection must propagate to the caller")
 	require.False(t, scriptWasExecuted, "disallowed script should not be executed")
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+	requireReportedClarification(t, errorutil.ExtensionPolicySettings_galleryScriptNotAllowed, err, report)
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 }
@@ -1851,10 +1858,11 @@ func Test_enable_e2e_extension_policy_settings_block_statusfail(t *testing.T) {
 	}
 
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
-	require.Nil(t, err, "enable command should succeed")
+	require.Error(t, err, "policy rejection must propagate to the caller")
 	require.False(t, scriptWasExecuted, "disallowed script should not be executed")
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+	requireReportedClarification(t, errorutil.ExtensionPolicySettings_galleryScriptNotAllowed, err, report)
 	require.Equal(t, types.StatusError, report[0].Status.Status, "status report should indicate failure")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 }
@@ -1935,10 +1943,11 @@ func Test_enable_e2e_extension_policy_settings_block_statussuccess_disableOutput
 	}
 
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
-	require.Nil(t, err, "enable command should succeed")
+	require.Error(t, err, "policy rejection must propagate to the caller")
 	require.False(t, scriptWasExecuted, "script should not be executed because output blobs are disabled")
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
+	requireReportedClarification(t, errorutil.ExtensionPolicySettings_outputBlobsNotAllowed, err, report)
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "output blobs are disabled in policy, but settings specify"), "execution message should indicate failure")
@@ -1983,10 +1992,11 @@ func Test_enable_e2e_runtimePolicyFile_deletedAfterExecution_thenRunsWithoutPoli
 	}
 
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, blockedSeqNum, constants.DownloadFolder, dataDir)
-	require.Nil(t, err, "enable command should succeed even when the script is blocked")
+	require.Error(t, err, "policy rejection must propagate to the caller")
 	require.False(t, scriptWasExecuted, "non-allowlisted script must be blocked by policy")
 
 	report := readStatusReport(t, fakeEnv, extName, blockedSeqNum)
+	requireReportedClarification(t, errorutil.ExtensionPolicySettings_downloadedScriptNotAllowed, err, report)
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "blocked script should report failed execution")
 

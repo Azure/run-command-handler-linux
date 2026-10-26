@@ -4,6 +4,7 @@ package observer
 
 import (
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 )
 
 type Notifier struct {
@@ -21,7 +22,7 @@ func (n *Notifier) Unregister() {
 func (n *Notifier) Notify(status types.StatusEventArgs) error {
 	tempObserver := n.observer
 	if tempObserver != nil {
-		return tempObserver.OnNotify(status)
+		return errorutil.WithCode(errorutil.Internal_failedToNotifyObserver, tempObserver.OnNotify(status))
 	}
 
 	return nil

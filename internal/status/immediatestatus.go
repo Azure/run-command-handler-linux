@@ -8,6 +8,7 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -71,7 +72,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 		// Only report the latest active status for each goal state
 		goalStateKey := key.(types.GoalStateKey)
 		if goalStateKey.RuntimeSettingsState != "disabled" {
-			if value.(types.StatusItem) != (types.StatusItem{}) {
+			if item := value.(types.StatusItem); item.Version != 0 || item.TimestampUTC != "" || item.Status.Name != "" || item.Status.Operation != "" || item.Status.Status != "" || item.Status.FormattedMessage != (types.FormattedMessage{}) || len(item.Status.Substatuses) > 0 {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
@@ -142,19 +143,19 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
 	if err != nil {
-		return fmt.Errorf("status: failed to marshal immediate status into json: %v", err)
+		return errorutil.WithCode(errorutil.Internal_failedToMarshalImmediateStatus, fmt.Errorf("status: failed to marshal immediate status into json: %w", err))
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
 	response, err := o.Reporter.ReportStatus(o.ctx, string(rootStatusJson))
 
-	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 	if err != nil {
-		return errors.Wrap(err, "failed to report status to HGAP")
+		return errorutil.WithCode(errorutil.HostGA_failedToReportImmediateStatus, errors.Wrap(err, "failed to report status to HGAP"))
 	}
+	o.ctx.Log("message", fmt.Sprintf("Status received from request: %v", response.Status))
 
 	if response.StatusCode != 200 {
-		return errors.New("failed to report status with error code " + response.Status)
+		return errorutil.WithCode(errorutil.HostGA_immediateStatusReturnedErrorStatus, errors.New("failed to report status with error code "+response.Status))
 	}
 
 	return nil

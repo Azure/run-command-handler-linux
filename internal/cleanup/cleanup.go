@@ -2,15 +2,22 @@ package cleanup
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 
-	"github.com/Azure/azure-extension-platform/pkg/utils"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/linuxutils"
 	"github.com/go-kit/kit/log"
+)
+
+var (
+	openDownloadDirectory   = func(name string) (io.Closer, error) { return os.Open(name) }
+	clearExceptMostRecent   = linuxutils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent
+	deleteDirectoriesExcept = linuxutils.TryDeleteDirectoriesExcept
 )
 
 func ImmediateRunCommandCleanup(ctx *log.Context, metadata types.RCMetadata, h types.HandlerEnvironment, runAsUser string) {
@@ -35,7 +42,7 @@ func deleteAllScriptsAndSettings(ctx *log.Context, metadata types.RCMetadata, h 
 		ctx.Log("message", "removing all files from the download 'runas' directory "+runAsDownloadParent)
 		err = linuxutils.TryDeleteDirectories(ctx, runAsDownloadParent)
 		if err != nil {
-			ctx.Log("event", "could not clear runas script")
+			ctx.Log("event", "could not clear runas script", "error", err)
 		}
 	}
 }
@@ -45,13 +52,16 @@ func deleteScriptsAndSettingsExceptMostRecent(ctx *log.Context, metadata types.R
 	runtimeSettingsLastSeqNumFormat := metadata.ExtName + ".%d.settings"
 
 	// check if directory exists
-	_, err := os.Open(metadata.DownloadPath)
+	dir, err := openDownloadDirectory(metadata.DownloadPath)
 	if err == nil {
-		err := utils.TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(metadata.DownloadPath, h.HandlerEnvironment.ConfigFolder, "",
+		dir.Close()
+		err := clearExceptMostRecent(ctx, metadata.DownloadPath, h.HandlerEnvironment.ConfigFolder, "",
 			uint64(metadata.SeqNum), runtimeSettingsRegexFormat, runtimeSettingsLastSeqNumFormat)
 		if err != nil {
-			ctx.Log("event", "could not clear settings and script files", "error", err)
+			ctx.Log("event", "could not clear settings and script files", "error", errorutil.WithCode(errorutil.Os_FailedToCleanOldScriptsAndSettings, err))
 		}
+	} else if !os.IsNotExist(err) {
+		ctx.Log("event", "could not open download directory", "error", errorutil.WithCode(errorutil.Os_FailedToOpenDownloadDirectory, err))
 	} else {
 		ctx.Log("message", "directory does not exist. Skipping cleanup")
 	}
@@ -60,9 +70,9 @@ func deleteScriptsAndSettingsExceptMostRecent(ctx *log.Context, metadata types.R
 		runAsDownloadParent := filepath.Join(fmt.Sprintf(constants.RunAsDir, runAsUser), metadata.DownloadDir)
 		seqNumString := strconv.Itoa(metadata.SeqNum)
 		ctx.Log("message", "removing all files from the download 'runas' directory "+runAsDownloadParent)
-		err = utils.TryDeleteDirectoriesExcept(runAsDownloadParent, seqNumString)
+		err = deleteDirectoriesExcept(ctx, runAsDownloadParent, seqNumString)
 		if err != nil {
-			ctx.Log("event", "could not clear runas script")
+			ctx.Log("event", "could not clear runas script", "error", errorutil.WithCode(errorutil.Os_FailedToCleanOldRunAsDirectories, err))
 		}
 	}
 }

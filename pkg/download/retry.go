@@ -1,12 +1,14 @@
 package download
 
 import (
+	stderrors "errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -27,6 +29,20 @@ const (
 	expRetryM = 2
 )
 
+type retryFailure struct {
+	attempt  int
+	latest   error
+	previous error
+}
+
+func (e retryFailure) Error() string {
+	return fmt.Sprintf("attempt %d: %s; previous attempts: %s", e.attempt, e.latest, e.previous)
+}
+
+func (e retryFailure) Unwrap() error { return e.latest }
+
+func (e retryFailure) Is(target error) bool { return stderrors.Is(e.previous, target) }
+
 // WithRetries retrieves a response body using the specified downloader. Any
 // error returned from d will be retried (and retrieved response bodies will be
 // closed on failures). If the retries do not succeed, the last error is returned.
@@ -43,7 +59,9 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 			}
 
 			if downloadErrors != nil {
-				downloadErrors = errors.Wrap(downloadErrors, fmt.Sprintf("Attempt %d: %s ", n+1, err.Error()))
+				// Unwrap only the latest cause so older pointer classifications
+				// cannot shadow its value classification. Is retains prior causes.
+				downloadErrors = errorutil.WithCode(errorutil.Internal_failedToAggregateDownloadAttempts, retryFailure{n + 1, err, downloadErrors})
 			} else {
 				downloadErrors = err
 			}
@@ -73,6 +91,9 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 				sf(slp)
 			}
 		}
+	}
+	if downloadErrors == nil {
+		return nil, errorutil.WithCode(errorutil.Internal_noDownloaders, errors.New("no downloaders supplied"))
 	}
 	return nil, downloadErrors
 }

@@ -9,11 +9,26 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
 
 var immediateGSInTerminalStatusLock = sync.Mutex{}
+
+type temporaryStatusFile interface {
+	Name() string
+	Close() error
+}
+
+var (
+	statusCreateTemp = func(dir, pattern string) (temporaryStatusFile, error) { return os.CreateTemp(dir, pattern) }
+	statusWriteFile  = os.WriteFile
+	statusReadFile   = os.ReadFile
+	statusRename     = os.Rename
+	statusStat       = os.Stat
+	statusRemove     = os.Remove
+)
 
 // ReportStatusToLocalFile saves operation status to the status file for the extension
 // handler with the optional given message, if the given cmd requires reporting
@@ -28,7 +43,7 @@ func ReportStatusToLocalFile(ctx *log.Context, hEnv types.HandlerEnvironment, me
 		return nil
 	}
 
-	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, true, metadata.ExtName)
+	rootStatusJson, err := getRootStatusJson(ctx, statusType, c, msg, true, metadata.ExtName, metadata.ClarificationError)
 	if err != nil {
 		return errors.Wrap(err, "failed to get json for status report")
 	}
@@ -55,18 +70,21 @@ func SaveStatusReport(statusFolder string, extName string, seqNo int, rootStatus
 	}
 
 	path := filepath.Join(statusFolder, fn)
-	tmpFile, err := os.CreateTemp(statusFolder, fn)
+	tmpFile, err := statusCreateTemp(statusFolder, fn)
 	if err != nil {
-		return fmt.Errorf("status: failed to create temporary file: %v", err)
+		return errorutil.WithCode(errorutil.Os_FailedToCreateTemporaryStatusFile, fmt.Errorf("status: failed to create temporary file: %w", err))
 	}
-	tmpFile.Close()
-
-	if err := os.WriteFile(tmpFile.Name(), rootStatusJson, 0644); err != nil {
-		return fmt.Errorf("status: failed to path=%s error=%v", tmpFile.Name(), err)
+	defer statusRemove(tmpFile.Name())
+	if err := tmpFile.Close(); err != nil {
+		return errorutil.WithCode(errorutil.Os_FailedToCloseTemporaryStatusFile, fmt.Errorf("status: failed to close temporary file: %w", err))
 	}
 
-	if err := os.Rename(tmpFile.Name(), path); err != nil {
-		return fmt.Errorf("status: failed to move to path=%s error=%v", path, err)
+	if err := statusWriteFile(tmpFile.Name(), rootStatusJson, 0644); err != nil {
+		return errorutil.WithCode(errorutil.Os_FailedToWriteTemporaryStatusFile, fmt.Errorf("status: failed to path=%s error=%w", tmpFile.Name(), err))
+	}
+
+	if err := statusRename(tmpFile.Name(), path); err != nil {
+		return errorutil.WithCode(errorutil.Os_FailedToPublishStatusFile, fmt.Errorf("status: failed to move to path=%s error=%w", path, err))
 	}
 
 	return nil
@@ -86,21 +104,21 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 	ctx.Log("message", "marshalling the content to json")
 	rootStatusJson, err := json.MarshalIndent(newStatusInTerminalState, "", "\t")
 	if err != nil {
-		return fmt.Errorf("status: failed to marshal status report into json: %v", err)
+		return errorutil.WithCode(errorutil.Internal_failedToMarshalTerminalGoalStates, fmt.Errorf("status: failed to marshal status report into json: %w", err))
 	}
 
 	ctx.Log("message", "writing the content to the temporary status file")
-	err = os.WriteFile(tempStatusFile, rootStatusJson, 0644)
+	err = statusWriteFile(tempStatusFile, rootStatusJson, 0644)
 
 	if err != nil {
-		return fmt.Errorf("status: failed to write status file: %v", err)
+		return errorutil.WithCode(errorutil.Os_FailedToWriteTerminalGoalStates, fmt.Errorf("status: failed to write status file: %w", err))
 	}
 
 	ctx.Log("message", "Renaming the temporary status file to the final status file")
-	err = os.Rename(tempStatusFile, statusFile)
+	err = statusRename(tempStatusFile, statusFile)
 
 	if err != nil {
-		return fmt.Errorf("status: failed to move status file: %v", err)
+		return errorutil.WithCode(errorutil.Os_FailedToPublishTerminalGoalStates, fmt.Errorf("status: failed to move status file: %w", err))
 	}
 
 	return nil
@@ -120,24 +138,26 @@ func GetGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) 
 
 	result := []ImmediateStatus{}
 
-	if _, err := os.Stat(statusFile); err == nil {
+	if _, err := statusStat(statusFile); err == nil {
 		ctx.Log("message", "status file already exists. Reading the content")
-		fileContent, err := os.ReadFile(statusFile)
+		fileContent, err := statusReadFile(statusFile)
 		if err != nil {
-			return result, fmt.Errorf("status: failed to read status file: %v", err)
+			return result, errorutil.WithCode(errorutil.Os_FailedToReadTerminalGoalStates, fmt.Errorf("status: failed to read status file: %w", err))
 		}
 
 		ctx.Log("message", "unmarshalling the content of the status file")
 		var existingStatus []ImmediateStatus
 		if err := json.Unmarshal(fileContent, &existingStatus); err != nil {
-			return result, fmt.Errorf("status: failed to unmarshal status file: %v", err)
+			return result, errorutil.WithCode(errorutil.Os_InvalidTerminalGoalStatesJson, fmt.Errorf("status: failed to unmarshal status file: %w", err))
 		}
 
 		ctx.Log("message", "merging the new status with the existing content")
 		result = existingStatus
 		ctx.Log("message", fmt.Sprintf("Found %v goal states in terminal state", len(result)))
-	} else {
+	} else if os.IsNotExist(err) {
 		ctx.Log("message", "status file does not exist. No goal states in terminal status")
+	} else {
+		return result, errorutil.WithCode(errorutil.Os_FailedToStatTerminalGoalStates, fmt.Errorf("status: failed to stat status file: %w", err))
 	}
 
 	return result, nil
@@ -173,7 +193,7 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 					}
 				}
 			} else {
-				return errors.New(fmt.Sprintf("goal state %v is not disabled. Cannot remove it from the statusInTerminalState list", goalStateKey))
+				return errorutil.WithCode(errorutil.Internal_invalidGoalStateRemovalState, errors.New(fmt.Sprintf("goal state %v is not disabled. Cannot remove it from the statusInTerminalState list", goalStateKey)))
 			}
 		}
 
@@ -188,9 +208,9 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 	return nil
 }
 
-func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string) ([]byte, error) {
+func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, indent bool, extName string, clarificationErrors ...error) ([]byte, error) {
 	ctx.Log("message", "creating json to report status")
-	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName)
+	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName, clarificationErrors...)
 
 	b, err := MarshalStatusReportIntoJson(statusReport, indent)
 	if err != nil {
@@ -202,11 +222,11 @@ func getRootStatusJson(ctx *log.Context, statusType types.StatusType, c types.Cm
 
 // getSingleStatusItem returns a single status item for the given status type, command, and message.
 // This is useful when only a single status item is needed for an immediate status report.
-func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, extName string) (types.StatusItem, error) {
+func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.Cmd, msg string, extName string, clarificationErrors ...error) (types.StatusItem, error) {
 	ctx.Log("message", "creating json to report status")
-	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName)
+	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName, clarificationErrors...)
 	if len(statusReport) != 1 {
-		return types.StatusItem{}, errors.New("expected a single status item")
+		return types.StatusItem{}, errorutil.WithCode(errorutil.Internal_unexpectedStatusItemCount, errors.New("expected a single status item"))
 	}
 	return statusReport[0], nil
 }
@@ -220,5 +240,5 @@ func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) (
 		b, err = json.Marshal(statusReport)
 	}
 
-	return b, err
+	return b, errorutil.WithCode(errorutil.Internal_failedToMarshalStatusReport, err)
 }

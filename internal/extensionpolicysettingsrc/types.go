@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 )
 
 // This refers *specifically* to file types that require signature verification
@@ -57,7 +58,7 @@ func StringToAllowedScriptTypeFlag(s string) (AllowedScriptTypeFlag, error) {
 			flag |= AllowAll
 		// TO-DO: consider the case where 'none' scripts are allowed to run.
 		default:
-			return 0, fmt.Errorf("Unknown script type in policy: %s", part)
+			return 0, errorutil.WithCode(errorutil.ExtensionPolicySettings_invalidPolicyFileFormat, fmt.Errorf("Unknown script type in policy: %s", part))
 		}
 	}
 	return flag, nil
@@ -90,19 +91,19 @@ func (rceps RCv2ExtensionPolicySettings) ValidateFormat() error {
 	// 2. LimitScripts must be a valid AllowedScriptType value. so map/check the value to the AllowedScriptTypeFlag bitmask.
 	if rceps.LimitScripts != "" {
 		if err != nil {
-			return fmt.Errorf("at least one of the values in LimitScripts is not a valid script type: %v", rceps.LimitScripts)
+			return fmt.Errorf("at least one of the values in LimitScripts is not a valid script type: %s: %w", rceps.LimitScripts, err)
 		}
 	}
 	// 3. If DownloadedScriptsAllowlist is not empty, limit scripts must allow "downloaded" scripts.
 	if len(rceps.DownloadedScriptsAllowlist) > 0 {
 		if (flag & AllowedDownloaded) == 0 {
-			return fmt.Errorf("DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts")
+			return errorutil.WithCode(errorutil.ExtensionPolicySettings_inconsistentDownloadedScriptAllowlist, fmt.Errorf("DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts"))
 		}
 	}
 	// 4. If CommandIdAllowlist is not empty, limit scripts must allow "commandId" scripts.
 	if len(rceps.CommandIdAllowlist) > 0 {
 		if (flag & AllowedCommandId) == 0 {
-			return fmt.Errorf("CommandIdAllowlist not empty, but LimitScripts does not allow 'commandId' scripts")
+			return errorutil.WithCode(errorutil.ExtensionPolicySettings_inconsistentCommandIdAllowlist, fmt.Errorf("CommandIdAllowlist not empty, but LimitScripts does not allow 'commandId' scripts"))
 		}
 	}
 	return nil
@@ -116,26 +117,26 @@ func CompareScriptTypeToAllowedScriptType(scriptType handlersettings.ScriptType,
 	switch scriptType {
 	case handlersettings.InlineScript:
 		if (allowedScriptTypes & Inline) == 0 {
-			return fmt.Errorf("inline scripts are not allowed by policy")
+			return errorutil.WithCode(errorutil.ExtensionPolicySettings_scriptNotAllowed, fmt.Errorf("inline scripts are not allowed by policy"))
 		}
 	case handlersettings.DownloadedScript:
 		if (allowedScriptTypes & AllowedDownloaded) == 0 {
-			return fmt.Errorf("downloaded scripts are not allowed by policy")
+			return errorutil.WithCode(errorutil.ExtensionPolicySettings_downloadedScriptTypeNotAllowed, fmt.Errorf("downloaded scripts are not allowed by policy"))
 		}
 	case handlersettings.GalleryScript:
 		if (allowedScriptTypes & Gallery) == 0 {
-			return fmt.Errorf("gallery scripts are not allowed by policy")
+			return errorutil.WithCode(errorutil.ExtensionPolicySettings_galleryScriptNotAllowed, fmt.Errorf("gallery scripts are not allowed by policy"))
 		}
 	case handlersettings.DiagnosticScript:
 		if (allowedScriptTypes & Diagnostic) == 0 {
-			return fmt.Errorf("diagnostic scripts are not allowed by policy")
+			return errorutil.WithCode(errorutil.ExtensionPolicySettings_diagnosticScriptNotAllowed, fmt.Errorf("diagnostic scripts are not allowed by policy"))
 		}
 	case handlersettings.CommandIdScript:
 		if (allowedScriptTypes & AllowedCommandId) == 0 {
-			return fmt.Errorf("commandId scripts are not allowed by policy")
+			return errorutil.WithCode(errorutil.ExtensionPolicySettings_commandIdScriptNotAllowed, fmt.Errorf("commandId scripts are not allowed by policy"))
 		}
 	default:
-		return fmt.Errorf("unknown script type: %v", scriptType)
+		return errorutil.WithCode(errorutil.ExtensionPolicySettings_unknownScriptType, fmt.Errorf("unknown script type: %v", scriptType))
 	}
 	return nil
 }

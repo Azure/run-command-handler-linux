@@ -1,12 +1,17 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	platformstatus "github.com/Azure/azure-extension-platform/pkg/status"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
+)
 
 // StatusReport contains one or more status items and is the parent object
 type StatusReport []StatusItem
 
-func NewStatusReport(statusType StatusType, operation string, message string, extName string) StatusReport {
-	return []StatusItem{
+func NewStatusReport(statusType StatusType, operation string, message string, extName string, clarificationErrors ...error) StatusReport {
+	report := []StatusItem{
 		{
 			Version:      1, // this is the protocol version do not change unless you are sure
 			TimestampUTC: time.Now().UTC().Format(time.RFC3339),
@@ -20,6 +25,17 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 			},
 		},
 	}
+	for _, err := range clarificationErrors {
+		if code, ok := errorutil.Code(err); ok {
+			report[0].Status.Substatuses = []platformstatus.Substatus{{
+				Name:   platformstatus.ErrorClarificationSubStatusName,
+				Status: string(StatusError),
+				Code:   code,
+			}}
+			break
+		}
+	}
+	return report
 }
 
 // StatusItem is used to serialize an individual part of the status read by the server
@@ -48,10 +64,11 @@ const (
 
 // Status is used for serializing status in a manner the server understands
 type Status struct {
-	Name             string           `json:"name"`
-	Operation        string           `json:"operation"`
-	Status           StatusType       `json:"status"`
-	FormattedMessage FormattedMessage `json:"formattedMessage"`
+	Substatuses      []platformstatus.Substatus `json:"substatus,omitempty"`
+	Name             string                     `json:"name"`
+	Operation        string                     `json:"operation"`
+	Status           StatusType                 `json:"status"`
+	FormattedMessage FormattedMessage           `json:"formattedMessage"`
 }
 
 // FormattedMessage is a struct used for serializing status

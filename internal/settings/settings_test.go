@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,7 +53,10 @@ func Test_UnmarshalSettingsFromStandardRunCommand(t *testing.T) {
 func Test_FailedToUnmarshalSettingsFromVMSettingsAPI(t *testing.T) {
 	var settings SettingsCommon
 	err := json.Unmarshal([]byte(jsonBadFormatVMSettingsAPI), &settings)
+	// Invalid JSON syntax is rejected by encoding/json before the production unmarshaler runs.
 	require.ErrorContains(t, err, "invalid character")
+	_, classified := errorutil.Code(err)
+	require.False(t, classified)
 }
 
 func Test_MarshalVMSettingAPI(t *testing.T) {

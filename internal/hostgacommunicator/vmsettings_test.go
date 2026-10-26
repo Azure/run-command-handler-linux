@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/ahmetb/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,9 @@ func Test_GetImmediateVMSettingsFailedToParseJson(t *testing.T) {
 
 	_, err := communicator.GetImmediateVMSettings(ctx, "")
 	require.NotNil(t, err)
+	code, ok := errorutil.Code(err)
+	require.True(t, ok)
+	require.Equal(t, errorutil.HostGA_failedToParseVmSettingsResponse, code)
 	require.ErrorContains(t, err, "failed to parse immediate VMSettings json")
 }
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -18,12 +19,16 @@ const (
 	chmod = os.FileMode(0600)
 )
 
+var processStartTime = func(pid string) ([]byte, error) {
+	return exec.Command("bash", "-c", "ps -o lstart= -p "+pid).Output()
+}
+
 // GetProcessStartTime returns the start time of the active process if still active
 func GetProcessStartTime(pid int) (string, error) {
 	pidString := fmt.Sprintf("%d", pid)
-	startTime, err := exec.Command("bash", "-c", "ps -o lstart= -p "+pidString).Output()
+	startTime, err := processStartTime(pidString)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to execute bash ps command")
+		return "", errorutil.WithCode(errorutil.Os_FailedToGetProcessStartTime, errors.Wrap(err, "failed to execute bash ps command"))
 	}
 	return string(startTime), nil
 }
@@ -39,12 +44,12 @@ func SaveCurrentPidAndStartTime(path string) error {
 	}
 
 	b := []byte(fmt.Sprintf("%s\t%s", pidString, startTime))
-	return errors.Wrap(os.WriteFile(path, b, chmod), "extName.pid: failed to write")
+	return errorutil.WithCode(errorutil.Os_FailedToWriteProcessRecord, errors.Wrap(os.WriteFile(path, b, chmod), "extName.pid: failed to write"))
 }
 
 // DeleteCurrentPidAndStartTime delete the file created by SaveCurrentPidAndStartTime
 func DeleteCurrentPidAndStartTime(path string) error {
-	return errors.Wrap(os.Remove(path), "failed to delete "+path)
+	return errorutil.WithCode(errorutil.Os_FailedToDeleteProcessRecord, errors.Wrap(os.Remove(path), "failed to delete "+path))
 }
 
 // ReadPidAndStartTime reads the stored pid and process start time from a file extName.pid
@@ -55,16 +60,16 @@ func ReadPidAndStartTime(path string) (int, string, error) {
 		if os.IsNotExist(err) {
 			return 0, "", nil
 		}
-		return 0, "", errors.Wrap(err, "extName.pid: failed to read:"+path)
+		return 0, "", errorutil.WithCode(errorutil.Os_FailedToReadProcessRecord, errors.Wrap(err, "extName.pid: failed to read:"+path))
 	}
 	data := strings.Split(string(b), "\t")
 	if len(data) != 2 {
-		return 0, "", errors.Wrap(err, "unexpected format in extName.pid:"+string(b))
+		return 0, "", errorutil.WithCode(errorutil.Os_InvalidProcessRecordFormat, fmt.Errorf("unexpected format in extName.pid:%s", b))
 	}
 
 	pid, err := strconv.Atoi(data[0])
 	if err != nil {
-		return 0, "", errors.Wrap(err, "failed to convert pid:"+data[0])
+		return 0, "", errorutil.WithCode(errorutil.Os_InvalidProcessRecordId, errors.Wrap(err, "failed to convert pid:"+data[0]))
 	}
 	return pid, data[1], nil
 }
@@ -94,7 +99,12 @@ func KillPreviousExtension(ctx *log.Context, pidFilePath string) {
 		if ctx != nil {
 			ctx.Log("event", "check process", "Active previous execution found. Killing pid ", previousPid)
 		}
-		syscall.Kill(-previousPid, syscall.SIGKILL) // Negative pid means kill the whole process group
-		DeleteCurrentPidAndStartTime(pidFilePath)
+		killErr := errorutil.WithCode(errorutil.Os_FailedToKillPreviousProcessGroup, killProcessGroup(-previousPid, syscall.SIGKILL)) // Negative pid means kill the whole process group
+		if killErr != nil && ctx != nil {
+			ctx.Log("error", killErr)
+		}
+		if err := DeleteCurrentPidAndStartTime(pidFilePath); err != nil && ctx != nil {
+			ctx.Log("error", err)
+		}
 	}
 }

@@ -11,10 +11,18 @@ import (
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
+
+func requireRequestCode(t *testing.T, err error, want int) {
+	t.Helper()
+	code, ok := errorutil.Code(err)
+	require.True(t, ok, "expected classified error: %v", err)
+	require.Equal(t, want, code)
+}
 
 const (
 	testRequestTimeout   = 2 * time.Second
@@ -85,6 +93,7 @@ func TestMakeRequest_WrapsGetRequestError(t *testing.T) {
 	require.Equal(t, badRequestor.calls, 1)
 	require.NotNil(t, err)
 	require.EqualError(t, err, badRequestorErrorMsg)
+	requireRequestCode(t, err, errorutil.HostGA_failedToCreateRequest)
 }
 
 func TestMakeRequest_WrapsHttpBadUrlError(t *testing.T) {
@@ -95,6 +104,7 @@ func TestMakeRequest_WrapsHttpBadUrlError(t *testing.T) {
 	require.Equal(t, testUrlRequest.calls, 1)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "unsupported protocol scheme")
+	requireRequestCode(t, err, errorutil.HostGA_failedToSendRequest)
 }
 
 func TestMakeRequest_RequestTimeout(t *testing.T) {
@@ -109,6 +119,7 @@ func TestMakeRequest_RequestTimeout(t *testing.T) {
 	require.Equal(t, timeoutTestUrl.calls, 1)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "Timeout exceeded")
+	requireRequestCode(t, err, errorutil.HostGA_failedToSendRequest)
 
 	testUrl := NewTestURLRequest(fmt.Sprintf("%s/delay/%d", srv.URL, 1))
 	rm = requesthelper.GetRequestManager(testUrl, testRequestTimeout)
@@ -138,6 +149,7 @@ func TestMakeRequest_BadStatusCodeFails(t *testing.T) {
 		_, err := rm.MakeRequest(ctx, "")
 		require.Equal(t, badTestCodeUrl.calls, 1)
 		require.NotNil(t, err, "not failed for code: %d", code)
+		requireRequestCode(t, err, errorutil.HostGA_requestReturnedErrorStatus)
 		require.Contains(t, err.Error(), "unexpected status code", "actual=%d", code)
 	}
 }

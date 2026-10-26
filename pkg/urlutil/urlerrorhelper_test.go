@@ -4,12 +4,23 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
+	"github.com/stretchr/testify/require"
 )
+
+func requireRedactedErrorCode(t *testing.T, err error) {
+	t.Helper()
+	code, ok := errorutil.Code(err)
+	require.True(t, ok, "missing clarification: %v", err)
+	require.Equal(t, errorutil.FileDownload_redactedUrlError, code)
+}
 
 func Test_expectedErrorString(t *testing.T) {
 	errorString := `Get https://aaaaaaaa.blob.core.windows.net/nodeagentpackage-version9-0-0-381/Ubuntu-16.04/batch_config-ubuntu-16.04-1.5.9.tar.gz?sv=2018-03-28&sr=b&sig=a%secret%2Bsecret&st=2019-05-17T01%3A25%3A42Z&se=2021-05-24T01%3A25%3A42Z&sp=r: dial tcp 13.68.165.64:443: i/o timeout`
 	inputErr := fmt.Errorf("%s", errorString)
 	outputErr := RemoveUrlFromErr(inputErr)
+	requireRedactedErrorCode(t, outputErr)
 	if strings.Contains(outputErr.Error(), "https://") || strings.Contains(outputErr.Error(), "secret") || !strings.Contains(outputErr.Error(), "[REDACTED]") {
 		t.Error("Url removal failed")
 	} else if !strings.Contains(outputErr.Error(), "dial tcp 13.68.165.64:443: i/o timeout") {
@@ -23,6 +34,7 @@ func Test_nonHttpsSchema(t *testing.T) {
 	errorString := `Gethttps://aaaaaaaa.blob.core.windows.net/nodeagentpackage-version9-0-0-381/Ubuntu-16.04/batch_config-ubuntu-16.04-1.5.9.tar.gz?sv=2018-03-28&sr=b&sig=a%secret%2Bsecret&st=2019-05-17T01%3A25%3A42Z&se=2021-05-24T01%3A25%3A42Z&sp=r: dial tcp 13.68.165.64:443: i/o timeout`
 	inputErr := fmt.Errorf("%s", errorString)
 	outputErr := RemoveUrlFromErr(inputErr)
+	requireRedactedErrorCode(t, outputErr)
 	if strings.Contains(outputErr.Error(), "https://") || strings.Contains(outputErr.Error(), "secret") || !strings.Contains(outputErr.Error(), "[REDACTED]") {
 		t.Error("Url removal failed")
 	} else if !strings.Contains(outputErr.Error(), "dial tcp 13.68.165.64:443: i/o timeout") {
@@ -36,6 +48,7 @@ func Test_errorWithMissingSpaces(t *testing.T) {
 	errorString := `Gethttps://aaaaaaaa.blob.core.windows.net/nodeagentpackage-version9-0-0-381/Ubuntu-16.04/batch_config-ubuntu-16.04-1.5.9.tar.gz?sv=2018-03-28&sr=b&sig=a%secret%2Bsecret&st=2019-05-17T01%3A25%3A42Z&se=2021-05-24T01%3A25%3A42Z&sp=r:dial tcp 13.68.165.64:443:i/o timeout`
 	inputErr := fmt.Errorf("%s", errorString)
 	outputErr := RemoveUrlFromErr(inputErr)
+	requireRedactedErrorCode(t, outputErr)
 	if strings.Contains(outputErr.Error(), "https://") || strings.Contains(outputErr.Error(), "secret") || !strings.Contains(outputErr.Error(), "[REDACTED]") {
 		t.Error("Url removal failed")
 	} else if !strings.Contains(outputErr.Error(), "tcp 13.68.165.64:443:i/o timeout") {
@@ -50,6 +63,7 @@ func Test_errorStringIsUrlOnly(t *testing.T) {
 	errorString := `https://aaaaaaaa.blob.core.windows.net/nodeagentpackage-version9-0-0-381/Ubuntu-16.04/batch_config-ubuntu-16.04-1.5.9.tar.gz?sv=2018-03-28&sr=b&sig=a%secret%2Bsecret&st=2019-05-17T01%3A25%3A42Z&se=2021-05-24T01%3A25%3A42Z&sp=r`
 	inputErr := fmt.Errorf("%s", errorString)
 	outputErr := RemoveUrlFromErr(inputErr)
+	requireRedactedErrorCode(t, outputErr)
 	if strings.Contains(outputErr.Error(), "https://") || strings.Contains(outputErr.Error(), "secret") || !strings.Contains(outputErr.Error(), "[REDACTED]") {
 		t.Error("Url removal failed")
 	} else {
@@ -61,6 +75,7 @@ func Test_errorStringIsSpaces(t *testing.T) {
 	errorString := `   `
 	inputErr := fmt.Errorf("%s", errorString)
 	outputErr := RemoveUrlFromErr(inputErr)
+	requireRedactedErrorCode(t, outputErr)
 	if outputErr.Error() != errorString {
 		t.Error("Url detected where there was no URL")
 	} else {
@@ -72,6 +87,7 @@ func Test_errorStringHasNoUrl(t *testing.T) {
 	errorString := `This: error\\ message \ has \ no? {urls:}`
 	inputErr := fmt.Errorf("%s", errorString)
 	outputErr := RemoveUrlFromErr(inputErr)
+	requireRedactedErrorCode(t, outputErr)
 	if outputErr.Error() != errorString {
 		t.Error("Url detected where there was no URL")
 	} else {

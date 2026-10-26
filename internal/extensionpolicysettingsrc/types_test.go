@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,6 +109,7 @@ func TestStringToAllowedScriptTypeFlag(t *testing.T) {
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
+				requirePolicyCode(t, err, errorutil.ExtensionPolicySettings_invalidPolicyFileFormat)
 				require.Equal(t, tt.wantErr, err.Error())
 				return
 			}
@@ -120,9 +122,10 @@ func TestStringToAllowedScriptTypeFlag(t *testing.T) {
 
 func TestValidateFormat(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   RCv2ExtensionPolicySettings
-		wantErr string
+		name     string
+		input    RCv2ExtensionPolicySettings
+		wantErr  string
+		wantCode int
 	}{
 		{
 			name: "valid policy",
@@ -139,7 +142,8 @@ func TestValidateFormat(t *testing.T) {
 			input: RCv2ExtensionPolicySettings{
 				LimitScripts: "inline,notARealType",
 			},
-			wantErr: "at least one of the values in LimitScripts is not a valid script type: inline,notARealType",
+			wantErr:  "at least one of the values in LimitScripts is not a valid script type: inline,notARealType: Unknown script type in policy: notarealtype",
+			wantCode: errorutil.ExtensionPolicySettings_invalidPolicyFileFormat,
 		},
 		{
 			name: "downloaded allowlist present, but downloaded scripts are blocked",
@@ -147,7 +151,8 @@ func TestValidateFormat(t *testing.T) {
 				LimitScripts:               "inline,gallery",
 				DownloadedScriptsAllowlist: []string{"hash1"},
 			},
-			wantErr: "DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts",
+			wantErr:  "DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts",
+			wantCode: errorutil.ExtensionPolicySettings_inconsistentDownloadedScriptAllowlist,
 		},
 		{
 			name: "command ID allowlist present, but command IDs are blocked",
@@ -155,7 +160,8 @@ func TestValidateFormat(t *testing.T) {
 				LimitScripts:       "inline,gallery",
 				CommandIdAllowlist: []string{"cmd1"},
 			},
-			wantErr: "CommandIdAllowlist not empty, but LimitScripts does not allow 'commandId' scripts",
+			wantErr:  "CommandIdAllowlist not empty, but LimitScripts does not allow 'commandId' scripts",
+			wantCode: errorutil.ExtensionPolicySettings_inconsistentCommandIdAllowlist,
 		},
 	}
 
@@ -165,6 +171,7 @@ func TestValidateFormat(t *testing.T) {
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
+				requirePolicyCode(t, err, tt.wantCode)
 				require.Equal(t, tt.wantErr, err.Error())
 				return
 			}
@@ -180,12 +187,14 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 		scriptType handlersettings.ScriptType
 		allowed    AllowedScriptTypeFlag
 		wantErr    string
+		wantCode   int
 	}{
 		{
 			name:       "none allowed, gallery denied",
 			scriptType: handlersettings.GalleryScript,
 			allowed:    AllowedScriptNone,
 			wantErr:    "gallery scripts are not allowed by policy",
+			wantCode:   errorutil.ExtensionPolicySettings_galleryScriptNotAllowed,
 		},
 		{
 			name:       "allow all, allow inline",
@@ -217,6 +226,7 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 			scriptType: handlersettings.InlineScript,
 			allowed:    Diagnostic,
 			wantErr:    "inline scripts are not allowed by policy",
+			wantCode:   errorutil.ExtensionPolicySettings_scriptNotAllowed,
 		},
 		{
 			name:       "allowed downloaded, allow downloaded",
@@ -228,12 +238,14 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 			scriptType: handlersettings.ScriptType("made-up"),
 			allowed:    AllowAll,
 			wantErr:    "unknown script type: made-up",
+			wantCode:   errorutil.ExtensionPolicySettings_unknownScriptType,
 		},
 		{
 			name:       "'none' script currently treated as unknown",
 			scriptType: handlersettings.NoneScript,
 			allowed:    AllowAll,
 			wantErr:    "unknown script type: None",
+			wantCode:   errorutil.ExtensionPolicySettings_unknownScriptType,
 		},
 	}
 
@@ -243,6 +255,7 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
+				requirePolicyCode(t, err, tt.wantCode)
 				require.Equal(t, tt.wantErr, err.Error())
 				return
 			}

@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	requesthelper "github.com/Azure/run-command-handler-linux/internal/requesthelper"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -18,6 +19,9 @@ import (
 const (
 	vmSettingsOperation = "immediateGoalState"
 )
+
+var readHandlerEnv = handlersettings.GetHandlerEnv
+var statCertificate = os.Stat
 
 const (
 	vmSettingsRequestTimeout = 30 * time.Second
@@ -62,7 +66,7 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 	request, err := http.NewRequest("GET", u.url, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create request to %v", u.url)
-		return nil, errors.Wrap(err, errMsg)
+		return nil, errorutil.WithCode(errorutil.HostGA_failedToCreateVmSettings, errors.Wrap(err, errMsg))
 	}
 
 	if eTag != "" {
@@ -72,9 +76,9 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 }
 
 func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) {
-	he, err := handlersettings.GetHandlerEnv()
+	he, err := readHandlerEnv()
 	if err != nil {
-		return false, errors.Wrap(err, "failed to parse handlerenv")
+		return false, errorutil.WithCode(errorutil.HostGA_failedToParseHandlerEnvironment, errors.Wrap(err, "failed to parse handlerenv"))
 	}
 
 	configFolder := he.HandlerEnvironment.ConfigFolder
@@ -86,16 +90,18 @@ func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) 
 		}
 
 		if s.SettingsCertThumbprint == "" {
-			return false, errors.New("HandlerSettings has protected settings but no cert thumbprint")
+			return false, errorutil.WithCode(errorutil.HostGA_missingSettingsCertificateThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
 		}
 
 		// go two levels up where certs are placed (/var/lib/waagent)
 		crt := filepath.Join(configFolder, "..", "..", fmt.Sprintf("%s.crt", s.SettingsCertThumbprint))
 		prv := filepath.Join(configFolder, "..", "..", fmt.Sprintf("%s.prv", s.SettingsCertThumbprint))
 
-		if !fileExists(crt) || !fileExists(prv) {
-			message := fmt.Sprintf("Certificate %v needed by %v is missing from the goal state", s.SettingsCertThumbprint, s.ExtensionName)
-			return false, errors.New(message)
+		for _, certificate := range []string{crt, prv} {
+			if _, err := statCertificate(certificate); err != nil {
+				message := fmt.Sprintf("Certificate %v needed by %v is unavailable in the goal state", s.SettingsCertThumbprint, s.ExtensionName)
+				return false, errorutil.WithCode(errorutil.HostGA_failedToDecryptProtectedSettings, errors.Wrap(err, message))
+			}
 		}
 	}
 

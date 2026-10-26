@@ -2,7 +2,9 @@ package settings
 
 import (
 	"encoding/json"
+	"fmt"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/pkg/errors"
 )
 
@@ -20,7 +22,7 @@ func (li *SettingsCommon) UnmarshalJSON(data []byte) error {
 	type localItem SettingsCommon
 	var loc localItem
 	if err := json.Unmarshal(data, &loc); err != nil {
-		return err
+		return errorutil.WithCode(errorutil.CustomerInput_invalidSettingsJson, err)
 	}
 	*li = SettingsCommon(loc)
 
@@ -32,14 +34,17 @@ func (li *SettingsCommon) UnmarshalJSON(data []byte) error {
 		var publicSettings map[string]interface{}
 		if publicSettingsRawString != "" {
 			if err := json.Unmarshal([]byte(publicSettingsRawString), &publicSettings); err != nil {
-				return errors.Wrapf(err, "failed to parse public settings from json")
+				return errorutil.WithCode(errorutil.CustomerInput_invalidPublicSettingsJson, errors.Wrapf(err, "failed to parse public settings from json"))
 			}
 		}
 
 		li.PublicSettings = publicSettings
-	case interface{}:
+	case map[string]interface{}:
 		// This covers the scenario to parse the settings for a normal run command request
 		li.PublicSettings = li.PublicSettingsRaw.(map[string]interface{})
+	case nil:
+	default:
+		return errorutil.WithCode(errorutil.CustomerInput_publicSettingsNotObject, fmt.Errorf("public settings must be an object or JSON object string"))
 	}
 
 	return nil
@@ -50,8 +55,9 @@ func (li SettingsCommon) MarshalJSON() ([]byte, error) {
 	s := SettingsCommonHelper(li)
 	publicSettingsRaw, err := json.Marshal(s.PublicSettings)
 	if err != nil {
-		return []byte{}, errors.Wrap(err, "could not marshal public settings")
+		return []byte{}, errorutil.WithCode(errorutil.Internal_failedToMarshalPublicSettings, errors.Wrap(err, "could not marshal public settings"))
 	}
 	s.PublicSettingsRaw = string(publicSettingsRaw)
-	return json.Marshal(s)
+	b, err := json.Marshal(s)
+	return b, errorutil.WithCode(errorutil.Internal_failedToMarshalSettings, errors.Wrap(err, "could not marshal settings"))
 }

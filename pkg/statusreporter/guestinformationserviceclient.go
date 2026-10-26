@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -36,7 +37,7 @@ func (c GuestInformationServiceClient) GetPutStatusUri() string {
 
 func (c GuestInformationServiceClient) ReportStatus(ctx *log.Context, statusToUpload string) (*http.Response, error) {
 	if statusToUpload == "" {
-		return nil, errors.New("provided status to upload is empty")
+		return nil, errorutil.WithCode(errorutil.Internal_emptyStatusUpload, errors.New("provided status to upload is empty"))
 	}
 
 	return ReportStatus(ctx, c.GetPutStatusUri(), statusToUpload)
