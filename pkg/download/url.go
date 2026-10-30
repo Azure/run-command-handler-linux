@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/google/uuid"
 )
 
@@ -28,7 +29,7 @@ func (u urlDownload) GetRequest() (*http.Request, error) {
 	if req != nil {
 		req.Header.Add(xMsClientRequestIdHeaderName, uuid.New().String())
 	}
-	return req, err
+	return req, errorutil.WithCode(errorutil.FileDownload_invalidRequestUrl, err)
 }
 
 // Scrub query. Used to remove the query parts like SAS token.

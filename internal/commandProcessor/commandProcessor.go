@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/instanceview"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/seqnumutil"
 	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
 	"github.com/go-kit/kit/log"
@@ -24,6 +25,10 @@ import (
 
 var (
 	handlerEnvironmentGetter func(name, version string) (he *handlerenv.HandlerEnvironment, _ error) = handlerenv.GetHandlerEnvironment
+	readHandlerSettings                                                                              = handlersettings.GetHandlerSettings
+	writeSettingsFile                                                                                = os.WriteFile
+	marshalSettings                                                                                  = json.Marshal
+	removeRuntimePolicyFile                                                                          = os.Remove
 )
 
 func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSettingsFile, extensionName string, seqNum int) error {
@@ -83,7 +88,9 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 	}
 
 	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, dataDir)
-	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView)
+	if err := instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView); err != nil {
+		ctx.Log("event", "failed to report initial instance view", "error", err)
+	}
 
 	// execute the subcommand
 	stdout, stderr, cmdInvokeError, exitCode := cmd.Functions.Invoke(ctx, hEnv, &instView, metadata, cmd)
@@ -94,21 +101,28 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 	instView.Output = stdout
 	instView.Error = stderr
 	if cmdInvokeError != nil {
+		cmdInvokeError = errorutil.WithCode(errorutil.Internal_unclassifiedCommandFailure, cmdInvokeError)
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
 		instView.ExecutionState = types.Failed
 		instView.EndTime = time.Now().UTC().Format(time.RFC3339)
 		instView.ExitCode = exitCode
+		instView.ClarificationError = cmdInvokeError
 		statusToReport := types.StatusSuccess
 
-		// If TreatFailureAsDeploymentFailure is set to true and the exit code is non-zero, set extension status to error
-		cfg, err := handlersettings.GetHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
+		// Fail the extension status and handler invocation only when deployment failure is enabled and the command has a non-zero failure exit code.
+		cfg, err := readHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
 		if err == nil && cfg.PublicSettings.TreatFailureAsDeploymentFailure && cmd.FailExitCode != 0 {
 			statusToReport = types.StatusError
 		}
 
-		instanceview.ReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView)
-		return errors.Wrapf(err, "command execution failed")
+		if reportErr := instanceview.ReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView); reportErr != nil {
+			ctx.Log("event", "failed to report execution error", "error", reportErr)
+		}
+		if statusToReport == types.StatusError {
+			return errors.Wrapf(cmdInvokeError, "command execution failed")
+		}
+		return nil
 	} else { // No error. Succeeded
 		instView.ExecutionMessage = "Execution completed"
 		instView.ExecutionState = types.Succeeded
@@ -116,7 +130,9 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		instView.ExitCode = constants.ExitCode_Okay
 	}
 
-	instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusSuccess, cmd, &instView)
+	if err := instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusSuccess, cmd, &instView); err != nil {
+		return errors.Wrap(err, "failed to report final instance view")
+	}
 	ctx.Log("event", "end")
 
 	return nil
@@ -147,6 +163,19 @@ func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironm
 		metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, constants.DataDir)
 		if err := cmd.Functions.Pre(ctx, hEnv, metadata, cmd); err != nil {
 			ctx.Log("event", "pre-check failed", "error", err)
+			if !errors.Is(err, types.ErrAlreadyProcessed) {
+				err = errorutil.WithCode(errorutil.Internal_unclassifiedPrecheckFailure, err)
+				view := types.RunCommandInstanceView{
+					ExecutionState:     types.Failed,
+					ExecutionMessage:   "Pre-check failed: " + err.Error(),
+					ExitCode:           cmd.FailExitCode,
+					EndTime:            time.Now().UTC().Format(time.RFC3339),
+					ClarificationError: err,
+				}
+				if reportErr := instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusError, cmd, &view); reportErr != nil {
+					ctx.Log("event", "failed to report pre-check error", "error", reportErr)
+				}
+			}
 			return errors.Wrapf(err, "pre-check step failed")
 		}
 	}
@@ -188,7 +217,7 @@ func getSeqNum(ctx **log.Context, hEnv types.HandlerEnvironment, extensionName s
 		if err != nil {
 			msg := fmt.Sprintf("failed to parse env variable ConfigSequenceNumber: %v", seqNumVariable)
 			(*ctx).Log("message", msg, "error", err)
-			return seqNum, errors.Wrap(err, msg)
+			return seqNum, errorutil.WithCode(errorutil.Internal_invalidSequenceEnvironmentVariable, errors.Wrap(err, msg))
 		}
 	}
 
@@ -197,6 +226,7 @@ func getSeqNum(ctx **log.Context, hEnv types.HandlerEnvironment, extensionName s
 		seqNum, err = seqnumutil.FindSequenceNumberFromConfig(hEnv.HandlerEnvironment.ConfigFolder, constants.ConfigFileExtension, extensionName)
 		if err != nil {
 			(*ctx).Log("FindSequenceNumberFromConfig", "failed to find sequence number from config folder.", "error", err)
+			return seqNum, err
 		} else {
 			(*ctx).Log("FindSequenceNumberFromConfig", fmt.Sprintf("Sequence number determined from config folder: %d", seqNum))
 		}
@@ -212,14 +242,14 @@ func storeConfigSettingsFileForLocalExecution(ctx *log.Context, hs handlersettin
 	configFilePath := handlersettings.GetConfigFilePath(configFolder, seqNum, extensionName)
 	ctx.Log("message", fmt.Sprintf("saving handler settings in file: %v", configFilePath))
 
-	content, err := json.Marshal(hs)
+	content, err := marshalSettings(hs)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal handler settings file")
+		return errorutil.WithCode(errorutil.Internal_failedToMarshalLocalSettings, errors.Wrap(err, "could not marshal handler settings file"))
 	}
 
-	err = os.WriteFile(configFilePath, content, 0644)
+	err = writeSettingsFile(configFilePath, content, 0644)
 	if err != nil {
-		return errors.Wrap(err, "could not store handler settings file locally to run the command")
+		return errorutil.WithCode(errorutil.Os_FailedToWriteLocalSettings, errors.Wrap(err, "could not store handler settings file locally to run the command"))
 	}
 
 	return nil
@@ -228,8 +258,8 @@ func storeConfigSettingsFileForLocalExecution(ctx *log.Context, hs handlersettin
 func deleteRuntimePolicySettingsFile(ctx *log.Context, hEnv types.HandlerEnvironment) {
 	policyFilePath := filepath.Join(hEnv.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
 	ctx.Log("message", "removing runtime policy settings file if it exists")
-	err := os.Remove(policyFilePath)
+	err := removeRuntimePolicyFile(policyFilePath)
 	if err != nil && !os.IsNotExist(err) {
-		ctx.Log("warning", "failed to remove runtime policy settings file", "error", err)
+		ctx.Log("warning", "failed to remove runtime policy settings file", "error", errorutil.WithCode(errorutil.Os_FailedToDeleteRuntimePolicy, err), "clarificationCode", errorutil.Os_FailedToDeleteRuntimePolicy)
 	}
 }

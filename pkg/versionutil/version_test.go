@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -59,6 +60,9 @@ func TestFailToExtractVersion(t *testing.T) {
 	for _, content := range versionsToTest {
 		extractedVersion, err := ExtractFromServiceDefinition(content, ctx)
 		require.NotNil(t, err, "extracting the version from invalid service definition should return an error")
+		code, ok := errorutil.Code(err)
+		require.True(t, ok)
+		require.Equal(t, errorutil.Internal_invalidServiceDefinition, code)
 		require.Equal(t, "", extractedVersion)
 	}
 }

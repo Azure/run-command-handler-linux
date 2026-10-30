@@ -10,6 +10,7 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,13 @@ var (
 	testHandlerSettings handlersettings.HandlerSettings = handlersettings.HandlerSettings{PublicSettings: handlersettings.PublicSettings{}, ProtectedSettings: handlersettings.ProtectedSettings{}}
 	testContext                                         = log.NewContext(log.NewNopLogger())
 )
+
+func requireExecCode(t *testing.T, err error, want int) {
+	t.Helper()
+	code, ok := errorutil.Code(err)
+	require.True(t, ok, "expected classified error: %v", err)
+	require.Equal(t, want, code)
+}
 
 func TestExec_success(t *testing.T) {
 	v := new(mockFile)
@@ -43,6 +51,7 @@ func TestExec_failure_exitError(t *testing.T) {
 	ec, err := Exec(testContext, "exit 12", "/", new(mockFile), new(mockFile), &testHandlerSettings)
 	require.NotNil(t, err)
 	require.EqualError(t, err, "command terminated with exit status=12") // error is customized
+	requireExecCode(t, err, errorutil.CommandExecution_failureExitCode)
 	require.EqualValues(t, 12, ec)
 }
 
@@ -52,6 +61,7 @@ func TestExec_failure_timeout(t *testing.T) {
 	testHandlerSettings.PublicSettings.TimeoutInSeconds = 0
 	require.NotNil(t, err)
 	require.EqualError(t, err, "command terminated with exit status=-1") // error is customized
+	requireExecCode(t, err, errorutil.CommandExecution_interruptedByVmShutdown)
 	require.EqualValues(t, -1, ec)
 }
 
@@ -133,6 +143,7 @@ func TestExec_failure_genericError(t *testing.T) {
 	_, err := Exec(testContext, "date", "/non-existing-path", new(mockFile), new(mockFile), &testHandlerSettings)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "failed to execute command:") // error is wrapped
+	requireExecCode(t, err, errorutil.CommandExecution_failedUnknownError)
 }
 
 func TestExec_failure_fdClosed(t *testing.T) {
@@ -142,6 +153,7 @@ func TestExec_failure_fdClosed(t *testing.T) {
 	_, err := Exec(testContext, "date", "/", out, out, &testHandlerSettings)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "file closed") // error is wrapped
+	requireExecCode(t, err, errorutil.CommandExecution_failedUnknownError)
 }
 
 func TestExec_failure_redirectsStdStreams_closesFds(t *testing.T) {
@@ -151,6 +163,7 @@ func TestExec_failure_redirectsStdStreams_closesFds(t *testing.T) {
 
 	_, err := Exec(testContext, `/bin/echo 'I am stdout!'>&1; /bin/echo 'I am stderr!'>&2; exit 12`, "/", o, e, &testHandlerSettings)
 	require.NotNil(t, err)
+	requireExecCode(t, err, errorutil.CommandExecution_failureExitCode)
 	require.Equal(t, "I am stdout!\n", string(o.b.Bytes()))
 	require.Equal(t, "I am stderr!\n", string(e.b.Bytes()))
 	require.True(t, o.closed, "stdout closed")
@@ -179,6 +192,7 @@ func TestExecCmdInDir(t *testing.T) {
 
 func TestExecCmdInDir_cantOpenError(t *testing.T) {
 	err, exitCode := ExecCmdInDir(testContext, "/bin/echo 'Hello world'", "/non-existing-dir", &testHandlerSettings)
+	requireExecCode(t, err, errorutil.Os_FailedToOpenStdOut)
 	require.Contains(t, err.Error(), "failed to open stdout file")
 	require.NotEqual(t, constants.ExitCode_Okay, exitCode)
 }
@@ -231,6 +245,7 @@ func (m *mockFile) Close() error {
 }
 
 func fileExists(t *testing.T, path string) bool {
+	// This raw os.Stat probe checks fixtures, not a production error boundary.
 	_, err := os.Stat(path)
 	if err == nil {
 		return true

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/urlutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -46,7 +47,12 @@ var (
 )
 
 func HttpClientDo(request *http.Request) (*http.Response, error) {
-	return httpClient.Do(request)
+	response, err := httpClient.Do(request)
+	var networkError net.Error
+	if errors.As(err, &networkError) && networkError.Timeout() {
+		return response, errorutil.WithCode(errorutil.FileDownload_exceededTimeout, err)
+	}
+	return response, errorutil.WithCode(errorutil.FileDownload_networkingError, err)
 }
 
 // Download retrieves a response body and checks the response status code to see
@@ -55,7 +61,7 @@ func HttpClientDo(request *http.Request) (*http.Response, error) {
 func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, error) {
 	request, err := downloader.GetRequest()
 	if err != nil {
-		return -1, nil, errors.Wrapf(err, "failed to create http request")
+		return -1, nil, errorutil.WithCode(errorutil.Internal_failedToCreateDownloadRequest, errors.Wrapf(err, "failed to create http request"))
 	}
 	requestID := request.Header.Get(xMsClientRequestIdHeaderName)
 	if len(requestID) > 0 {
@@ -64,62 +70,80 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 
 	response, err := MakeHttpRequest(request)
 	if err != nil {
-		err = urlutil.RemoveUrlFromErr(err)
+		err = urlutil.RemoveUrlFromErr(errorutil.WithCode(errorutil.FileDownload_httpRequestFailed, err))
 		return -1, nil, errors.Wrapf(err, "http request failed")
 	}
 
 	if response.StatusCode == http.StatusOK {
 		return response.StatusCode, response.Body, nil
 	}
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
 
 	errString := fmt.Sprintf("Status code %d while downloading blob '%s'. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. For more information, see https://aka.ms/RunCommandManagedLinux", response.StatusCode, request.URL.Opaque)
 	requestId := response.Header.Get(xMsServiceRequestIdHeaderName)
+	requestIdSuffix := ""
+	if len(requestId) > 0 {
+		requestIdSuffix = fmt.Sprintf(" (Service request ID: %s)", requestId)
+	}
 	switch downloader.(type) {
 	case *blobWithMsiToken:
 		switch response.StatusCode {
 		case http.StatusNotFound:
 			notFoundError := fmt.Sprintf("RunCommand failed to download the blob '%s' and received a response code '%s'. Make sure that the Azure blob and managed identity exist, and the identity has access to the storage blob's container with the 'Storage Blob Data Reader' role assignment. For a user-assigned identity, add it under the VM's identity. For more information, see https://aka.ms/RunCommandManagedLinux", request.URL.Opaque, response.Status)
 			errString = fmt.Sprintf("%s: %s", MsiDownload404ErrorString, notFoundError)
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.Msi_notFound, errors.New(errString+requestIdSuffix))
 		case http.StatusForbidden,
 			http.StatusUnauthorized,
 			http.StatusBadRequest,
 			http.StatusConflict:
 			forbiddenError := fmt.Sprintf("RunCommand failed to download the blob '%s' and received a response code '%s'. Ensure that the managed identity has access to the storage blob's container with the 'Storage Blob Data Reader' role assignment. For a user-assigned identity, add it under the VM's identity. For more information, see https://aka.ms/RunCommandManagedLinux", request.URL.Opaque, response.Status)
 			errString = fmt.Sprintf("%s: %s", MsiDownload403ErrorString, forbiddenError)
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.Msi_doesNotHaveRightPermissions, errors.New(errString+requestIdSuffix))
+		case http.StatusInternalServerError:
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.Imds_internalMsiError, errors.New(errString+requestIdSuffix))
+		default:
+			if response.StatusCode >= http.StatusInternalServerError {
+				return response.StatusCode, nil, errorutil.WithCode(errorutil.Imds_downloadInternalServerError, errors.New(errString+requestIdSuffix))
+			}
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.Msi_GenericRetrievalError, errors.New(errString+requestIdSuffix))
 		}
-		break
 	default:
 		hostname := request.URL.Host
+		errString = fmt.Sprintf("RunCommand failed to download the file from %s because the server returned a response code and message of %q Please verify the machine has network connectivity.",
+			hostname,
+			response.Status)
 		switch response.StatusCode {
-		case http.StatusUnauthorized:
-			errString = fmt.Sprintf("RunCommand failed to download the file from %s because access was denied. Please fix the blob permissions and try again. The response code and message returned were: %q.",
-				hostname,
-				response.Status)
-			break
+		case http.StatusUnauthorized, http.StatusForbidden:
+			if response.StatusCode == http.StatusUnauthorized {
+				errString = fmt.Sprintf("RunCommand failed to download the file from %s because access was denied. Please fix the blob permissions and try again. The response code and message returned were: %q.",
+					hostname,
+					response.Status)
+			}
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.FileDownload_accessDenied, errors.New(errString+requestIdSuffix))
 		case http.StatusNotFound:
 			errString = fmt.Sprintf("RunCommand failed to download the file from %s because it does not exist. Please create the blob and try again, the response code and message returned were: %q",
 				hostname,
 				response.Status)
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.FileDownload_doesNotExist, errors.New(errString+requestIdSuffix))
 
 		case http.StatusBadRequest:
 			errString = fmt.Sprintf("RunCommand failed to download the file from %s because parts of the request were incorrectly formatted, missing, and/or invalid. The response code and message returned were: %q",
 				hostname,
 				response.Status)
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.FileDownload_badRequest, errors.New(errString+requestIdSuffix))
 
 		case http.StatusInternalServerError:
 			errString = fmt.Sprintf("RunCommand failed to download the file from %s due to an issue with storage. The response code and message returned were: %q",
 				hostname,
 				response.Status)
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.Storage_internalServerError, errors.New(errString+requestIdSuffix))
 		default:
-			errString = fmt.Sprintf("RunCommand failed to download the file from %s because the server returned a response code and message of %q Please verify the machine has network connectivity.",
-				hostname,
-				response.Status)
+			if response.StatusCode >= http.StatusInternalServerError {
+				return response.StatusCode, nil, errorutil.WithCode(errorutil.FileDownload_internalServerError, errors.New(errString+requestIdSuffix))
+			}
+			return response.StatusCode, nil, errorutil.WithCode(errorutil.FileDownload_genericError, errors.New(errString+requestIdSuffix))
 		}
 	}
-
-	if len(requestId) > 0 {
-		errString += fmt.Sprintf(" (Service request ID: %s)", requestId)
-
-	}
-	return response.StatusCode, nil, errors.New(errString)
 }

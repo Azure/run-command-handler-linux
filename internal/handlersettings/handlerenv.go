@@ -8,6 +8,12 @@ import (
 	"strings"
 
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
+)
+
+var (
+	readSettingsFile = os.ReadFile
+	settingsAbsPath  = filepath.Abs
 )
 
 // HandlerEnvFileName is the file name of the Handler Environment as placed by the
@@ -20,7 +26,7 @@ const HandlerEnvFileName = "HandlerEnvironment.json"
 func GetHandlerEnv() (he types.HandlerEnvironment, _ error) {
 	dir, err := scriptDir()
 	if err != nil {
-		return he, fmt.Errorf("vmextension: cannot find base directory of the running process: %v", err)
+		return he, fmt.Errorf("vmextension: cannot find base directory of the running process: %w", err)
 	}
 	paths := []string{
 		filepath.Join(dir, HandlerEnvFileName),       // this level (i.e. executable is in [EXT_NAME]/.)
@@ -28,25 +34,25 @@ func GetHandlerEnv() (he types.HandlerEnvironment, _ error) {
 	}
 	var b []byte
 	for _, p := range paths {
-		o, err := os.ReadFile(p)
+		o, err := readSettingsFile(p)
 		if err != nil && !os.IsNotExist(err) {
-			return he, fmt.Errorf("vmextension: error examining HandlerEnvironment at '%s': %v", p, err)
+			return he, errorutil.WithCode(errorutil.Os_FailedToExamineHandlerEnvironment, fmt.Errorf("vmextension: error examining HandlerEnvironment at '%s': %w", p, err))
 		} else if err == nil {
 			b = o
 			break
 		}
 	}
 	if b == nil {
-		return he, fmt.Errorf("vmextension: Cannot find HandlerEnvironment at paths: %s", strings.Join(paths, ", "))
+		return he, errorutil.WithCode(errorutil.Os_CouldNotFindHandlerEnvironment, fmt.Errorf("vmextension: Cannot find HandlerEnvironment at paths: %s", strings.Join(paths, ", ")))
 	}
 	return ParseHandlerEnv(b)
 }
 
 // scriptDir returns the absolute path of the running process.
 func scriptDir() (string, error) {
-	p, err := filepath.Abs(os.Args[0])
+	p, err := settingsAbsPath(os.Args[0])
 	if err != nil {
-		return "", err
+		return "", errorutil.WithCode(errorutil.Os_FailedToGetWorkingDirectory, err)
 	}
 	return filepath.Dir(p), nil
 }
@@ -57,10 +63,10 @@ func ParseHandlerEnv(b []byte) (he types.HandlerEnvironment, _ error) {
 	var hf []types.HandlerEnvironment
 
 	if err := json.Unmarshal(b, &hf); err != nil {
-		return he, fmt.Errorf("vmextension: failed to parse handler env: %v", err)
+		return he, errorutil.WithCode(errorutil.Os_InvalidHandlerEnvironmentJson, fmt.Errorf("vmextension: failed to parse handler env: %w", err))
 	}
 	if len(hf) != 1 {
-		return he, fmt.Errorf("vmextension: expected 1 config in parsed HandlerEnvironment, found: %v", len(hf))
+		return he, errorutil.WithCode(errorutil.Os_UnexpectedHandlerEnvironmentCount, fmt.Errorf("vmextension: expected 1 config in parsed HandlerEnvironment, found: %v", len(hf)))
 	}
 	return hf[0], nil
 }

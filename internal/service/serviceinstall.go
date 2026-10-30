@@ -7,10 +7,19 @@ import (
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/servicehandler"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+)
+
+var (
+	systemdPresent     = systemd.IsSystemDPresent
+	markExecutable     = os.Chmod
+	reportServiceError = func(events *extensionevents.ExtensionEventManager, operation, message string) {
+		events.LogErrorEvent(operation, message)
+	}
 )
 
 const (
@@ -36,8 +45,8 @@ WantedBy=multi-user.target`
 
 func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if !isSystemdSupported(ctx) {
-		extensionEvents.LogErrorEvent("register", "Systemd not supported. Failed to register service")
-		return errors.New("Systemd not supported. Failed to register service")
+		reportServiceError(extensionEvents, "register", "Systemd not supported. Failed to register service")
+		return errorutil.WithCode(errorutil.Os_SystemdNotSupported, errors.New("Systemd not supported. Failed to register service"))
 	}
 	targetVersion := os.Getenv(constants.VersionEnvName)
 	ctx.Log("message", "trying to register extension with version: "+targetVersion)
@@ -68,11 +77,11 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 
 	ctx.Log("message", "Making immediate-run-command-handler executable")
 	execDirectory := os.Getenv(constants.ExtensionPathEnvName) + "/bin/immediate-run-command-handler"
-	err = os.Chmod(execDirectory, 0744)
+	err = markExecutable(execDirectory, 0744)
 	if err != nil {
 		errMessage := fmt.Sprintf("Error while marking the immediate run command binary as executable: %v", err)
-		extensionEvents.LogErrorEvent("register", errMessage)
-		return errors.Wrap(err, "error while marking the immediate run command binary as executable")
+		reportServiceError(extensionEvents, "register", errMessage)
+		return errorutil.WithCode(errorutil.Os_FailedToMakeServiceBinaryExecutable, errors.Wrap(err, "error while marking the immediate run command binary as executable"))
 	}
 
 	err = serviceHandler.Register(ctx, systemdUnitContent)
@@ -222,7 +231,7 @@ func IsInstalled(ctx *log.Context) (bool, error) {
 	return false, nil
 }
 
-func getSystemdHandler(ctx *log.Context) *servicehandler.Handler {
+var getSystemdHandler = func(ctx *log.Context) *servicehandler.Handler {
 	ctx.Log("message", "Getting service handler for "+systemdUnitName)
 	config := servicehandler.NewConfiguration(systemdUnitName)
 	handler := servicehandler.NewHandler(systemd.NewUnitManager(), config, ctx)
@@ -239,7 +248,7 @@ func generateServiceConfigurationContent(ctx *log.Context) string {
 
 func isSystemdSupported(ctx *log.Context) bool {
 	ctx.Log("message", "Check if systemd is present on the system before applying next operation")
-	result := systemd.IsSystemDPresent()
+	result := systemdPresent()
 
 	if result {
 		ctx.Log("message", "systemd was found on the system")

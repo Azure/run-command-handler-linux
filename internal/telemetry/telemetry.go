@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/pkg/errors"
 )
 
@@ -38,28 +39,40 @@ type telemetryEvent struct {
 }
 
 type telemetryEventWriter struct {
-	fh *os.File
+	fh io.WriteCloser
 }
+
+var openTelemetryFile = func(name string) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0400)
+}
+
+var renameTelemetryFile = os.Rename
 
 func (w *telemetryEventWriter) Write(bs []byte) (n int, err error) {
 	fn := getTelemetryFileName()
 	temp := fn + ".tmp"
 
-	fh, err := os.OpenFile(temp, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0400)
+	fh, err := openTelemetryFile(temp)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to open telemetry file")
+		return 0, errorutil.WithCode(errorutil.Os_FailedToOpenTelemetryFile, errors.Wrap(err, "failed to open telemetry file"))
 	}
 
 	w.fh = fh
 	n, err = w.fh.Write(bs)
-	err = os.Rename(temp, fn)
+	if err != nil {
+		return n, errorutil.WithCode(errorutil.Os_FailedToWriteTelemetryFile, errors.Wrap(err, "failed to write telemetry file"))
+	}
+	if n != len(bs) {
+		return n, errorutil.WithCode(errorutil.Os_ShortTelemetryFileWrite, io.ErrShortWrite)
+	}
+	err = errorutil.WithCode(errorutil.Os_FailedToPublishTelemetryFile, errors.Wrap(renameTelemetryFile(temp, fn), "failed to publish telemetry file"))
 
 	return
 }
 
 func (w *telemetryEventWriter) Close() (err error) {
 	if w.fh != nil {
-		err = w.fh.Close()
+		err = errorutil.WithCode(errorutil.Os_FailedToCloseTelemetryFile, errors.Wrap(w.fh.Close(), "failed to close telemetry file"))
 		w.fh = nil
 	}
 	return
@@ -84,17 +97,24 @@ func newTelemetryEventSenderWithWriteCloser(writer io.WriteCloser) *telemetryEve
 	return &telemetryEventSender{writer: writer}
 }
 
-func (w *telemetryEventSender) send(e telemetryEvent) error {
-	defer w.writer.Close()
+func (w *telemetryEventSender) send(e telemetryEvent) (result error) {
+	defer func() {
+		if closeErr := w.writer.Close(); result == nil {
+			result = errorutil.WithCode(errorutil.Os_FailedToCloseTelemetryWriter, errors.Wrap(closeErr, "failed to close telemetry event writer"))
+		}
+	}()
 
 	bs, err := json.Marshal(e)
 	if err != nil {
-		return errors.Wrap(err, "failed to marhsal telemetry event")
+		return errorutil.WithCode(errorutil.Internal_failedToMarshalTelemetryEvent, errors.Wrap(err, "failed to marshal telemetry event"))
 	}
 
-	_, err = w.writer.Write(bs)
+	n, err := w.writer.Write(bs)
 	if err != nil {
-		return errors.Wrap(err, "failed to write telemetry event")
+		return errorutil.WithCode(errorutil.Os_FailedToWriteTelemetryEvent, errors.Wrap(err, "failed to write telemetry event"))
+	}
+	if n != len(bs) {
+		return errorutil.WithCode(errorutil.Os_ShortTelemetryEventWrite, io.ErrShortWrite)
 	}
 
 	return nil

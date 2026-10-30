@@ -8,6 +8,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -111,6 +112,9 @@ func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
 	badCommunicator := new(BadCommunicator)
 	_, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, badCommunicator, "")
 	require.ErrorContains(t, err, "failed to retrieve immediate VMSettings")
+	code, ok := errorutil.Code(err)
+	require.True(t, ok)
+	require.Equal(t, errorutil.HostGA_failedToRetrieveVmSettings, code)
 	require.ErrorContains(t, err, "http expected failure")
 }
 

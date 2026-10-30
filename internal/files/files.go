@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/preprocess"
 	"github.com/Azure/run-command-handler-linux/pkg/urlutil"
 	"github.com/go-kit/kit/log"
@@ -18,6 +19,24 @@ import (
 )
 
 var UseMockSASDownloadFailure bool = false
+
+var (
+	downloadSASBlob = download.GetSASBlob
+	saveDownload    = download.SaveTo
+	isScriptText    = preprocess.IsTextFile
+	readScript      = ioutil.ReadFile
+	writeScript     = ioutil.WriteFile
+	setScriptMode   = os.Chmod
+)
+
+type scriptWriter interface {
+	WriteString(string) (int, error)
+	Close() error
+}
+
+var openScriptFile = func(name string, flag int, mode os.FileMode) (scriptWriter, error) {
+	return os.OpenFile(name, flag, mode)
+}
 
 func DownloadAndProcessArtifact(ctx *log.Context, downloadDir string, artifact *handlersettings.UnifiedArtifact) (string, error) {
 	fileName := artifact.FileName
@@ -48,7 +67,7 @@ func DownloadAndProcessScript(ctx *log.Context, url, downloadDir string, cfg *ha
 func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName string, scriptSAS string, sourceManagedIdentity *handlersettings.RunCommandManagedIdentity) (string, error) {
 	var err error
 	if !urlutil.IsValidUrl(url) {
-		return "", fmt.Errorf("%s is not a valid url", url) // url does not contain SAS to se can log it
+		return "", errorutil.WithCode(errorutil.CustomerInput_invalidScriptUrl, fmt.Errorf("%s is not a valid url", url)) // url does not contain SAS to se can log it
 	}
 
 	targetFilePath := filepath.Join(downloadDir, fileName)
@@ -59,8 +78,9 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 		if UseMockSASDownloadFailure {
 			scriptSASDownloadErr = errors.New("Downloading script using SAS token failed.")
 		} else {
-			downloadedFilePath, scriptSASDownloadErr = download.GetSASBlob(url, scriptSAS, downloadDir)
+			downloadedFilePath, scriptSASDownloadErr = downloadSASBlob(url, scriptSAS, downloadDir)
 		}
+		scriptSASDownloadErr = errorutil.WithCode(errorutil.FileDownload_scriptSasDownloadFailed, scriptSASDownloadErr)
 		// Download was successful using SAS. So use downloadedFilePath
 		if scriptSASDownloadErr == nil && downloadedFilePath != "" {
 			targetFilePath = downloadedFilePath
@@ -69,23 +89,37 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 
 	//If there was an error downloading using SAS URI or SAS was not provided, download using managedIdentity or publicly.
 	if scriptSASDownloadErr != nil || scriptSAS == "" {
-		ctx.Log("info", fmt.Sprintf("Downloading script using SAS token failed: %v. Attempting download using managed identity or public access.", scriptSASDownloadErr))
+		if scriptSASDownloadErr != nil {
+			ctx.Log("info", "Downloading script using SAS token failed. Attempting download using managed identity or public access.", "error", scriptSASDownloadErr)
+		}
 		downloaders, getDownloadersError := getDownloaders(url, sourceManagedIdentity, download.ProdMsiDownloader{})
 		if getDownloadersError == nil {
 			const mode = 0500 // we assume users download scripts to execute
-			_, err = download.SaveTo(ctx, downloaders, targetFilePath, mode)
+			_, err = saveDownload(ctx, downloaders, targetFilePath, mode)
 		} else {
 			return "", getDownloadersError
 		}
 	}
 
 	if err != nil {
-		return "", err
+		return "", errorutil.WithCode(errorutil.Os_FailedToMakeDownloadedFileExecutable, err)
 	}
 
+	// Downloads are executable but read-only; allow the owner to normalize the
+	// script, then restore the original execution permissions even on failure.
+	if err := setScriptMode(targetFilePath, 0700); err != nil {
+		return "", errorutil.WithCode(errorutil.Os_FailedToMakeDownloadedFileWritable, errors.Wrap(err, "failed to make downloaded file writable for post-processing"))
+	}
 	err = PostProcessFile(targetFilePath)
+	restoreErr := errorutil.WithCode(errorutil.Os_FailedToRestoreDownloadedFilePermissions, errors.Wrap(setScriptMode(targetFilePath, 0500), "failed to restore downloaded file permissions"))
 	if err != nil {
+		if restoreErr != nil {
+			return "", fmt.Errorf("failed to post-process %q: %w; failed to restore permissions: %w", fileName, err, restoreErr)
+		}
 		return "", errors.Wrapf(err, "failed to post-process '%s'", fileName)
+	}
+	if restoreErr != nil {
+		return "", restoreErr
 	}
 
 	return targetFilePath, nil
@@ -97,7 +131,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, error) {
 
 	if fileURL == "" {
-		return nil, fmt.Errorf("fileURL is empty")
+		return nil, errorutil.WithCode(errorutil.CustomerInput_emptyDownloadUrl, fmt.Errorf("fileURL is empty"))
 	}
 
 	if download.IsAzureStorageBlobUri(fileURL) {
@@ -116,7 +150,7 @@ func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandM
 			// uses user-managed identity
 			msiProvider = msiDownloader.GetMsiProviderByObjectId(fileURL, managedIdentity.ObjectId)
 		default:
-			return nil, fmt.Errorf("use either ClientId or ObjectId for managed identity. Not both")
+			return nil, errorutil.WithCode(errorutil.CustomerInput_clientIdObjectIdBothSpecified, fmt.Errorf("use either ClientId or ObjectId for managed identity. Not both"))
 		}
 
 		_, msiError := msiProvider()
@@ -144,7 +178,7 @@ func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandM
 func UrlToFileName(fileURL string) (string, error) {
 	u, err := url.Parse(fileURL)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to parse URL: %q", fileURL)
+		return "", errorutil.WithCode(errorutil.CustomerInput_invalidDownloadFileUrl, errors.Wrapf(err, "unable to parse URL: %q", fileURL))
 	}
 
 	s := strings.Split(u.Path, "/")
@@ -154,39 +188,45 @@ func UrlToFileName(fileURL string) (string, error) {
 			return fn, nil
 		}
 	}
-	return "", fmt.Errorf("cannot extract file name from URL: %q", fileURL)
+	return "", errorutil.WithCode(errorutil.CustomerInput_missingDownloadFileName, fmt.Errorf("cannot extract file name from URL: %q", fileURL))
 }
 
 // postProcessFile determines if path is a script file based on heuristics
 // and makes in-place changes to the file with some post-processing such as BOM
 // and DOS-line endings fixes to make the script POSIX-friendly.
 func PostProcessFile(path string) error {
-	ok, err := preprocess.IsTextFile(path)
+	ok, err := isScriptText(path)
 	if err != nil {
-		return errors.Wrapf(err, "error determining if script is a text file")
+		return errorutil.WithCode(errorutil.Os_FailedToDetermineScriptFileType, errors.Wrapf(err, "error determining if script is a text file"))
 	}
 	if !ok {
 		return nil
 	}
 
-	b, err := ioutil.ReadFile(path) // read the file into memory for processing
+	b, err := readScript(path) // read the file into memory for processing
 	if err != nil {
-		return errors.Wrapf(err, "error reading file")
+		return errorutil.WithCode(errorutil.Os_FailedToReadScriptForPostprocessing, errors.Wrapf(err, "error reading file"))
 	}
 	b = preprocess.RemoveBOM(b)
 	b = preprocess.Dos2Unix(b)
 
-	err = ioutil.WriteFile(path, b, 0)
-	return errors.Wrap(os.Rename(path, path), "error writing file")
+	err = writeScript(path, b, 0)
+	if err != nil {
+		return errorutil.WithCode(errorutil.Os_FailedToWritePostprocessedScript, errors.Wrap(err, "error writing file"))
+	}
+	return nil
 }
 
 func SaveScriptFile(filePath string, content string) error {
 	const mode = 0500 // scripts should have execute permissions
-	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
+	file, err := openScriptFile(filePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return errors.Wrap(err, "failed to open file for writing: "+filePath)
+		return errorutil.WithCode(errorutil.Os_FailedToOpenEmbeddedScript, errors.Wrap(err, "failed to open file for writing: "+filePath))
 	}
 	_, err = file.WriteString(content)
-	file.Close()
-	return errors.Wrap(err, "failed to write to the file: "+filePath)
+	closeErr := file.Close()
+	if err != nil {
+		return errorutil.WithCode(errorutil.Os_FailedToWriteEmbeddedScript, errors.Wrap(err, "failed to write to the file: "+filePath))
+	}
+	return errorutil.WithCode(errorutil.Os_FailedToCloseEmbeddedScript, errors.Wrap(closeErr, "failed to close the file: "+filePath))
 }

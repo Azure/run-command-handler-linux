@@ -1,12 +1,15 @@
 package status
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +21,9 @@ func Test_reportStatus_fails(t *testing.T) {
 	metadata := types.NewRCMetadata("", 1, constants.DownloadFolder, constants.DataDir)
 	err := ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "")
 	require.NotNil(t, err)
+	code, ok := errorutil.Code(err)
+	require.True(t, ok)
+	require.Equal(t, errorutil.Os_FailedToCreateTemporaryStatusFile, code)
 	require.Contains(t, err.Error(), "failed to save handler status")
 }
 
@@ -31,12 +37,18 @@ func Test_reportStatus_fileExists(t *testing.T) {
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
 	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder, constants.DataDir)
+	metadata.ClarificationError = errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("FOO ERROR"))
 	require.Nil(t, ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusError, types.CmdEnableTemplate, "FOO ERROR"))
 
 	path := filepath.Join(tmpDir, "first.1.status")
 	b, err := os.ReadFile(path)
 	require.Nil(t, err, ".status file exists")
 	require.NotEqual(t, 0, len(b), ".status file not empty")
+	var report types.StatusReport
+	require.NoError(t, json.Unmarshal(b, &report))
+	require.Len(t, report, 1)
+	require.Equal(t, types.StatusError, report[0].Status.Status)
+	requireStatusClarification(t, report[0].Status, errorutil.CommandExecution_failureExitCode)
 }
 
 func Test_reportStatus_checksIfShouldBeReported(t *testing.T) {
@@ -52,6 +64,7 @@ func Test_reportStatus_checksIfShouldBeReported(t *testing.T) {
 		require.Nil(t, ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, c, ""))
 
 		fp := filepath.Join(tmpDir, "first.2.status")
+		// os.Stat is a raw library probe of file presence, not a production error.
 		_, err = os.Stat(fp) // check if the .status file is there
 		if c.ShouldReportStatus && err != nil {
 			t.Fatalf("cmd=%q should have reported status file=%q err=%v", c.Name, fp, err)

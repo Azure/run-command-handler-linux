@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -59,10 +60,19 @@ func Test_ExecutePreStepsAndFailed(t *testing.T) {
 	ctx := initializeLogger(cmd)
 	extName, seqNum := "testExtension", 5
 	fakeEnv := types.HandlerEnvironment{}
+	fakeEnv.HandlerEnvironment.StatusFolder = t.TempDir()
 
 	err := executePreSteps(ctx, cmd, fakeEnv, extName, seqNum, constants.DownloadFolder)
 	require.ErrorContains(t, err, "pre-check step failed")
+	requireProcessorCode(t, err, errorutil.Internal_unclassifiedPrecheckFailure)
 	require.ErrorContains(t, err, "expected error")
+	payload, err := os.ReadFile(filepath.Join(fakeEnv.HandlerEnvironment.StatusFolder, "testExtension.5.status"))
+	require.NoError(t, err)
+	var report types.StatusReport
+	require.NoError(t, json.Unmarshal(payload, &report))
+	require.Len(t, report, 1)
+	require.Equal(t, types.StatusError, report[0].Status.Status)
+	requireProcessorStatusCode(t, report, errorutil.Internal_unclassifiedPrecheckFailure)
 }
 
 func Test_SaveConfigurationFileInConfigFolderSuccessfully(t *testing.T) {
@@ -162,14 +172,17 @@ func Test_GetSeqNumFromEnvVariableFailedToParse(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	_, err := getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
+	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "-")
 	_, err = getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
+	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "+")
 	_, err = getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
+	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
 }
 
 func Test_GetSeqNumFromFailedToFind(t *testing.T) {
@@ -187,6 +200,8 @@ func Test_GetSeqNumFromFailedToFind(t *testing.T) {
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "")
 	actualSeqNum, err := getSeqNum(&ctx, fakeEnv, extName)
-	require.Nil(t, err)
+	require.Error(t, err)
+	requireProcessorCode(t, err, errorutil.Internal_noSequenceConfigurationFiles)
+	require.Contains(t, err.Error(), "can't find out seqnum")
 	require.Equal(t, 0, actualSeqNum)
 }

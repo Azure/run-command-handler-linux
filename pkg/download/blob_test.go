@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/Azure/run-command-handler-linux/pkg/blobutil"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -27,17 +28,20 @@ func Test_blobDownload_validateInputs(t *testing.T) {
 
 	_, err := NewBlobDownload("", "", blobutil.AzureBlobRef{}).GetRequest()
 	require.NotNil(t, err)
+	requireDownloadCode(t, errorutil.Storage_failedToInitializeClient, err)
 	errorMessage := err.Error()
 	require.Contains(t, errorMessage, "failed to initialize azure storage client")
 	require.Contains(t, errorMessage, "azure: account name is not valid")
 
 	_, err = NewBlobDownload("account", "", blobutil.AzureBlobRef{}).GetRequest()
 	require.NotNil(t, err)
+	requireDownloadCode(t, errorutil.Storage_failedToInitializeClient, err)
 	require.Contains(t, err.Error(), "failed to initialize azure storage client")
 	require.Contains(t, err.Error(), "account key required")
 
 	_, err = NewBlobDownload("account", "Zm9vCg==", blobutil.AzureBlobRef{}).GetRequest()
 	require.NotNil(t, err)
+	requireDownloadCode(t, errorutil.Storage_failedToInitializeClient, err)
 	require.Contains(t, err.Error(), "failed to initialize azure storage client")
 
 	_, err = NewBlobDownload("account", "Zm9vCg==", blobutil.AzureBlobRef{
@@ -92,6 +96,7 @@ func Test_blobDownload_fails_badCreds(t *testing.T) {
 
 	status, _, err := Download(testctx, d)
 	require.NotNil(t, err)
+	requireDownloadCode(t, errorutil.FileDownload_accessDenied, err)
 	require.Contains(t, err.Error(), "Please verify the machine has network connectivity")
 	require.Contains(t, err.Error(), "403")
 	require.Equal(t, status, http.StatusForbidden)
@@ -120,12 +125,18 @@ func Test_blobDownload_fails_badRequest(t *testing.T) {
 
 	status, _, err := Download(testctx, d)
 	require.NotNil(t, err)
+	requireDownloadCode(t, errorutil.FileDownload_badRequest, err)
 	require.Contains(t, err.Error(), "parts of the request were incorrectly formatted, missing, and/or invalid")
 	require.Contains(t, err.Error(), "400")
 	require.Equal(t, status, http.StatusBadRequest)
 }
 
 func Test_blobDownload_fails_urlNotFound(t *testing.T) {
+	old := MakeHttpRequest
+	t.Cleanup(func() { MakeHttpRequest = old })
+	MakeHttpRequest = func(*http.Request) (*http.Response, error) {
+		return nil, errorutil.WithCode(errorutil.FileDownload_networkingError, fmt.Errorf("host not found"))
+	}
 	d := NewBlobDownload("accountname", "Zm9vCg==", blobutil.AzureBlobRef{
 		StorageBase: ".example.com",
 		Blob:        "fooBlob.txt",
@@ -134,6 +145,7 @@ func Test_blobDownload_fails_urlNotFound(t *testing.T) {
 
 	_, _, err := Download(testctx, d)
 	require.NotNil(t, err)
+	requireDownloadCode(t, errorutil.FileDownload_networkingError, err)
 	require.Contains(t, err.Error(), "http request failed:")
 }
 
@@ -207,70 +219,70 @@ func Test_GetSASBlob_nestedDirectories_actualBlob(t *testing.T) {
 	// Then, run the following commands prior to this test
 	// export AZURE_STORAGE_ACCOUNT="<your_storage_account_name>"
 	// export AZURE_STORAGE_ACCESS_KEY="<your_storage_account_access_key>"
-    acct := os.Getenv("AZURE_STORAGE_ACCOUNT")
-    key := os.Getenv("AZURE_STORAGE_ACCESS_KEY")
-    if acct == "" || key == "" {
-        t.Skipf("Skipping: AZURE_STORAGE_ACCOUNT or AZURE_STORAGE_ACCESS_KEY not specified to run this test")
-    }
-    base := storage.DefaultBaseURL
+	acct := os.Getenv("AZURE_STORAGE_ACCOUNT")
+	key := os.Getenv("AZURE_STORAGE_ACCESS_KEY")
+	if acct == "" || key == "" {
+		t.Skipf("Skipping: AZURE_STORAGE_ACCOUNT or AZURE_STORAGE_ACCESS_KEY not specified to run this test")
+	}
+	base := storage.DefaultBaseURL
 
-    // Create a blob in a nested directory structure
-    client, err := storage.NewClient(acct, key, base, storage.DefaultAPIVersion, true)
-    require.Nil(t, err)
-    blobStorageClient := client.GetBlobService()
+	// Create a blob in a nested directory structure
+	client, err := storage.NewClient(acct, key, base, storage.DefaultAPIVersion, true)
+	require.Nil(t, err)
+	blobStorageClient := client.GetBlobService()
 
-    var (
-        content   = []byte("test script content\n")
-        name      = "dir1/dir2/script.sh" // nested path
-        container = fmt.Sprintf("run-command-test-%d", rand.New(rand.NewSource(time.Now().UnixNano())).Int63())
-    )
+	var (
+		content   = []byte("test script content\n")
+		name      = "dir1/dir2/script.sh" // nested path
+		container = fmt.Sprintf("run-command-test-%d", rand.New(rand.NewSource(time.Now().UnixNano())).Int63())
+	)
 
-    containerReference := blobStorageClient.GetContainerReference(container)
-    _, err = containerReference.DeleteIfExists(nil)
-    require.Nil(t, err)
-    _, err = containerReference.CreateIfNotExists(&storage.CreateContainerOptions{Access: storage.ContainerAccessTypePrivate})
-    require.Nil(t, err)
-    defer containerReference.Delete(nil)
-    
-    blobReference := containerReference.GetBlobReference(name)
-    require.Nil(t, blobReference.PutAppendBlob(nil))
-    require.Nil(t, blobReference.AppendBlock(content, nil))
+	containerReference := blobStorageClient.GetContainerReference(container)
+	_, err = containerReference.DeleteIfExists(nil)
+	require.Nil(t, err)
+	_, err = containerReference.CreateIfNotExists(&storage.CreateContainerOptions{Access: storage.ContainerAccessTypePrivate})
+	require.Nil(t, err)
+	defer containerReference.Delete(nil)
 
-    // Generate SAS URL for the blob
-    d := NewBlobDownload(acct, key, blobutil.AzureBlobRef{
-        Container:   container,
-        Blob:        name,
-        StorageBase: base,
-    })
-    v, ok := d.(blobDownload)
-    require.True(t, ok)
-    sasURL, err := v.getURL()
-    require.Nil(t, err)
+	blobReference := containerReference.GetBlobReference(name)
+	require.Nil(t, blobReference.PutAppendBlob(nil))
+	require.Nil(t, blobReference.AppendBlock(content, nil))
 
-    // Parse the SAS URL to separate URI from SAS token
-    blobURI := fmt.Sprintf("https://%s.blob.%s/%s/%s", acct, base, container, name)
-    sasToken := sasURL[len(blobURI):] // Everything after the base URI is the SAS token
+	// Generate SAS URL for the blob
+	d := NewBlobDownload(acct, key, blobutil.AzureBlobRef{
+		Container:   container,
+		Blob:        name,
+		StorageBase: base,
+	})
+	v, ok := d.(blobDownload)
+	require.True(t, ok)
+	sasURL, err := v.getURL()
+	require.Nil(t, err)
 
-    // Download the blob using GetSASBlob
-    tmpDir, err := ioutil.TempDir("", "nested-test-")
-    require.Nil(t, err)
-    defer os.RemoveAll(tmpDir)
+	// Parse the SAS URL to separate URI from SAS token
+	blobURI := fmt.Sprintf("https://%s.blob.%s/%s/%s", acct, base, container, name)
+	sasToken := sasURL[len(blobURI):] // Everything after the base URI is the SAS token
 
-    scriptFilePath, err := GetSASBlob(blobURI, sasToken, tmpDir)
-    require.Nil(t, err)
+	// Download the blob using GetSASBlob
+	tmpDir, err := ioutil.TempDir("", "nested-test-")
+	require.Nil(t, err)
+	defer os.RemoveAll(tmpDir)
 
-    // Verify that the file was downloaded with correct content
-    result, err := ioutil.ReadFile(scriptFilePath)
-    require.Nil(t, err)
-    require.EqualValues(t, content, result, "downloaded content should match")
+	scriptFilePath, err := GetSASBlob(blobURI, sasToken, tmpDir)
+	require.Nil(t, err)
 
-    // Verify that the file was created
-    require.Contains(t, scriptFilePath, tmpDir, "file path should be in temp directory")
-    
-    // Verify the file exists and is not a directory
-    fileInfo, err := os.Stat(scriptFilePath)
-    require.Nil(t, err)
-    require.False(t, fileInfo.IsDir(), "should be a file, not a directory")
+	// Verify that the file was downloaded with correct content
+	result, err := ioutil.ReadFile(scriptFilePath)
+	require.Nil(t, err)
+	require.EqualValues(t, content, result, "downloaded content should match")
+
+	// Verify that the file was created
+	require.Contains(t, scriptFilePath, tmpDir, "file path should be in temp directory")
+
+	// Verify the file exists and is not a directory
+	fileInfo, err := os.Stat(scriptFilePath)
+	require.Nil(t, err)
+	require.False(t, fileInfo.IsDir(), "should be a file, not a directory")
 }
 
 func Test_blobAppend_actualBlob(t *testing.T) {

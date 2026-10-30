@@ -8,6 +8,7 @@ import (
 
 	"github.com/Azure/azure-extension-foundation/httputil"
 	"github.com/Azure/azure-extension-foundation/msi"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
@@ -30,6 +31,17 @@ type blobWithMsiToken struct {
 
 type MsiProvider func() (msi.Msi, error)
 
+type managedIdentityProvider interface {
+	GetMsiForResource(string) (msi.Msi, error)
+	GetMsiUsingClientId(string, string) (msi.Msi, error)
+	GetMsiUsingObjectId(string, string) (msi.Msi, error)
+}
+
+var newMSIProvider = func() managedIdentityProvider {
+	provider := msi.NewMsiProvider(httputil.NewSecureHttpClient(httputil.DefaultRetryBehavior))
+	return &provider
+}
+
 type MsiDownloader interface {
 	GetMsiProvider(blobUri string) MsiProvider
 	GetMsiProviderByClientId(blobUri, clientId string) MsiProvider
@@ -45,15 +57,15 @@ var MockReturnErrorForMockMsiDownloader = false // Used only for test
 func (self *blobWithMsiToken) GetRequest() (*http.Request, error) {
 	msi, err := self.msiProvider()
 	if err != nil {
-		return nil, err
+		return nil, errorutil.WithCode(errorutil.Msi_failedToGetDownloadToken, err)
 	}
 	if msi.AccessToken == "" {
-		return nil, errors.New("MSI token is empty")
+		return nil, errorutil.WithCode(errorutil.Msi_emptyToken, errors.New("MSI token is empty"))
 	}
 
 	request, err := http.NewRequest(http.MethodGet, self.url, nil)
 	if err != nil {
-		return nil, err
+		return nil, errorutil.WithCode(errorutil.CustomerInput_invalidMsiDownloadUrl, err)
 	}
 
 	request.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())
@@ -70,13 +82,13 @@ func NewBlobWithMsiDownload(url string, msiProvider MsiProvider) Downloader {
 
 // Uses system identity to get Msi token
 func (prodMsiDownloader ProdMsiDownloader) GetMsiProvider(blobUri string) MsiProvider {
-	msiProvider := msi.NewMsiProvider(httputil.NewSecureHttpClient(httputil.DefaultRetryBehavior))
+	msiProvider := newMSIProvider()
 	return func() (msi.Msi, error) {
 		msi, err := msiProvider.GetMsiForResource(GetResourceNameFromBlobUri(blobUri))
 		if err != nil {
-			return msi, errors.Wrapf(err, "Unable to get managed identity. "+
+			return msi, errorutil.WithCode(errorutil.Msi_failedToGetSystemIdentity, errors.Wrapf(err, "Unable to get managed identity. "+
 				"Please make sure that system assigned managed identity is enabled on the VM "+
-				"or user assigned identity is added to the system.")
+				"or user assigned identity is added to the system."))
 		}
 		return msi, nil
 	}
@@ -90,7 +102,7 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProvider(blobUri string) MsiPro
 			Resource:    "Msi by System Identity for blob " + blobUri,
 		}
 		if MockReturnErrorForMockMsiDownloader {
-			return mockMsi, errors.New("Error getting msi")
+			return mockMsi, errorutil.WithCode(errorutil.Imds_mockSystemIdentityError, errors.New("Error getting msi"))
 		} else {
 			return mockMsi, nil
 		}
@@ -100,12 +112,12 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProvider(blobUri string) MsiPro
 
 // Get Msi token by clientId
 func (prodMsiDownloader ProdMsiDownloader) GetMsiProviderByClientId(blobUri, clientId string) MsiProvider {
-	msiProvider := msi.NewMsiProvider(httputil.NewSecureHttpClient(httputil.DefaultRetryBehavior))
+	msiProvider := newMSIProvider()
 	return func() (msi.Msi, error) {
 		msi, err := msiProvider.GetMsiUsingClientId(clientId, GetResourceNameFromBlobUri(blobUri))
 		if err != nil {
-			return msi, errors.Wrapf(err, "Unable to get managed identity with client id %s. "+
-				"Please make sure that the user assigned managed identity is added to the VM ", clientId)
+			return msi, errorutil.WithCode(errorutil.Msi_failedToGetClientIdentity, errors.Wrapf(err, "Unable to get managed identity with client id %s. "+
+				"Please make sure that the user assigned managed identity is added to the VM ", clientId))
 		}
 		return msi, nil
 	}
@@ -119,7 +131,7 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProviderByClientId(blobUri stri
 			Resource:    "Msi by clientId for blob " + blobUri,
 		}
 		if MockReturnErrorForMockMsiDownloader {
-			return mockMsi, errors.New("Error getting msi")
+			return mockMsi, errorutil.WithCode(errorutil.Imds_mockClientIdentityError, errors.New("Error getting msi"))
 		} else {
 			return mockMsi, nil
 		}
@@ -128,12 +140,12 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProviderByClientId(blobUri stri
 
 // Get Msi token by objectId
 func (prodMsiDownloader ProdMsiDownloader) GetMsiProviderByObjectId(blobUri, objectId string) MsiProvider {
-	msiProvider := msi.NewMsiProvider(httputil.NewSecureHttpClient(httputil.DefaultRetryBehavior))
+	msiProvider := newMSIProvider()
 	return func() (msi.Msi, error) {
 		msi, err := msiProvider.GetMsiUsingObjectId(objectId, GetResourceNameFromBlobUri(blobUri))
 		if err != nil {
-			return msi, errors.Wrapf(err, "Unable to get managed identity with object id %s. "+
-				"Please make sure that the user assigned managed identity is added to the VM ", objectId)
+			return msi, errorutil.WithCode(errorutil.Msi_failedToGetObjectIdentity, errors.Wrapf(err, "Unable to get managed identity with object id %s. "+
+				"Please make sure that the user assigned managed identity is added to the VM ", objectId))
 		}
 		return msi, nil
 	}
@@ -147,7 +159,7 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProviderByObjectId(blobUri, obj
 			Resource:    "Msi by objectId for blob " + blobUri,
 		}
 		if MockReturnErrorForMockMsiDownloader {
-			return mockMsi, errors.New("Error getting msi")
+			return mockMsi, errorutil.WithCode(errorutil.Imds_mockObjectIdentityError, errors.New("Error getting msi"))
 		} else {
 			return mockMsi, nil
 		}

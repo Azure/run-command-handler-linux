@@ -7,6 +7,7 @@ import (
 	commands "github.com/Azure/run-command-handler-linux/internal/cmds"
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
 )
 
@@ -33,25 +34,31 @@ func main() {
 	}
 }
 
-// parseCmd looks at os.Args and parses the subcommand. If it is invalid,
-// it prints the usage string and an error message and exits with code 0.
+// parseCmd parses the subcommand. If it is invalid, it prints the usage string
+// and a clarified error message and exits with code 2.
 func parseCmd(args []string) types.Cmd {
-	if len(os.Args) != 2 {
+	cmd, err := parseCommand(args)
+	if err != nil {
 		printUsage(args)
-		fmt.Println("Incorrect usage.")
+		fmt.Println(err)
 		os.Exit(2)
 	}
-	op := os.Args[1]
+	return cmd
+}
+
+func parseCommand(args []string) (types.Cmd, error) {
+	if len(args) != 2 {
+		return types.Cmd{}, errorutil.WithCode(errorutil.CustomerInput_invalidCommandLineArguments, fmt.Errorf("Incorrect usage."))
+	}
+	op := args[1]
 	cmd, ok := commands.Cmds[op]
 
 	// If no command was found, then exit
 	if !ok {
-		printUsage(args)
-		fmt.Printf("Incorrect command: %q\n", op)
-		os.Exit(2)
+		return types.Cmd{}, errorutil.WithCode(errorutil.CustomerInput_unknownCommandLineOperation, fmt.Errorf("Incorrect command: %q", op))
 	}
 
-	return cmd
+	return cmd, nil
 }
 
 // printUsage prints the help string and version of the program to stdout with a

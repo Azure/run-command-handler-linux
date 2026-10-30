@@ -1,6 +1,7 @@
 package handlersettings
 
 import (
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/pkg/errors"
 )
 
@@ -60,7 +61,7 @@ func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, error) {
 	}
 
 	if len(s.ProtectedSettings.Artifacts) != len(s.PublicSettings.Artifacts) {
-		return nil, errors.New(("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug."))
+		return nil, errorutil.WithCode(errorutil.Internal_invalidArtifactSpecification, errors.New("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug."))
 	}
 
 	artifacts := make([]UnifiedArtifact, len(s.PublicSettings.Artifacts))
@@ -84,7 +85,7 @@ func (s HandlerSettings) ReadArtifacts() ([]UnifiedArtifact, error) {
 		}
 
 		if !found {
-			return nil, errors.New(("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug."))
+			return nil, errorutil.WithCode(errorutil.Internal_inconsistentArtifactSpecification, errors.New("RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug."))
 		}
 	}
 

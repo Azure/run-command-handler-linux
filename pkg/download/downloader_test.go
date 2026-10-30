@@ -11,12 +11,21 @@ import (
 
 	"github.com/Azure/azure-extension-foundation/msi"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
 type badDownloader struct{ calls int }
+
+func requireDownloadCode(t *testing.T, expected errorutil.ErrorClarificationCode, err error) {
+	t.Helper()
+	require.Error(t, err)
+	code, ok := errorutil.Code(err)
+	require.True(t, ok, "missing clarification: %v", err)
+	require.Equal(t, expected, code)
+}
 
 var (
 	testctx = log.NewContext(log.NewNopLogger())
@@ -29,12 +38,14 @@ func (b *badDownloader) GetRequest() (*http.Request, error) {
 
 func TestDownload_wrapsGetRequestError(t *testing.T) {
 	_, _, err := download.Download(testctx, new(badDownloader))
+	requireDownloadCode(t, errorutil.Internal_failedToCreateDownloadRequest, err)
 	require.NotNil(t, err)
 	require.EqualError(t, err, "failed to create http request: expected error")
 }
 
 func TestDownload_wrapsHTTPError(t *testing.T) {
 	_, _, err := download.Download(testctx, download.NewURLDownload("bad url"))
+	requireDownloadCode(t, errorutil.FileDownload_networkingError, err)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "http request failed:")
 }
@@ -43,16 +54,21 @@ func TestDownload_wrapsCommonErrorCodes(t *testing.T) {
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
 
-	for _, code := range []int{
-		http.StatusNotFound,
-		http.StatusForbidden,
-		http.StatusInternalServerError,
-		http.StatusBadGateway,
-		http.StatusBadRequest,
-		http.StatusUnauthorized,
+	for _, tc := range []struct {
+		status        int
+		clarification errorutil.ErrorClarificationCode
+	}{
+		{http.StatusNotFound, errorutil.FileDownload_doesNotExist},
+		{http.StatusForbidden, errorutil.FileDownload_accessDenied},
+		{http.StatusInternalServerError, errorutil.Storage_internalServerError},
+		{http.StatusBadGateway, errorutil.FileDownload_internalServerError},
+		{http.StatusBadRequest, errorutil.FileDownload_badRequest},
+		{http.StatusUnauthorized, errorutil.FileDownload_accessDenied},
 	} {
+		code := tc.status
 		respCode, _, err := download.Download(testctx, download.NewURLDownload(fmt.Sprintf("%s/status/%d", srv.URL, code)))
 		require.NotNil(t, err, "not failed for code:%d", code)
+		requireDownloadCode(t, tc.clarification, err)
 		require.Equal(t, code, respCode)
 		switch respCode {
 		case http.StatusNotFound:
@@ -89,6 +105,7 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 	msiDownloader404 := download.NewBlobWithMsiDownload(srv.URL+"/status/404", mockMsiProvider)
 
 	returnCode, body, err := download.Download(testctx, msiDownloader404)
+	requireDownloadCode(t, errorutil.Msi_notFound, err)
 	require.True(t, strings.Contains(err.Error(), download.MsiDownload404ErrorString), "error string doesn't contain the correct message")
 	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
@@ -96,6 +113,7 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 
 	msiDownloader403 := download.NewBlobWithMsiDownload(srv.URL+"/status/403", mockMsiProvider)
 	returnCode, body, err = download.Download(testctx, msiDownloader403)
+	requireDownloadCode(t, errorutil.Msi_doesNotHaveRightPermissions, err)
 	require.True(t, strings.Contains(err.Error(), download.MsiDownload403ErrorString), "error string doesn't contain the correct message")
 	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")
 	require.Nil(t, body, "body is not nil for failed download")
@@ -104,6 +122,7 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 	// Should use default error message for any error code other than 400, 401, 403, 404, and 409
 	msiDownloader500 := download.NewBlobWithMsiDownload(srv.URL+"/status/500", mockMsiProvider)
 	returnCode, body, err = download.Download(testctx, msiDownloader500)
+	requireDownloadCode(t, errorutil.Imds_internalMsiError, err)
 	fmt.Println(err.Error())
 	require.Contains(t, err.Error(), "Use either a public script URI that points to .sh file", "error string doesn't contain full message")
 	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")

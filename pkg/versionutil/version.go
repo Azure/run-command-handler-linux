@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 )
 
@@ -50,7 +51,7 @@ func ExtractFromServiceDefinition(content string, ctx *log.Context) (string, err
 
 		// If parsing still didn't succeed, return an error.
 		if len(firstSplit) < 2 {
-			return "", errors.New("wrong service definition found. Missing field " + fmt.Sprintf("ExecStart=%s/%s- and ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandExtensionName, constants.WaAgentDirectory, constants.RunCommandTestExtensionName))
+			return "", errorutil.WithCode(errorutil.Internal_invalidServiceDefinition, errors.New("wrong service definition found. Missing field "+fmt.Sprintf("ExecStart=%s/%s- and ExecStart=%s/%s-", constants.WaAgentDirectory, constants.RunCommandExtensionName, constants.WaAgentDirectory, constants.RunCommandTestExtensionName)))
 		}
 	}
 

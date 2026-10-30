@@ -1,8 +1,12 @@
 package types
 
 import (
+	"errors"
+
 	"github.com/go-kit/kit/log"
 )
+
+var ErrAlreadyProcessed = errors.New("the script configuration has already been processed, will not run again")
 
 type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, metadata RCMetadata, c Cmd) (stdout string, stderr string, err error, exitCode int)
 type reportStatusFunc func(ctx *log.Context, hEnv HandlerEnvironment, metadata RCMetadata, statusType StatusType, c Cmd, msg string) error

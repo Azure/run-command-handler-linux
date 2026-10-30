@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 )
 
@@ -23,13 +24,14 @@ func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, metadat
 		return err
 	}
 
+	metadata.ClarificationError = instanceview.ClarificationError
 	return c.Functions.ReportStatus(ctx, hEnv, metadata, t, c, msg)
 }
 
 func SerializeInstanceView(instanceview *types.RunCommandInstanceView) (string, error) {
 	bytes, err := instanceview.Marshal()
 	if err != nil {
-		return "", fmt.Errorf("status: failed to marshal into json: %v", err)
+		return "", errorutil.WithCode(errorutil.Internal_failedToMarshalInstanceView, fmt.Errorf("status: failed to marshal into json: %w", err))
 	}
 	return string(bytes), err
 }
