@@ -43,11 +43,19 @@ func TryClearExtensionScriptsDirectoriesAndSettingsFiles(ctx *log.Context, scrip
 
 func TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(ctx *log.Context, scriptsDirectory string, runtimeSettingsDirectory string, extensionName string, mostRecentSequenceNumberFinished uint64, runtimeSettingsRegexFormatWithAnyExtName string, runtimeSettingsLastSeqNumFormatWithAnyExtName string) error {
 	recentSequence := strconv.FormatUint(mostRecentSequenceNumberFinished, 10)
-	if err := TryDeleteDirectoriesExcept(ctx, filepath.Join(scriptsDirectory, extensionName), recentSequence); err != nil {
-		return errors.Wrap(err, "could not delete extension scripts directories")
-	}
+	dirErr := TryDeleteDirectoriesExcept(ctx, filepath.Join(scriptsDirectory, extensionName), recentSequence)
 	recentSettings := fmt.Sprintf(runtimeSettingsLastSeqNumFormatWithAnyExtName, mostRecentSequenceNumberFinished)
-	return tryClearRegexMatchingFilesExcept(ctx, runtimeSettingsDirectory, runtimeSettingsRegexFormatWithAnyExtName, recentSettings, false)
+	filesErr := tryClearRegexMatchingFilesExcept(ctx, runtimeSettingsDirectory, runtimeSettingsRegexFormatWithAnyExtName, recentSettings, false)
+
+	if dirErr != nil && filesErr != nil {
+		return fmt.Errorf("failed to delete dirs: %w; failed to clear settings: %w", dirErr, filesErr)
+	} else if dirErr != nil {
+		return errors.Wrap(dirErr, "could not delete extension scripts directories")
+	} else if filesErr != nil {
+		return errors.Wrap(filesErr, "could not clear runtime settings files")
+	}
+
+	return nil
 }
 
 func TryDeleteDirectories(ctx *log.Context, parentDirectory string) error {

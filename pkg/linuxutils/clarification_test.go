@@ -178,3 +178,97 @@ func TestMostRecentCleanupClarifications(t *testing.T) {
 		})
 	}
 }
+
+func TestMostRecentCleanupTruncatesSettingsAfterScriptsFailure(t *testing.T) {
+	for _, readError := range []bool{false, true} {
+		name := "open scripts"
+		code := errorutil.Os_FailedToOpenCleanupParentDirectory
+		if readError {
+			name = "read scripts"
+			code = errorutil.Os_FailedToReadCleanupParentDirectory
+		}
+		t.Run(name, func(t *testing.T) {
+			oldOpen := openDirectory
+			t.Cleanup(func() { openDirectory = oldOpen })
+			config := t.TempDir()
+			for _, name := range []string{"extension.1.settings", "extension.5.settings", "other.1.settings"} {
+				require.NoError(t, os.WriteFile(filepath.Join(config, name), []byte("settings"), 0600))
+			}
+			cause := errors.New("script directory failure")
+			openDirectory = func(name string) (directoryReader, error) {
+				if name == filepath.Join("downloads", "extension") {
+					if readError {
+						return fakeDirectory{err: cause}, nil
+					}
+					return nil, cause
+				}
+				return os.Open(name)
+			}
+			err := TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(
+				log.NewContext(log.NewNopLogger()), "downloads", config, "extension", 5,
+				`^extension\.\d+\.settings$`, "extension.%d.settings")
+			require.ErrorIs(t, err, cause)
+			actual, ok := errorutil.Code(err)
+			require.True(t, ok)
+			require.Equal(t, code, actual)
+			for _, name := range []string{"extension.1.settings", "extension.5.settings", "other.1.settings"} {
+				content, err := os.ReadFile(filepath.Join(config, name))
+				require.NoError(t, err)
+				if name == "extension.1.settings" {
+					require.Empty(t, content, "older settings must be truncated even when scripts cleanup fails")
+				} else {
+					require.Equal(t, "settings", string(content))
+				}
+			}
+		})
+	}
+}
+
+func TestMostRecentCleanupPreservesBothDirectoryErrors(t *testing.T) {
+	failures := []struct {
+		name     string
+		read     bool
+		dirCode  errorutil.ErrorClarificationCode
+		fileCode errorutil.ErrorClarificationCode
+	}{
+		{"open", false, errorutil.Os_FailedToOpenCleanupParentDirectory, errorutil.Os_FailedToOpenSettingsCleanupDirectory},
+		{"read", true, errorutil.Os_FailedToReadCleanupParentDirectory, errorutil.Os_FailedToReadSettingsCleanupDirectory},
+	}
+	for _, scriptsFailure := range failures {
+		for _, settingsFailure := range failures {
+			t.Run(scriptsFailure.name+" scripts/"+settingsFailure.name+" settings", func(t *testing.T) {
+				oldOpen := openDirectory
+				t.Cleanup(func() { openDirectory = oldOpen })
+				scriptsCause := errors.New("script directory failure")
+				settingsCause := errors.New("settings directory failure")
+				var opened []string
+				openDirectory = func(name string) (directoryReader, error) {
+					opened = append(opened, name)
+					read, cause := settingsFailure.read, settingsCause
+					if name == filepath.Join("downloads", "extension") {
+						read, cause = scriptsFailure.read, scriptsCause
+					}
+					if read {
+						return fakeDirectory{err: cause}, nil
+					}
+					return nil, cause
+				}
+				err := TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(
+					log.NewContext(log.NewNopLogger()), "downloads", "config", "extension", 5,
+					`^extension\.\d+\.settings$`, "extension.%d.settings")
+				require.Equal(t, []string{filepath.Join("downloads", "extension"), "config"}, opened)
+				require.ErrorIs(t, err, scriptsCause)
+				require.ErrorIs(t, err, settingsCause)
+				var combined interface{ Unwrap() []error }
+				require.ErrorAs(t, err, &combined)
+				causes := combined.Unwrap()
+				require.Len(t, causes, 2)
+				for i, want := range []errorutil.ErrorClarificationCode{scriptsFailure.dirCode, settingsFailure.fileCode} {
+					code, ok := errorutil.Code(causes[i])
+					require.True(t, ok)
+					require.Equal(t, want, code, "each cause must retain its own clarification code")
+				}
+			})
+		}
+	}
+}

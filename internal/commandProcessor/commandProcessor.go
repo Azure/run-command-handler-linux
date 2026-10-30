@@ -89,7 +89,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 
 	metadata := types.NewRCMetadata(extensionName, seqNum, downloadFolder, dataDir)
 	if err := instanceview.ReportInstanceView(ctx, hEnv, metadata, types.StatusTransitioning, cmd, &instView); err != nil {
-		return errors.Wrap(err, "failed to report initial instance view")
+		ctx.Log("event", "failed to report initial instance view", "error", err)
 	}
 
 	// execute the subcommand
@@ -110,7 +110,7 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		instView.ClarificationError = cmdInvokeError
 		statusToReport := types.StatusSuccess
 
-		// If TreatFailureAsDeploymentFailure is set to true and the exit code is non-zero, set extension status to error
+		// Fail the extension status and handler invocation only when deployment failure is enabled and the command has a non-zero failure exit code.
 		cfg, err := readHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
 		if err == nil && cfg.PublicSettings.TreatFailureAsDeploymentFailure && cmd.FailExitCode != 0 {
 			statusToReport = types.StatusError
@@ -119,7 +119,10 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		if reportErr := instanceview.ReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView); reportErr != nil {
 			ctx.Log("event", "failed to report execution error", "error", reportErr)
 		}
-		return errors.Wrapf(cmdInvokeError, "command execution failed")
+		if statusToReport == types.StatusError {
+			return errors.Wrapf(cmdInvokeError, "command execution failed")
+		}
+		return nil
 	} else { // No error. Succeeded
 		instView.ExecutionMessage = "Execution completed"
 		instView.ExecutionState = types.Succeeded

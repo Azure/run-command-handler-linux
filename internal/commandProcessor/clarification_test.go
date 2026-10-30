@@ -55,19 +55,27 @@ func TestCommandFailurePreservesClarificationAndDeploymentBehavior(t *testing.T)
 					},
 				})
 				err := ProcessHandlerCommandWithDetails(log.NewContext(log.NewNopLogger()), cmd, types.HandlerEnvironment{}, "command", 1, "download", "/mock")
-				require.ErrorIs(t, err, cause)
-				code, ok := errorutil.Code(err)
-				require.True(t, ok)
-				require.Equal(t, errorutil.CommandExecution_failureExitCode, code)
 				require.Equal(t, cause, reported)
 				expected := types.StatusSuccess
 				if treatAsFailure && !settingsFailure {
 					expected = types.StatusError
+					require.ErrorIs(t, err, cause)
+					requireProcessorCode(t, err, errorutil.CommandExecution_failureExitCode)
+				} else {
+					require.NoError(t, err)
 				}
 				require.Equal(t, []types.StatusType{types.StatusTransitioning, expected}, states)
 				require.Len(t, reports, 2)
 				require.Empty(t, reports[0][0].Status.Substatuses, "transitioning status must not contain a failure")
 				requireProcessorStatusCode(t, reports[1], errorutil.CommandExecution_failureExitCode)
+				var view types.RunCommandInstanceView
+				require.NoError(t, json.Unmarshal([]byte(reports[1][0].Status.FormattedMessage.Message), &view))
+				require.Equal(t, types.ExecutionState(types.Failed), view.ExecutionState)
+				require.Equal(t, "Execution failed: "+cause.Error(), view.ExecutionMessage)
+				require.Equal(t, 12, view.ExitCode)
+				require.Equal(t, "stdout", view.Output)
+				require.Equal(t, "stderr", view.Error)
+				require.NotEmpty(t, view.EndTime)
 			})
 		}
 	}
@@ -83,7 +91,9 @@ func TestProcessorClarificationErrors(t *testing.T) {
 			switch code {
 			case errorutil.Internal_unclassifiedCommandFailure:
 				readHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
-					return handlersettings.HandlerSettings{}, nil
+					cfg := handlersettings.HandlerSettings{}
+					cfg.PublicSettings.TreatFailureAsDeploymentFailure = true
+					return cfg, nil
 				}
 				cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
 					Invoke: func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int) {
@@ -126,7 +136,9 @@ func TestReportingFailureDoesNotReplaceCommandError(t *testing.T) {
 	mockProcessor(t)
 	cause := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("script failed"))
 	readHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
-		return handlersettings.HandlerSettings{}, nil
+		cfg := handlersettings.HandlerSettings{}
+		cfg.PublicSettings.TreatFailureAsDeploymentFailure = true
+		return cfg, nil
 	}
 
 	calls := 0

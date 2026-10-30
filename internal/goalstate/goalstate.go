@@ -150,7 +150,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 	var runtimeSettings []handlersettings.RunTimeSettingsFile
 	hs.RuntimeSettings = append(runtimeSettings, handlersettings.RunTimeSettingsFile{HandlerSettings: setting})
 	ctx.Log("message", "executing immediate goal state")
-	if commandErr := executeImmediateCommand(cmd, hs, *setting.ExtensionName, *setting.SeqNo); commandErr != nil {
+	if commandErr := executeImmediateCommand(cmd, hs, *setting.ExtensionName, *setting.SeqNo); commandErr != nil && !errors.Is(commandErr, types.ErrAlreadyProcessed) {
 		err <- errorutil.WithCode(errorutil.Internal_failedToProcessImmediateCommand, errors.Wrap(commandErr, "failed to process immediate handler command"))
 		return
 	}

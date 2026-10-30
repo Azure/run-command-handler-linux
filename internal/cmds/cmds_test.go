@@ -1821,11 +1821,11 @@ func Test_enable_e2e_extension_policy_settings_block_statussuccess(t *testing.T)
 	}
 
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
-	require.Error(t, err, "policy rejection must propagate to the caller")
+	require.NoError(t, err, "policy rejection must not fail the handler when deployment failure is disabled")
 	require.False(t, scriptWasExecuted, "disallowed script should not be executed")
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
-	requireReportedClarification(t, errorutil.ExtensionPolicySettings_galleryScriptNotAllowed, err, report)
+	requireStatusClarification(t, errorutil.ExtensionPolicySettings_galleryScriptNotAllowed, report)
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 }
@@ -1943,11 +1943,11 @@ func Test_enable_e2e_extension_policy_settings_block_statussuccess_disableOutput
 	}
 
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, seqNum, constants.DownloadFolder, dataDir)
-	require.Error(t, err, "policy rejection must propagate to the caller")
+	require.NoError(t, err, "policy rejection must not fail the handler when deployment failure is disabled")
 	require.False(t, scriptWasExecuted, "script should not be executed because output blobs are disabled")
 
 	report := readStatusReport(t, fakeEnv, extName, seqNum) // verify status report exists and is valid
-	requireReportedClarification(t, errorutil.ExtensionPolicySettings_outputBlobsNotAllowed, err, report)
+	requireStatusClarification(t, errorutil.ExtensionPolicySettings_outputBlobsNotAllowed, report)
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "execution message should indicate failure")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "output blobs are disabled in policy, but settings specify"), "execution message should indicate failure")
@@ -1992,11 +1992,11 @@ func Test_enable_e2e_runtimePolicyFile_deletedAfterExecution_thenRunsWithoutPoli
 	}
 
 	err = commandProcessor.ProcessHandlerCommandWithDetails(ctx, CmdEnable, fakeEnv, extName, blockedSeqNum, constants.DownloadFolder, dataDir)
-	require.Error(t, err, "policy rejection must propagate to the caller")
+	require.NoError(t, err, "policy rejection must not fail the handler when deployment failure is disabled")
 	require.False(t, scriptWasExecuted, "non-allowlisted script must be blocked by policy")
 
 	report := readStatusReport(t, fakeEnv, extName, blockedSeqNum)
-	requireReportedClarification(t, errorutil.ExtensionPolicySettings_downloadedScriptNotAllowed, err, report)
+	requireStatusClarification(t, errorutil.ExtensionPolicySettings_downloadedScriptNotAllowed, report)
 	require.Equal(t, types.StatusSuccess, report[0].Status.Status, "status report should indicate success")
 	require.True(t, strings.Contains(report[0].Status.FormattedMessage.Message, "executionState\":\"Failed\",\"executionMessage\":\"Execution failed"), "blocked script should report failed execution")
 

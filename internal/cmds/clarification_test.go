@@ -101,6 +101,11 @@ func requireCommandCode(t *testing.T, expected int, err error) {
 func requireReportedClarification(t *testing.T, expected int, err error, report types.StatusReport) {
 	t.Helper()
 	requireCommandCode(t, expected, err)
+	requireStatusClarification(t, expected, report)
+}
+
+func requireStatusClarification(t *testing.T, expected int, report types.StatusReport) {
+	t.Helper()
 	require.Positive(t, expected, "policy violations are customer errors")
 	require.Len(t, report, 1)
 	require.Len(t, report[0].Status.Substatuses, 1)
