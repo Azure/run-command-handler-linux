@@ -46,6 +46,7 @@ const (
 	Internal_nilGoalStateCommunicator                   ErrorClarificationCode = -3210
 	HostGA_failedToRetrieveVmSettings                   ErrorClarificationCode = -3211
 	Internal_failedToProcessImmediateCommand            ErrorClarificationCode = -3212
+	Internal_failedToParseImmediateInstanceView         ErrorClarificationCode = -3213
 	HostGA_failedToCreateRequestManager                 ErrorClarificationCode = -3300
 	HostGA_failedToReadVmSettingsResponse               ErrorClarificationCode = -3301
 	HostGA_failedToParseVmSettingsResponse              ErrorClarificationCode = -3302

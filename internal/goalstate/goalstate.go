@@ -1,6 +1,7 @@
 package goalstate
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -33,6 +34,17 @@ var goalStateTimeout = time.Minute * time.Duration(maxExecutionTimeInMinutes)
 var executeImmediateCommand = commandProcessor.ProcessImmediateHandlerCommand
 var buildStatusItem = status.GetSingleStatusItem
 
+// ImmediateCommandExecutionError retains the terminal execution result for fallback reporting.
+type ImmediateCommandExecutionError struct {
+	InstanceView types.RunCommandInstanceView
+	Status       types.StatusType
+	Reported     bool
+	Err          error
+}
+
+func (e *ImmediateCommandExecutionError) Error() string { return e.Err.Error() }
+func (e *ImmediateCommandExecutionError) Unwrap() error { return e.Err }
+
 // HandleImmediateGoalState handles the immediate goal state by executing the command and waiting for it to finish.
 // ctx: The logger context.
 // setting: The settings for the command.
@@ -45,6 +57,10 @@ func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon,
 	select {
 	case e := <-err:
 		ctx.Log("error", fmt.Sprintf("error when trying to execute goal state: %v", e))
+		var executionErr *ImmediateCommandExecutionError
+		if errors.As(e, &executionErr) {
+			return executionErr.InstanceView.ExitCode, errors.Wrap(e, "error when trying to execute goal state")
+		}
 		return constants.ExitCode_ImmediateTaskFailed, errors.Wrapf(e, "error when trying to execute goal state")
 	case <-done:
 		ctx.Log("message", "goal state successfully finished")
@@ -120,6 +136,8 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 		return
 	}
 
+	var terminalResult *ImmediateCommandExecutionError
+	var terminalReportErr error
 	// Overwrite function to report status to HGAP. This function prepares the status to be sent to the HGAP and then calls the notifier to send it.
 	cmd.Functions.ReportStatus = func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, statusType types.StatusType, c types.Cmd, msg string) error {
 		if !c.ShouldReportStatus {
@@ -127,13 +145,27 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 			return nil
 		}
 
+		if statusType != types.StatusTransitioning {
+			var view types.RunCommandInstanceView
+			if err := json.Unmarshal([]byte(msg), &view); err != nil {
+				terminalReportErr = errorutil.WithCode(errorutil.Internal_failedToParseImmediateInstanceView, errors.Wrap(err, "failed to unmarshal immediate command instance view"))
+				return terminalReportErr
+			}
+			view.ClarificationError = metadata.ClarificationError
+			terminalResult = &ImmediateCommandExecutionError{InstanceView: view, Status: statusType}
+		}
+
 		statusItem, err := buildStatusItem(ctx, statusType, c, msg, metadata.ExtName, metadata.ClarificationError)
 		if err != nil {
-			return errorutil.WithCode(errorutil.Internal_failedToCreateImmediateCommandStatus, errors.Wrap(err, "failed to get status item"))
+			reportErr := errorutil.WithCode(errorutil.Internal_failedToCreateImmediateCommandStatus, errors.Wrap(err, "failed to get status item"))
+			if terminalResult != nil {
+				terminalReportErr = reportErr
+			}
+			return reportErr
 		}
 
 		ctx.Log("message", fmt.Sprintf("reporting status by notifying the observer to then send to HGAP for extension name %v and seq number %v", metadata.ExtName, metadata.SeqNum))
-		return notifier.Notify(types.StatusEventArgs{
+		err = notifier.Notify(types.StatusEventArgs{
 			StatusKey: types.GoalStateKey{
 				ExtensionName:        metadata.ExtName,
 				SeqNumber:            metadata.SeqNum,
@@ -141,6 +173,11 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 			},
 			TopLevelStatus: statusItem,
 		})
+		if terminalResult != nil {
+			terminalResult.Reported = err == nil
+			terminalReportErr = err
+		}
+		return err
 	}
 
 	// Overwrite function to cleanup the command. This function is called after the command has been executed.
@@ -150,8 +187,31 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 	var runtimeSettings []handlersettings.RunTimeSettingsFile
 	hs.RuntimeSettings = append(runtimeSettings, handlersettings.RunTimeSettingsFile{HandlerSettings: setting})
 	ctx.Log("message", "executing immediate goal state")
-	if commandErr := executeImmediateCommand(cmd, hs, *setting.ExtensionName, *setting.SeqNo); commandErr != nil && !errors.Is(commandErr, types.ErrAlreadyProcessed) {
+	commandErr := executeImmediateCommand(cmd, hs, *setting.ExtensionName, *setting.SeqNo)
+	if errors.Is(commandErr, types.ErrAlreadyProcessed) {
+		done <- true
+		return
+	}
+	if terminalResult != nil {
+		cause := terminalResult.InstanceView.ClarificationError
+		if cause == nil {
+			cause = commandErr
+		}
+		if cause == nil {
+			cause = terminalReportErr
+		}
+		if cause != nil {
+			terminalResult.Err = cause
+			err <- terminalResult
+			return
+		}
+	}
+	if commandErr != nil {
 		err <- errorutil.WithCode(errorutil.Internal_failedToProcessImmediateCommand, errors.Wrap(commandErr, "failed to process immediate handler command"))
+		return
+	}
+	if terminalReportErr != nil {
+		err <- terminalReportErr
 		return
 	}
 	done <- true

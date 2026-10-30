@@ -130,17 +130,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				// For successful goal states, the status is reported by the usual workflow
 				if err != nil {
 					ctx.Log("error", "failed to execute goal state", "message", err)
-					instView := types.RunCommandInstanceView{
-						ExecutionState:     types.Failed,
-						ExecutionMessage:   "Execution failed",
-						ExitCode:           exitCode,
-						Output:             "",
-						Error:              err.Error(),
-						StartTime:          startTime,
-						EndTime:            time.Now().UTC().Format(time.RFC3339),
-						ClarificationError: err,
-					}
-					if reportErr := goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView); reportErr != nil {
+					if reportErr := reportImmediateGoalStateFailure(ctx, notifier, statusKey, startTime, exitCode, err); reportErr != nil {
 						ctx.Log("error", "failed to report final goal state status", "message", reportErr)
 					}
 
@@ -180,6 +170,26 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 	}
 
 	return newEtag, nil
+}
+
+func reportImmediateGoalStateFailure(ctx *log.Context, notifier *observer.Notifier, statusKey types.GoalStateKey, startTime string, exitCode int, err error) error {
+	var executionErr *goalstate.ImmediateCommandExecutionError
+	if errors.As(err, &executionErr) {
+		if executionErr.Reported {
+			return nil
+		}
+		return goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, executionErr.Status, &executionErr.InstanceView)
+	}
+	instView := types.RunCommandInstanceView{
+		ExecutionState:     types.Failed,
+		ExecutionMessage:   "Execution failed",
+		ExitCode:           exitCode,
+		Error:              err.Error(),
+		StartTime:          startTime,
+		EndTime:            time.Now().UTC().Format(time.RFC3339),
+		ClarificationError: err,
+	}
+	return goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView)
 }
 
 func validateGoalStateSettings(s settings.SettingsCommon) error {

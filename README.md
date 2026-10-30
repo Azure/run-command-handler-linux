@@ -20,6 +20,12 @@ existing instance-view message, output, script exit code, and
 therefore have a successful top-level deployment status and still carry its
 error clarification.
 
+Immediate commands retain the script's exit code and full terminal instance view.
+An execution result already reported to the observer is not replaced by a fallback
+status. If terminal reporting fails, the fallback retries the original instance
+view and top-level status. Script failures carry the positive
+`CommandExecution_failureExitCode` clarification, not a system-error code.
+
 Codes are declared centrally as named `ErrorClarificationCode` constants in
 [errorclarificationcodes.go](pkg/errorutil/errorclarificationcodes.go), grouped
 into system and user errors like CustomScript. Shared classifications use
