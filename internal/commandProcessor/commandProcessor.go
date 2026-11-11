@@ -47,7 +47,21 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 		return errors.Wrap(err, "failed when trying to store handler settings locally")
 	}
 
-	// Store handler settings locally before moving forward...
+	// Keep settings available until final status reporting has been attempted.
+	if cleanup := cmd.Functions.Cleanup; cleanup != nil {
+		var pendingCleanup func()
+		cmd.Functions.Cleanup = func(ctx *log.Context, metadata types.RCMetadata, hEnv types.HandlerEnvironment, runAsUser string) {
+			pendingCleanup = func() {
+				cleanup(ctx, metadata, hEnv, runAsUser)
+			}
+		}
+		defer func() {
+			if pendingCleanup != nil {
+				pendingCleanup()
+			}
+		}()
+	}
+
 	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.ImmediateDownloadFolder, constants.DataDir)
 }
 
