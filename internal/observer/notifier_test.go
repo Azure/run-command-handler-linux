@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
@@ -40,6 +41,7 @@ func Test_notifyObserver(t *testing.T) {
 
 	nonEmptyStatusItem := getNonEmptyStatusItem()
 	statusKey := types.GoalStateKey{
+		HandlerName:   constants.RunCommandTestExtensionName,
 		ExtensionName: "test",
 		SeqNumber:     1,
 	}
@@ -67,6 +69,7 @@ func Test_notifyObserver_NotRegisteredObserver(t *testing.T) {
 
 	nonEmptyStatusItem := getNonEmptyStatusItem()
 	statusKey := types.GoalStateKey{
+		HandlerName:   constants.RunCommandTestExtensionName,
 		ExtensionName: "test",
 		SeqNumber:     1,
 	}

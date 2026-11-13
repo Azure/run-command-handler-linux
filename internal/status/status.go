@@ -72,6 +72,12 @@ func SaveStatusReport(statusFolder string, extName string, seqNo int, rootStatus
 	return nil
 }
 
+// Handler identity is cached locally, but belongs only on the enclosing handler in HTTP reports.
+type cachedImmediateStatus struct {
+	ImmediateStatus
+	HandlerName string `json:"handlerName"`
+}
+
 func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState []ImmediateStatus) error {
 	immediateGSInTerminalStatusLock.Lock()
 	defer immediateGSInTerminalStatusLock.Unlock()
@@ -84,7 +90,11 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 	tempStatusFile := statusFile + ".tmp"
 
 	ctx.Log("message", "marshalling the content to json")
-	rootStatusJson, err := json.MarshalIndent(newStatusInTerminalState, "", "\t")
+	cachedStatuses := make([]cachedImmediateStatus, len(newStatusInTerminalState))
+	for i, status := range newStatusInTerminalState {
+		cachedStatuses[i] = cachedImmediateStatus{ImmediateStatus: status, HandlerName: status.HandlerName}
+	}
+	rootStatusJson, err := json.MarshalIndent(cachedStatuses, "", "\t")
 	if err != nil {
 		return fmt.Errorf("status: failed to marshal status report into json: %v", err)
 	}
@@ -128,13 +138,21 @@ func GetGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) 
 		}
 
 		ctx.Log("message", "unmarshalling the content of the status file")
-		var existingStatus []ImmediateStatus
+		var existingStatus []cachedImmediateStatus
 		if err := json.Unmarshal(fileContent, &existingStatus); err != nil {
 			return result, fmt.Errorf("status: failed to unmarshal status file: %v", err)
 		}
 
 		ctx.Log("message", "merging the new status with the existing content")
-		result = existingStatus
+		for _, cached := range existingStatus {
+			if cached.HandlerName == "" {
+				ctx.Log("warning", "ignoring cached immediate status without a handler name",
+					"extensionName", cached.Status.Name, "sequenceNumber", cached.SequenceNumber)
+				continue
+			}
+			cached.ImmediateStatus.HandlerName = cached.HandlerName
+			result = append(result, cached.ImmediateStatus)
+		}
 		ctx.Log("message", fmt.Sprintf("Found %v goal states in terminal state", len(result)))
 	} else {
 		ctx.Log("message", "status file does not exist. No goal states in terminal status")
@@ -157,7 +175,7 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 		for _, goalStateKey := range goalStateKeysToRemove {
 			if goalStateKey.RuntimeSettingsState == "disabled" {
 				for i, status := range statusInTerminalState {
-					if status.SequenceNumber == goalStateKey.SeqNumber && status.Status.Name == goalStateKey.ExtensionName {
+					if status.HandlerName == goalStateKey.HandlerName && status.SequenceNumber == goalStateKey.SeqNumber && status.Status.Name == goalStateKey.ExtensionName {
 						ctx.Log("message", fmt.Sprintf("Goal state %v is disabled. Removing it from the statusInTerminalState list.", goalStateKey))
 						statusInTerminalState = append(statusInTerminalState[:i], statusInTerminalState[i+1:]...)
 						break
@@ -166,7 +184,7 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 			} else if goalStateKey.RuntimeSettingsState == "enabled" {
 				for i, status := range statusInTerminalState {
 					// If the sequence number is less than the goal state key sequence number, it means that the goal state got updated
-					if status.SequenceNumber < goalStateKey.SeqNumber && status.Status.Name == goalStateKey.ExtensionName {
+					if status.HandlerName == goalStateKey.HandlerName && status.SequenceNumber < goalStateKey.SeqNumber && status.Status.Name == goalStateKey.ExtensionName {
 						ctx.Log("message", fmt.Sprintf("Goal state %v is updated. Removing it from the statusInTerminalState list.", goalStateKey))
 						statusInTerminalState = append(statusInTerminalState[:i], statusInTerminalState[i+1:]...)
 						break

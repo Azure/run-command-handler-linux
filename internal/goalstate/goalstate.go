@@ -30,13 +30,14 @@ var statusToCommandMap = map[string]string{
 
 // HandleImmediateGoalState handles the immediate goal state by executing the command and waiting for it to finish.
 // ctx: The logger context.
+// handlerName: The handler identity from the immediate goal state.
 // setting: The settings for the command.
 // notifier: The notifier to send the status to the HGAP. This is a notifier that must have been initialized and a status observer must have been added to it.
 // Returns the exit code and an error if there was an issue executing the goal state.
-func HandleImmediateGoalState(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier) (int, error) {
+func HandleImmediateGoalState(ctx *log.Context, handlerName string, setting settings.SettingsCommon, notifier *observer.Notifier) (int, error) {
 	done := make(chan bool)
 	err := make(chan error)
-	go startAsync(ctx, setting, notifier, done, err)
+	go startAsync(ctx, handlerName, setting, notifier, done, err)
 	select {
 	case e := <-err:
 		ctx.Log("error", fmt.Sprintf("error when trying to execute goal state: %v", e))
@@ -92,7 +93,7 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 // startAsync starts the command asynchronously. The command to execute is the enable command.
 // The function to report status is overwritten to report the status to the HGAP. The notifier is used to send the status to the HGAP.
 // The function to cleanup the command is overwritten to cleanup the command immediately after it has been executed.
-func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
+func startAsync(ctx *log.Context, handlerName string, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
 	if notifier == nil {
 		err <- errors.New("notifier is nil. Cannot report status to HGAP")
 		return
@@ -123,6 +124,7 @@ func startAsync(ctx *log.Context, setting settings.SettingsCommon, notifier *obs
 		ctx.Log("message", fmt.Sprintf("reporting status by notifying the observer to then send to HGAP for extension name %v and seq number %v", metadata.ExtName, metadata.SeqNum))
 		return notifier.Notify(types.StatusEventArgs{
 			StatusKey: types.GoalStateKey{
+				HandlerName:          handlerName,
 				ExtensionName:        metadata.ExtName,
 				SeqNumber:            metadata.SeqNum,
 				RuntimeSettingsState: extensionState,

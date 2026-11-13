@@ -9,6 +9,7 @@ type StatusEventArgs struct {
 // GoalStateKey is a unique identifier for a goal state item.
 // It is used to store the goal state item in the event map.
 type GoalStateKey struct {
+	HandlerName          string
 	ExtensionName        string
 	SeqNumber            int
 	RuntimeSettingsState string
