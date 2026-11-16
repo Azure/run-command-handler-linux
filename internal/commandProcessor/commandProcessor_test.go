@@ -73,16 +73,16 @@ func Test_ProcessImmediateHandlerCommand_CleanupAfterFinalStatus(t *testing.T) {
 			cleanupCalls := 0
 			var invokeContext *log.Context
 			cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
-				Invoke: func(ctx *log.Context, env types.HandlerEnvironment, _ *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+				Invoke: func(ctx *log.Context, env types.HandlerEnvironment, _ *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 					invokeContext = ctx
 					events = append(events, "invoke")
 					require.FileExists(t, configPath)
-					c.Functions.Cleanup(ctx, metadata, env, "cleanup-test-user")
 					events = append(events, "invoke returned")
+					cleanup := &types.CleanupRequest{RunAsUser: "cleanup-test-user"}
 					if test.scriptFails {
-						return "script output", "script error", errors.New("script failed"), 1
+						return "script output", "script error", errors.New("script failed"), 1, cleanup
 					}
-					return "script output", "", nil, 0
+					return "script output", "", nil, 0, cleanup
 				},
 				ReportStatus: func(ctx *log.Context, env types.HandlerEnvironment, _ types.RCMetadata, statusType types.StatusType, _ types.Cmd, message string) error {
 					if statusType == types.StatusTransitioning {
@@ -134,28 +134,45 @@ func Test_ProcessImmediateHandlerCommand_CleanupAfterFinalStatus(t *testing.T) {
 }
 
 func Test_ProcessImmediateHandlerCommand_DoesNotInventCleanup(t *testing.T) {
-	for _, configured := range []bool{false, true} {
-		t.Run(fmt.Sprintf("cleanup configured=%t", configured), func(t *testing.T) {
+	tests := []struct {
+		name        string
+		configured  bool
+		requested   bool
+		scriptFails bool
+	}{
+		{name: "no callback or request"},
+		{name: "callback without request", configured: true},
+		{name: "failure without request", configured: true, scriptFails: true},
+		{name: "request without callback", requested: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			hEnv := setCleanupTestHandlerEnvironment(t)
 			cleanupCalls := 0
 			cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
-				Invoke: func(_ *log.Context, _ types.HandlerEnvironment, _ *types.RunCommandInstanceView, _ types.RCMetadata, c types.Cmd) (string, string, error, int) {
-					if !configured {
+				Invoke: func(_ *log.Context, _ types.HandlerEnvironment, _ *types.RunCommandInstanceView, _ types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
+					if !test.configured {
 						require.Nil(t, c.Functions.Cleanup)
 					}
-					return "", "", nil, 0
+					if test.requested {
+						return "", "", nil, 0, &types.CleanupRequest{}
+					}
+					if test.scriptFails {
+						return "", "", errors.New("script failed before cleanup"), 1, nil
+					}
+					return "", "", nil, 0, nil
 				},
 				ReportStatus: func(_ *log.Context, _ types.HandlerEnvironment, _ types.RCMetadata, _ types.StatusType, _ types.Cmd, _ string) error {
 					return nil
 				},
 			})
-			if configured {
+			if test.configured {
 				cmd.Functions.Cleanup = func(_ *log.Context, _ types.RCMetadata, _ types.HandlerEnvironment, _ string) {
 					cleanupCalls++
 				}
 			}
 			require.NoError(t, ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(false), "cleanup-test", 1))
-			require.Zero(t, cleanupCalls, "cleanup must not run unless the command requests it")
+			require.Zero(t, cleanupCalls, "cleanup requires both a request and a callback")
 			require.FileExists(t, handlersettings.GetConfigFilePath(hEnv.HandlerEnvironment.ConfigFolder, 1, "cleanup-test"))
 		})
 	}
@@ -187,10 +204,9 @@ func Test_ProcessHandlerCommand_CleanupOrderingUnchanged(t *testing.T) {
 	require.NoError(t, storeConfigSettingsFileForLocalExecution(ctx, cleanupTestSettings(false), hEnv, name, seq))
 	events := []string{}
 	cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
-		Invoke: func(ctx *log.Context, env types.HandlerEnvironment, _ *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
-			c.Functions.Cleanup(ctx, metadata, env, "")
+		Invoke: func(ctx *log.Context, env types.HandlerEnvironment, _ *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 			events = append(events, "invoke returned")
-			return "", "", nil, 0
+			return "", "", nil, 0, &types.CleanupRequest{}
 		},
 		ReportStatus: func(_ *log.Context, _ types.HandlerEnvironment, _ types.RCMetadata, statusType types.StatusType, _ types.Cmd, _ string) error {
 			if statusType == types.StatusSuccess {
@@ -203,7 +219,7 @@ func Test_ProcessHandlerCommand_CleanupOrderingUnchanged(t *testing.T) {
 		},
 	})
 	require.NoError(t, ProcessHandlerCommand(cmd))
-	require.Equal(t, []string{"cleanup", "invoke returned", "final status"}, events)
+	require.Equal(t, []string{"invoke returned", "cleanup", "final status"}, events)
 }
 
 func enablePreSuccess(ctx *log.Context, h types.HandlerEnvironment, metadata types.RCMetadata, c types.Cmd) error {

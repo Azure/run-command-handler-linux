@@ -351,7 +351,7 @@ func Test_update_immediateRunCommandFails_traditionalStillUpdates(t *testing.T) 
 	// Call update directly (the update_handler helper asserts success, which we cannot guarantee here).
 	fakeInstanceView := types.RunCommandInstanceView{}
 	metadata := types.NewRCMetadata("", 0, constants.DownloadFolder, tempDir)
-	_, _, updateErr, _ := CmdUpdate.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, types.CmdUpdateTemplate)
+	_, _, updateErr, _, _ := CmdUpdate.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, types.CmdUpdateTemplate)
 
 	// The immediate run command update failed, so update() surfaces that error...
 	require.Error(t, updateErr, "immediate run command update was expected to fail")
@@ -528,7 +528,8 @@ func generic_handler_call(t *testing.T, fakeEnv types.HandlerEnvironment, tempDi
 	fakeInstanceView := types.RunCommandInstanceView{}
 
 	metadata := types.NewRCMetadata("", 0, constants.DownloadFolder, tempDir)
-	_, _, err, exitCode := cmd.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, cmdTemplate)
+	_, _, err, exitCode, cleanup := cmd.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, cmdTemplate)
+	require.Nil(t, cleanup)
 	require.Nil(t, err, cmdName+" command should run successfully")
 	require.Equal(t, constants.ExitCode_Okay, exitCode)
 }
@@ -582,7 +583,16 @@ func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir st
 		require.Nil(t, err, "EnablePre failed")
 
 		// Call the Enable function
-		_, _, err, exitCode := CmdEnable.Functions.Invoke(ctx, fakeEnv, &fakeInstanceView, metadata, types.CmdEnableTemplate)
+		cleanupCalled := false
+		executionCmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
+			Cleanup: func(_ *log.Context, _ types.RCMetadata, _ types.HandlerEnvironment, _ string) {
+				cleanupCalled = true
+			},
+		})
+		_, _, err, exitCode, cleanup := CmdEnable.Functions.Invoke(ctx, fakeEnv, &fakeInstanceView, metadata, executionCmd)
+		require.NotNil(t, cleanup)
+		require.Empty(t, cleanup.RunAsUser)
+		require.False(t, cleanupCalled, "execution should return a cleanup request rather than call cleanup")
 		require.Nil(t, err, "command should run successfully")
 		require.Equal(t, constants.ExitCode_Okay, exitCode)
 
@@ -607,7 +617,8 @@ func disable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir s
 
 	metadata := types.NewRCMetadata(extName, 0, constants.DownloadFolder, tempDir)
 	metadata.MostRecentSequence = filepath.Join(tempDir, extName+constants.MrSeqFileExtension)
-	_, _, err, _ := CmdDisable.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, types.CmdDisableTemplate)
+	_, _, err, _, cleanup := CmdDisable.Functions.Invoke(log.NewContext(log.NewNopLogger()), fakeEnv, &fakeInstanceView, metadata, types.CmdDisableTemplate)
+	require.Nil(t, cleanup)
 	require.Nil(t, err)
 
 	// The .mrseq should still be here

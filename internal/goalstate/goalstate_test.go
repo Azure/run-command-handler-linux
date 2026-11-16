@@ -47,8 +47,8 @@ func Test_HandleImmediateGoalState_preservesHandlerName(t *testing.T) {
 			oldCmd := commands.Cmds[enableCommand]
 			cmd := oldCmd
 			cmd.Functions.Pre = nil
-			cmd.Functions.Invoke = func(_ *log.Context, _ types.HandlerEnvironment, _ *types.RunCommandInstanceView, _ types.RCMetadata, _ types.Cmd) (string, string, error, int) {
-				return "command output", "", nil, 0
+			cmd.Functions.Invoke = func(_ *log.Context, _ types.HandlerEnvironment, _ *types.RunCommandInstanceView, _ types.RCMetadata, _ types.Cmd) (string, string, error, int, *types.CleanupRequest) {
+				return "command output", "", nil, 0, nil
 			}
 			commands.Cmds[enableCommand] = cmd
 			t.Cleanup(func() { commands.Cmds[enableCommand] = oldCmd })

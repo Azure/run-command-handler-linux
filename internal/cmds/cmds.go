@@ -89,7 +89,7 @@ var (
 	ErrAlreadyProcessed = errors.New("the script configuration has already been processed, will not run again")
 )
 
-func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
 
 	// Figure out the directories from which and to where we're upgrading. We cannot entirely rely on the environment variables from the Guest Agent
@@ -102,7 +102,7 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			// If we fail on update, then there's a risk we could re-execute the customer's script. Don't take that chance.
 			// By failing Update, the extension goal state will fail. WALA will try us again on the next goal state.
 			ctx.Log("event", "Unable to rehydrate mrseq files")
-			return "", "", err, constants.ExitCode_CouldNotRehydrateMrSeq
+			return "", "", err, constants.ExitCode_CouldNotRehydrateMrSeq, nil
 		}
 	}
 
@@ -110,19 +110,19 @@ func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	// This is necessary to prevent rerunning of already executed Run Commands after upgrade of extension version, and also return their statuses.
 	copyError := CopyStateForUpdate(ctx, upgradeFromVersionDirectory, upgradeToVersionDirectory, extensionEvents)
 	if copyError != nil {
-		return "", "", errors.Wrap(copyError, "Migrating *.mrseq or .status files failed during update."), constants.ExitCode_CopyStateForUpdateFailed
+		return "", "", errors.Wrap(copyError, "Migrating *.mrseq or .status files failed during update."), constants.ExitCode_CopyStateForUpdateFailed, nil
 	}
 
 	exitCode, err := immediateUpdate(ctx, h, metadata.ExtName, metadata.SeqNum, extensionEvents)
 	if err != nil {
-		return "", "", err, exitCode
+		return "", "", err, exitCode, nil
 	}
 
 	ctx.Log("event", "update")
-	return "", "", nil, constants.ExitCode_Okay
+	return "", "", nil, constants.ExitCode_Okay, nil
 }
 
-func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
 	extensionHandlerName := commandProcessor.GetExtensionName(ctx)
 	if extensionHandlerName == constants.ImmediateRunCommandHandlerName {
@@ -132,39 +132,39 @@ func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 			// if the extension is actually being deleted, and keep them for an update. However, in IRC we're not called by Guest Agent, so we
 			// need to delete them ourself.
 			resetSeqNum(ctx, metadata.MostRecentSequence, extensionEvents)
-			return "", "", err, exitCode
+			return "", "", err, exitCode, nil
 		}
 	}
 
 	ctx.Log("event", "disable")
 	pid.KillPreviousExtension(ctx, metadata.PidFilePath)
-	return "", "", nil, constants.ExitCode_Okay
+	return "", "", nil, constants.ExitCode_Okay, nil
 }
 
-func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
 	exitCode, err := immediatecmds.Install()
 	if err != nil {
-		return "", "", err, exitCode
+		return "", "", err, exitCode, nil
 	}
 
 	if err := os.MkdirAll(DataDir, 0755); err != nil {
 		errMessage := fmt.Sprintf("Failed to create data dir: %v due to: %v", DataDir, err)
 		extensionEvents.LogErrorEvent("install", errMessage)
-		return "", "", errors.Wrap(err, errMessage), constants.ExitCode_CreateDataDirectoryFailed
+		return "", "", errors.Wrap(err, errMessage), constants.ExitCode_CreateDataDirectoryFailed, nil
 	}
 
 	ctx.Log("event", "created data dir", "path", DataDir)
 	ctx.Log("event", "installed")
 	extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("created data dir: %v", DataDir))
-	return "", "", nil, constants.ExitCode_Okay
+	return "", "", nil, constants.ExitCode_Okay, nil
 }
 
-func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
 	exitCode, err := immediatecmds.Uninstall(ctx, h, metadata.ExtName, metadata.SeqNum, extensionEvents)
 	if err != nil {
-		return "", "", err, exitCode
+		return "", "", err, exitCode, nil
 	}
 
 	{ // a new context scope with path
@@ -173,13 +173,13 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 		if err := os.RemoveAll(DataDir); err != nil {
 			errMessage := fmt.Sprintf("Failed to delete data directory: %v due to: %v", DataDir, err)
 			extensionEvents.LogErrorEvent("uninstall", errMessage)
-			return "", "", errors.Wrap(err, errMessage), constants.ExitCode_RemoveDataDirectoryFailed
+			return "", "", errors.Wrap(err, errMessage), constants.ExitCode_RemoveDataDirectoryFailed, nil
 		}
 		ctx.Log("event", "removed data dir")
 		extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("removed data dir %v", DataDir))
 	}
 	ctx.Log("event", "uninstalled")
-	return "", "", nil, constants.ExitCode_Okay
+	return "", "", nil, constants.ExitCode_Okay, nil
 }
 
 func enablePre(ctx *log.Context, h types.HandlerEnvironment, metadata types.RCMetadata, c types.Cmd) error {
@@ -200,7 +200,7 @@ func enablePre(ctx *log.Context, h types.HandlerEnvironment, metadata types.RCMe
 	return nil
 }
 
-func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int) {
+func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
 
 	// parse the extension handler settings (not available prior to 'enable')
@@ -208,14 +208,14 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	if err1 != nil {
 		errMessage := fmt.Sprintf("Failed to get configuration: %v", err1)
 		extensionEvents.LogErrorEvent("enable", errMessage)
-		return "", "", errors.Wrap(err1, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed
+		return "", "", errors.Wrap(err1, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed, nil
 	}
 
 	exitCode, err := immediatecmds.Enable(ctx, h, metadata.ExtName, metadata.SeqNum, cfg, extensionEvents)
 
 	// If there is an error or the customer requested to install the script as a service, return the error and exit code immediately.
 	if err != nil || cfg.InstallAsService() {
-		return "", "", err, exitCode
+		return "", "", err, exitCode, nil
 	}
 
 	// Load extension policy settings.
@@ -238,20 +238,20 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
 		extensionPolicyManagerPtr = nil
 	} else {
-		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed
+		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed, nil
 	}
 
 	// Validate handler settings against policy settings.
 	if extensionPolicyManagerPtr != nil && rceps != nil {
 		if err, exitCode = extensionpolicysettingsrc.ValidateHandlerSettingsAgainstPolicy(ctx, &cfg, rceps); err != nil {
-			return "", "", err, exitCode
+			return "", "", err, exitCode, nil
 		}
 	}
 
 	dir := filepath.Join(metadata.DownloadPath, fmt.Sprintf("%d", metadata.SeqNum))
 	scriptFilePath, err := downloadScript(ctx, dir, &cfg, rceps)
 	if err != nil && errors.Is(err, extensionerrors.ErrItemNotInAllowlist) {
-		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy
+		return "", "", errors.Wrap(err, "downloaded script file is not in the allowlist."), constants.ExitCode_DownloadedScriptBlockedByExtensionPolicy, nil
 	}
 
 	if err != nil {
@@ -260,7 +260,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		return "",
 			"",
 			errors.Wrap(err, fmt.Sprintf("File downloads failed. Use either a public script URI that points to .sh file, Azure storage blob SAS URI or storage blob accessible by a managed identity and retry. If managed identity is used, make sure it has been given access to container of storage blob '%s' with 'Storage Blob Data Reader' role assignment. In case of user-assigned identity, make sure you add it under VM's identity. For more info, refer https://aka.ms/RunCommandManagedLinux", download.GetUriForLogging(cfg.ScriptURI()))),
-			constants.ExitCode_ScriptBlobDownloadFailed
+			constants.ExitCode_ScriptBlobDownloadFailed, nil
 	}
 
 	err = downloadArtifacts(ctx, dir, &cfg)
@@ -269,7 +269,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "", "",
 			errors.Wrap(err, "Artifact downloads failed. Use either a public artifact URI that points to .sh file, Azure storage blob SAS URI, or storage blob accessible by a managed identity and retry."),
-			constants.ExitCode_DownloadArtifactFailed
+			constants.ExitCode_DownloadArtifactFailed, nil
 	}
 
 	blobCreateOrReplaceError := "Error creating AppendBlob '%s' using SAS token or Managed identity. Please use a valid blob SAS URI with [read, append, create, write] permissions OR managed identity. If managed identity is used, make sure Azure blob and identity exist, and identity has been given access to storage blob's container with 'Storage Blob Data Contributor' role assignment. In case of user-assigned identity, make sure you add it under VM's identity and provide outputBlobUri / errorBlobUri and corresponding clientId in outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). In case of system-assigned identity, do not use outputBlobManagedIdentity / errorBlobManagedIdentity parameter(s). For more info, refer https://aka.ms/RunCommandManagedLinux"
@@ -290,7 +290,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed
+				constants.ExitCode_BlobCreateOrReplaceFailed, nil
 		}
 	}
 
@@ -308,7 +308,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed
+				constants.ExitCode_BlobCreateOrReplaceFailed, nil
 		}
 	}
 
@@ -365,11 +365,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
 	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
 
-	if c.Functions.Cleanup != nil {
-		c.Functions.Cleanup(ctx, metadata, h, cfg.PublicSettings.RunAsUser)
-	}
-
-	return stdoutTail, stderrTail, runErr, exitCode
+	return stdoutTail, stderrTail, runErr, exitCode, &types.CleanupRequest{RunAsUser: cfg.PublicSettings.RunAsUser}
 }
 
 func createExtensionEventManager(ctx *log.Context, hEnv types.HandlerEnvironment) *extensionevents.ExtensionEventManager {
