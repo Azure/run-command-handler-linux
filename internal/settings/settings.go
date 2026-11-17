@@ -22,7 +22,7 @@ func (li *SettingsCommon) UnmarshalJSON(data []byte) error {
 	type localItem SettingsCommon
 	var loc localItem
 	if err := json.Unmarshal(data, &loc); err != nil {
-		return errorutil.WithCode(errorutil.CustomerInput_invalidSettingsJson, err)
+		return errorutil.EnsureClarification(errorutil.CustomerInput_invalidSettingsJson, err)
 	}
 	*li = SettingsCommon(loc)
 
@@ -34,7 +34,7 @@ func (li *SettingsCommon) UnmarshalJSON(data []byte) error {
 		var publicSettings map[string]interface{}
 		if publicSettingsRawString != "" {
 			if err := json.Unmarshal([]byte(publicSettingsRawString), &publicSettings); err != nil {
-				return errorutil.WithCode(errorutil.CustomerInput_invalidPublicSettingsJson, errors.Wrapf(err, "failed to parse public settings from json"))
+				return errorutil.EnsureClarification(errorutil.CustomerInput_invalidPublicSettingsJson, errors.Wrapf(err, "failed to parse public settings from json"))
 			}
 		}
 
@@ -44,7 +44,7 @@ func (li *SettingsCommon) UnmarshalJSON(data []byte) error {
 		li.PublicSettings = li.PublicSettingsRaw.(map[string]interface{})
 	case nil:
 	default:
-		return errorutil.WithCode(errorutil.CustomerInput_publicSettingsNotObject, fmt.Errorf("public settings must be an object or JSON object string"))
+		return errorutil.EnsureClarification(errorutil.CustomerInput_publicSettingsNotObject, fmt.Errorf("public settings must be an object or JSON object string"))
 	}
 
 	return nil
@@ -55,9 +55,9 @@ func (li SettingsCommon) MarshalJSON() ([]byte, error) {
 	s := SettingsCommonHelper(li)
 	publicSettingsRaw, err := json.Marshal(s.PublicSettings)
 	if err != nil {
-		return []byte{}, errorutil.WithCode(errorutil.Internal_failedToMarshalPublicSettings, errors.Wrap(err, "could not marshal public settings"))
+		return []byte{}, errorutil.EnsureClarification(errorutil.Internal_failedToMarshalPublicSettings, errors.Wrap(err, "could not marshal public settings"))
 	}
 	s.PublicSettingsRaw = string(publicSettingsRaw)
 	b, err := json.Marshal(s)
-	return b, errorutil.WithCode(errorutil.Internal_failedToMarshalSettings, errors.Wrap(err, "could not marshal settings"))
+	return b, errorutil.EnsureClarification(errorutil.Internal_failedToMarshalSettings, errors.Wrap(err, "could not marshal settings"))
 }

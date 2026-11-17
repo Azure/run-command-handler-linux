@@ -17,45 +17,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWithCode(t *testing.T) {
+func TestEnsureClarification(t *testing.T) {
 	cause := errors.New("cause")
-	require.NoError(t, WithCode(1, nil))
+	require.NoError(t, EnsureClarification(1, nil))
 	for _, original := range []error{
 		vmextension.NewErrorWithClarificationPtr(25, cause),
 		vmextension.NewErrorWithClarification(-25, cause),
 		fmt.Errorf("context: %w", error(vmextension.NewErrorWithClarificationPtr(26, cause))),
 		fmt.Errorf("context: %w", vmextension.NewErrorWithClarification(-26, cause)),
 	} {
-		expected, _ := Code(original)
-		err := WithCode(999, original)
+		expected, _ := FindClarification(original)
+		err := EnsureClarification(999, original)
 		require.Equal(t, original, err)
-		code, ok := Code(err)
+		code, ok := FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, expected, code)
 		require.ErrorIs(t, err, cause)
 	}
 	for _, code := range []int{1, -1} {
-		err := WithCode(code, cause)
-		actual, ok := Code(err)
+		err := EnsureClarification(code, cause)
+		actual, ok := FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, code, actual)
 		require.ErrorIs(t, err, cause)
 	}
-	_, ok := Code(cause)
+	_, ok := FindClarification(cause)
 	require.False(t, ok)
-	_, ok = Code(nil)
+	_, ok = FindClarification(nil)
 	require.False(t, ok)
 	joined := errors.Join(vmextension.NewErrorWithClarification(27, cause), vmextension.NewErrorWithClarificationPtr(28, cause))
-	code, ok := Code(joined)
+	code, ok := FindClarification(joined)
 	require.True(t, ok)
 	require.Equal(t, 27, code, "pointer errors must not take precedence over earlier value errors")
-	code, ok = Code(errors.Join(cause, vmextension.NewErrorWithClarificationPtr(29, cause)))
+	code, ok = FindClarification(errors.Join(cause, vmextension.NewErrorWithClarificationPtr(29, cause)))
 	require.True(t, ok)
 	require.Equal(t, 29, code)
-	_, ok = Code(errors.Join(cause, errors.New("another unclassified cause")))
+	_, ok = FindClarification(errors.Join(cause, errors.New("another unclassified cause")))
 	require.False(t, ok)
 	var nilClarification *vmextension.ErrorWithClarification
-	_, ok = Code(nilClarification)
+	_, ok = FindClarification(nilClarification)
 	require.False(t, ok)
 }
 
@@ -180,7 +180,7 @@ func TestClarificationCodesHaveUniqueSites(t *testing.T) {
 				return true
 			}
 			selector, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || selector.Sel.Name != "WithCode" {
+			if !ok || selector.Sel.Name != "EnsureClarification" {
 				return true
 			}
 			argument, ok := call.Args[0].(*ast.SelectorExpr)

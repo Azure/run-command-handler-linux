@@ -74,7 +74,7 @@ func TestStatusFilesystemClarifications(t *testing.T) {
 			default:
 				_, err = GetGoalStatesInTerminalStatus(ctx)
 			}
-			actual, ok := errorutil.Code(err)
+			actual, ok := errorutil.FindClarification(err)
 			require.True(t, ok, "%v", err)
 			require.Equal(t, code, actual)
 		})
@@ -87,7 +87,7 @@ func TestClarificationsInManagedAndImmediateStatus(t *testing.T) {
 			t.Run(string(topLevel)+strconv.Itoa(code), func(t *testing.T) {
 				mockStatusFilesystem(t)
 				ctx := log.NewContext(log.NewNopLogger())
-				cause := errorutil.WithCode(code, errors.New("original execution error"))
+				cause := errorutil.EnsureClarification(code, errors.New("original execution error"))
 				metadata := types.NewRCMetadata("command", 9, "download", "/mock")
 				metadata.ClarificationError = cause
 				env := types.HandlerEnvironment{}
@@ -160,7 +160,7 @@ func TestImmediateStatusReportingErrors(t *testing.T) {
 			}
 			observer := StatusObserver{ctx: log.NewContext(log.NewNopLogger()), Reporter: reporter}
 			err := observer.reportImmediateStatus(ImmediateTopLevelStatus{})
-			actual, ok := errorutil.Code(err)
+			actual, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, code, actual)
 		})

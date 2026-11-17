@@ -26,7 +26,7 @@ func RemoveUrlFromErr(err error) error {
 			strSegments[i] = "[REDACTED]"
 		}
 	}
-	return errorutil.WithCode(errorutil.FileDownload_redactedUrlError, redactedError{strings.Join(strSegments, " "), err})
+	return errorutil.EnsureClarification(errorutil.FileDownload_redactedUrlError, redactedError{strings.Join(strSegments, " "), err})
 }
 
 func IsValidUrl(urlstring string) bool {

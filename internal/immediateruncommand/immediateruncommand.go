@@ -199,13 +199,13 @@ func reportImmediateGoalStateFailure(ctx *log.Context, notifier *observer.Notifi
 
 func validateGoalStateSettings(s settings.SettingsCommon) error {
 	if s.ExtensionName == nil || s.SeqNo == nil || s.ExtensionState == nil {
-		return errorutil.WithCode(errorutil.Internal_incompleteFetchedGoalState, errors.New("goal state is missing extension name, sequence number or state"))
+		return errorutil.EnsureClarification(errorutil.Internal_incompleteFetchedGoalState, errors.New("goal state is missing extension name, sequence number or state"))
 	}
 	return nil
 }
 
 func newConcurrencyLimitError(maxTasksToFetch int, state settings.SettingsCommon) error {
-	return errorutil.WithCode(errorutil.CommandExecution_concurrentGoalStateLimitExceeded, fmt.Errorf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *state.ExtensionName, *state.SeqNo))
+	return errorutil.EnsureClarification(errorutil.CommandExecution_concurrentGoalStateLimitExceeded, fmt.Errorf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *state.ExtensionName, *state.SeqNo))
 }
 
 // Get the goal states that have not been processed yet

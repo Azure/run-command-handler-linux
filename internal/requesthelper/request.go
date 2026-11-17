@@ -36,12 +36,12 @@ func GetRequestManager(rf RequestFactory, timeout time.Duration) *RequestManager
 func (rm *RequestManager) MakeRequest(ctx *log.Context, eTag string) (*http.Response, error) {
 	req, err := rm.requestFactory.GetRequest(ctx, eTag)
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.HostGA_failedToCreateRequest, err)
+		return nil, errorutil.EnsureClarification(errorutil.HostGA_failedToCreateRequest, err)
 	}
 
 	resp, err := rm.httpClient.Do(req)
 	if err != nil {
-		return resp, errorutil.WithCode(errorutil.HostGA_failedToSendRequest, err)
+		return resp, errorutil.EnsureClarification(errorutil.HostGA_failedToSendRequest, err)
 	}
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent || resp.StatusCode == http.StatusNotModified {
@@ -49,7 +49,7 @@ func (rm *RequestManager) MakeRequest(ctx *log.Context, eTag string) (*http.Resp
 	}
 
 	err = fmt.Errorf("unexpected status code: actual=%d expected=%d", resp.StatusCode, http.StatusOK)
-	return resp, errorutil.WithCode(errorutil.HostGA_requestReturnedErrorStatus, err)
+	return resp, errorutil.EnsureClarification(errorutil.HostGA_requestReturnedErrorStatus, err)
 }
 
 // httpClient is the default client to be used. http.Get() uses a client without timeouts (http.DefaultClient)

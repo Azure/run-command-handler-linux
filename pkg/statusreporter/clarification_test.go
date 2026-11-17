@@ -42,7 +42,7 @@ func TestStatusReporterClarifications(t *testing.T) {
 		if resp != nil {
 			resp.Body.Close()
 		}
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok, "%v", err)
 		require.Equal(t, want, code)
 		if want == errorutil.HostGA_failedToSendStatusRequest {
@@ -56,7 +56,7 @@ func TestStatusReporterClarifications(t *testing.T) {
 	})}
 	resp, err := ReportStatus(ctx, "http://example.invalid", "status")
 	require.ErrorContains(t, err, "404 Not Found")
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.HostGA_statusUploadReturnedErrorStatus, code)
 	resp.Body.Close()

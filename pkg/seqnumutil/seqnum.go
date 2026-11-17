@@ -22,7 +22,7 @@ const (
 func FindSequenceNumberFromConfig(path, fileExtension string, extensionName string) (int, error) {
 	g, err := filepath.Glob(filepath.Join(path, fmt.Sprintf("%s.*%s", extensionName, fileExtension)))
 	if err != nil {
-		return 0, errorutil.WithCode(errorutil.Internal_failedToReadSequenceConfigurationDirectory, err)
+		return 0, errorutil.EnsureClarification(errorutil.Internal_failedToReadSequenceConfigurationDirectory, err)
 	}
 	seqs := make([]int, 0, len(g))
 	for _, v := range g {
@@ -40,7 +40,7 @@ func FindSequenceNumberFromConfig(path, fileExtension string, extensionName stri
 		seqs = append(seqs, i)
 	}
 	if len(seqs) == 0 {
-		return 0, errorutil.WithCode(errorutil.Internal_noSequenceConfigurationFiles, fmt.Errorf("can't find out seqnum from %s, not enough files", path))
+		return 0, errorutil.EnsureClarification(errorutil.Internal_noSequenceConfigurationFiles, fmt.Errorf("can't find out seqnum from %s, not enough files", path))
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(seqs)))
 	return seqs[0], nil
@@ -50,7 +50,7 @@ func FindSequenceNumberFromConfig(path, fileExtension string, extensionName stri
 // path if it does not exist.
 func SaveSeqNum(path string, num int) error {
 	b := []byte(fmt.Sprintf("%v", num))
-	return errorutil.WithCode(errorutil.Os_FailedToWriteSequenceNumber, errors.Wrap(os.WriteFile(path, b, chmod), "seqnum: failed to write"))
+	return errorutil.EnsureClarification(errorutil.Os_FailedToWriteSequenceNumber, errors.Wrap(os.WriteFile(path, b, chmod), "seqnum: failed to write"))
 }
 
 // IsSmallerThan returns true if the sequence number stored at path is smaller
@@ -62,9 +62,9 @@ func IsSmallerThan(path string, num int) (bool, error) {
 		if os.IsNotExist(err) {
 			return true, nil
 		}
-		return false, errorutil.WithCode(errorutil.Os_FailedToReadSequenceNumber, errors.Wrap(err, "seqnum: failed to read"))
+		return false, errorutil.EnsureClarification(errorutil.Os_FailedToReadSequenceNumber, errors.Wrap(err, "seqnum: failed to read"))
 	}
 	seqNum := strings.TrimSuffix(string(b), "\n")
 	stored, err := strconv.Atoi(seqNum)
-	return stored < num, errorutil.WithCode(errorutil.Os_InvalidStoredSequenceNumber, errors.Wrapf(err, "seqnum: cannot parse number %q", b))
+	return stored < num, errorutil.EnsureClarification(errorutil.Os_InvalidStoredSequenceNumber, errors.Wrapf(err, "seqnum: cannot parse number %q", b))
 }

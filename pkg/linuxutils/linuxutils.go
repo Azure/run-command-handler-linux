@@ -66,13 +66,13 @@ func TryDeleteDirectoriesExcept(ctx *log.Context, parentDirectory string, except
 	// Check if the directory exists
 	directoryFDRef, err := openDirectory(parentDirectory)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToOpenCleanupParentDirectory, errors.Wrap(err, "could not open parent directory"))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToOpenCleanupParentDirectory, errors.Wrap(err, "could not open parent directory"))
 	}
 	defer directoryFDRef.Close()
 
 	dirEntries, err := directoryFDRef.ReadDir(0)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToReadCleanupParentDirectory, errors.Wrap(err, "could not read contents from directory"))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToReadCleanupParentDirectory, errors.Wrap(err, "could not read contents from directory"))
 	}
 
 	if dirEntries != nil {
@@ -80,7 +80,7 @@ func TryDeleteDirectoriesExcept(ctx *log.Context, parentDirectory string, except
 			if dirEntry.IsDir() && dirEntry.Name() != exceptDirectoryName {
 				fullDirectoryPath := filepath.Join(parentDirectory, dirEntry.Name())
 				ctx.Log("message", "trying to remove directory: "+fullDirectoryPath)
-				err = errorutil.WithCode(errorutil.Os_FailedToDeleteScriptDirectory, removeDirectory(fullDirectoryPath))
+				err = errorutil.EnsureClarification(errorutil.Os_FailedToDeleteScriptDirectory, removeDirectory(fullDirectoryPath))
 				if err != nil {
 					ctx.Log("warning", "could not delete directory", "error", err)
 				}
@@ -99,24 +99,24 @@ func tryClearRegexMatchingFiles(ctx *log.Context, directory string, regexFileNam
 
 func tryClearRegexMatchingFilesExcept(ctx *log.Context, directory string, regexFileNamePattern string, exceptFileName string, deleteFiles bool) error {
 	if regexFileNamePattern == "" {
-		return errorutil.WithCode(errorutil.Internal_emptyCleanupFilePattern, errors.New("empty regexFileNamePattern argument"))
+		return errorutil.EnsureClarification(errorutil.Internal_emptyCleanupFilePattern, errors.New("empty regexFileNamePattern argument"))
 	}
 
 	// Check if the directory exists
 	directoryFDRef, err := openDirectory(directory)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToOpenSettingsCleanupDirectory, errors.Wrap(err, "could not open directory"))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToOpenSettingsCleanupDirectory, errors.Wrap(err, "could not open directory"))
 	}
 	defer directoryFDRef.Close()
 
 	regex, err := regexp.Compile(regexFileNamePattern)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Internal_invalidCleanupFilePattern, errors.Wrap(err, "could not parse given regular expression"))
+		return errorutil.EnsureClarification(errorutil.Internal_invalidCleanupFilePattern, errors.Wrap(err, "could not parse given regular expression"))
 	}
 
 	dirEntries, err := directoryFDRef.ReadDir(0)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToReadSettingsCleanupDirectory, errors.Wrap(err, "could not read contents from directory"))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToReadSettingsCleanupDirectory, errors.Wrap(err, "could not read contents from directory"))
 	}
 
 	for _, dirEntry := range dirEntries {
@@ -126,13 +126,13 @@ func tryClearRegexMatchingFilesExcept(ctx *log.Context, directory string, regexF
 			fullFilePath := filepath.Join(directory, fileName)
 			if deleteFiles {
 				ctx.Log("message", "deleting file "+fullFilePath)
-				err = errorutil.WithCode(errorutil.Os_FailedToDeleteSettingsFile, removeFile(fullFilePath))
+				err = errorutil.EnsureClarification(errorutil.Os_FailedToDeleteSettingsFile, removeFile(fullFilePath))
 				if err != nil {
 					ctx.Log("warning", "could not delete file", "error", err)
 				}
 			} else {
 				ctx.Log("message", "cleaning file "+fullFilePath)
-				err = errorutil.WithCode(errorutil.Os_FailedToTruncateSettingsFile, truncateFile(fullFilePath, 0)) // Calling create on existing file truncates file
+				err = errorutil.EnsureClarification(errorutil.Os_FailedToTruncateSettingsFile, truncateFile(fullFilePath, 0)) // Calling create on existing file truncates file
 				if err != nil {
 					ctx.Log("warning", "could not truncate file", "error", err)
 				}

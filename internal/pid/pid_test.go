@@ -54,7 +54,7 @@ func Test_GetProcessStartTime(t *testing.T) {
 	startTime, err = GetProcessStartTime(123456)
 	require.Empty(t, startTime)
 	require.NotNil(t, err)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.Os_FailedToGetProcessStartTime, code)
 	require.Contains(t, err.Error(), "failed to execute bash ps command")

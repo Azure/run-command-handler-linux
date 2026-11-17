@@ -15,7 +15,7 @@ import (
 func requirePolicyCode(t *testing.T, err error, want int) {
 	t.Helper()
 	require.Error(t, err)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "missing clarification: %v", err)
 	require.Equal(t, want, code)
 }

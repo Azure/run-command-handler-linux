@@ -72,19 +72,19 @@ func SaveStatusReport(statusFolder string, extName string, seqNo int, rootStatus
 	path := filepath.Join(statusFolder, fn)
 	tmpFile, err := statusCreateTemp(statusFolder, fn)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToCreateTemporaryStatusFile, fmt.Errorf("status: failed to create temporary file: %w", err))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToCreateTemporaryStatusFile, fmt.Errorf("status: failed to create temporary file: %w", err))
 	}
 	defer statusRemove(tmpFile.Name())
 	if err := tmpFile.Close(); err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToCloseTemporaryStatusFile, fmt.Errorf("status: failed to close temporary file: %w", err))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToCloseTemporaryStatusFile, fmt.Errorf("status: failed to close temporary file: %w", err))
 	}
 
 	if err := statusWriteFile(tmpFile.Name(), rootStatusJson, 0644); err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToWriteTemporaryStatusFile, fmt.Errorf("status: failed to path=%s error=%w", tmpFile.Name(), err))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToWriteTemporaryStatusFile, fmt.Errorf("status: failed to path=%s error=%w", tmpFile.Name(), err))
 	}
 
 	if err := statusRename(tmpFile.Name(), path); err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToPublishStatusFile, fmt.Errorf("status: failed to move to path=%s error=%w", path, err))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToPublishStatusFile, fmt.Errorf("status: failed to move to path=%s error=%w", path, err))
 	}
 
 	return nil
@@ -114,21 +114,21 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 	}
 	rootStatusJson, err := json.MarshalIndent(cachedStatuses, "", "\t")
 	if err != nil {
-		return errorutil.WithCode(errorutil.Internal_failedToMarshalTerminalGoalStates, fmt.Errorf("status: failed to marshal status report into json: %w", err))
+		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalTerminalGoalStates, fmt.Errorf("status: failed to marshal status report into json: %w", err))
 	}
 
 	ctx.Log("message", "writing the content to the temporary status file")
 	err = statusWriteFile(tempStatusFile, rootStatusJson, 0644)
 
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToWriteTerminalGoalStates, fmt.Errorf("status: failed to write status file: %w", err))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToWriteTerminalGoalStates, fmt.Errorf("status: failed to write status file: %w", err))
 	}
 
 	ctx.Log("message", "Renaming the temporary status file to the final status file")
 	err = statusRename(tempStatusFile, statusFile)
 
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToPublishTerminalGoalStates, fmt.Errorf("status: failed to move status file: %w", err))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToPublishTerminalGoalStates, fmt.Errorf("status: failed to move status file: %w", err))
 	}
 
 	return nil
@@ -152,13 +152,13 @@ func GetGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) 
 		ctx.Log("message", "status file already exists. Reading the content")
 		fileContent, err := statusReadFile(statusFile)
 		if err != nil {
-			return result, errorutil.WithCode(errorutil.Os_FailedToReadTerminalGoalStates, fmt.Errorf("status: failed to read status file: %w", err))
+			return result, errorutil.EnsureClarification(errorutil.Os_FailedToReadTerminalGoalStates, fmt.Errorf("status: failed to read status file: %w", err))
 		}
 
 		ctx.Log("message", "unmarshalling the content of the status file")
 		var existingStatus []cachedImmediateStatus
 		if err := json.Unmarshal(fileContent, &existingStatus); err != nil {
-			return result, errorutil.WithCode(errorutil.Os_InvalidTerminalGoalStatesJson, fmt.Errorf("status: failed to unmarshal status file: %w", err))
+			return result, errorutil.EnsureClarification(errorutil.Os_InvalidTerminalGoalStatesJson, fmt.Errorf("status: failed to unmarshal status file: %w", err))
 		}
 
 		ctx.Log("message", "merging the new status with the existing content")
@@ -175,7 +175,7 @@ func GetGoalStatesInTerminalStatus(ctx *log.Context) ([]ImmediateStatus, error) 
 	} else if os.IsNotExist(err) {
 		ctx.Log("message", "status file does not exist. No goal states in terminal status")
 	} else {
-		return result, errorutil.WithCode(errorutil.Os_FailedToStatTerminalGoalStates, fmt.Errorf("status: failed to stat status file: %w", err))
+		return result, errorutil.EnsureClarification(errorutil.Os_FailedToStatTerminalGoalStates, fmt.Errorf("status: failed to stat status file: %w", err))
 	}
 
 	return result, nil
@@ -211,7 +211,7 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 					}
 				}
 			} else {
-				return errorutil.WithCode(errorutil.Internal_invalidGoalStateRemovalState, errors.New(fmt.Sprintf("goal state %v is not disabled. Cannot remove it from the statusInTerminalState list", goalStateKey)))
+				return errorutil.EnsureClarification(errorutil.Internal_invalidGoalStateRemovalState, errors.New(fmt.Sprintf("goal state %v is not disabled. Cannot remove it from the statusInTerminalState list", goalStateKey)))
 			}
 		}
 
@@ -244,7 +244,7 @@ func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.
 	ctx.Log("message", "creating json to report status")
 	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName, clarificationErrors...)
 	if len(statusReport) != 1 {
-		return types.StatusItem{}, errorutil.WithCode(errorutil.Internal_unexpectedStatusItemCount, errors.New("expected a single status item"))
+		return types.StatusItem{}, errorutil.EnsureClarification(errorutil.Internal_unexpectedStatusItemCount, errors.New("expected a single status item"))
 	}
 	return statusReport[0], nil
 }
@@ -258,5 +258,5 @@ func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) (
 		b, err = json.Marshal(statusReport)
 	}
 
-	return b, errorutil.WithCode(errorutil.Internal_failedToMarshalStatusReport, err)
+	return b, errorutil.EnsureClarification(errorutil.Internal_failedToMarshalStatusReport, err)
 }

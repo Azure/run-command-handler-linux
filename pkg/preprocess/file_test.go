@@ -31,7 +31,7 @@ func TestHasShebang(t *testing.T) {
 func TestIsTextFile_openError(t *testing.T) {
 	_, err := IsTextFile("/non/existing/path")
 	require.NotNil(t, err)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.Os_FailedToOpenTextFile, code)
 	require.Contains(t, err.Error(), "failed to open file")

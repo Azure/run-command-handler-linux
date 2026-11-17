@@ -135,7 +135,7 @@ func Test_blobDownload_fails_urlNotFound(t *testing.T) {
 	old := MakeHttpRequest
 	t.Cleanup(func() { MakeHttpRequest = old })
 	MakeHttpRequest = func(*http.Request) (*http.Response, error) {
-		return nil, errorutil.WithCode(errorutil.FileDownload_networkingError, fmt.Errorf("host not found"))
+		return nil, errorutil.EnsureClarification(errorutil.FileDownload_networkingError, fmt.Errorf("host not found"))
 	}
 	d := NewBlobDownload("accountname", "Zm9vCg==", blobutil.AzureBlobRef{
 		StorageBase: ".example.com",

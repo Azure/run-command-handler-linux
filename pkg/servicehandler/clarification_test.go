@@ -15,7 +15,7 @@ import (
 func requireServiceCode(t *testing.T, want errorutil.ErrorClarificationCode, err error) {
 	t.Helper()
 	require.Error(t, err)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "missing clarification: %v", err)
 	require.Equal(t, want, code)
 }
@@ -67,7 +67,7 @@ func TestServiceHandlerClarifications(t *testing.T) {
 			m.getInstalledVersion_f = func(string, *log.Context) (string, error) { return "", cause }
 			_, err = h.GetInstalledVersion(ctx)
 		}
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, want, code)
 		require.ErrorIs(t, err, cause)
@@ -77,18 +77,18 @@ func TestServiceHandlerClarifications(t *testing.T) {
 func TestServiceHandlerPreservesLowerClarifications(t *testing.T) {
 	ctx := log.NewContext(log.NewLogfmtLogger(io.Discard))
 	cause := errors.New("lower failure")
-	lower := errorutil.WithCode(-999, cause)
+	lower := errorutil.EnsureClarification(-999, cause)
 	m := getManagerMock()
 	m.createUnitConfiguration_f = func(string, []byte, *log.Context) error { return lower }
 	h := NewHandler(m, NewConfiguration("test.service"), ctx)
 	err := h.Register(ctx, "")
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, -999, code)
 	require.ErrorIs(t, err, cause)
 	m = getManagerMock()
 	m.removeUnitConfiguration_f = func(string, *log.Context) error {
-		return errorutil.WithCode(998, &os.PathError{Op: "remove", Path: "test", Err: os.ErrNotExist})
+		return errorutil.EnsureClarification(998, &os.PathError{Op: "remove", Path: "test", Err: os.ErrNotExist})
 	}
 	h = NewHandler(m, NewConfiguration("test.service"), ctx)
 	require.NoError(t, h.Register(ctx, ""), "wrapped ENOENT remains ignorable")

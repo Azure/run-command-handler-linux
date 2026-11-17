@@ -22,7 +22,7 @@ func (n *Notifier) Unregister() {
 func (n *Notifier) Notify(status types.StatusEventArgs) error {
 	tempObserver := n.observer
 	if tempObserver != nil {
-		return errorutil.WithCode(errorutil.Internal_failedToNotifyObserver, tempObserver.OnNotify(status))
+		return errorutil.EnsureClarification(errorutil.Internal_failedToNotifyObserver, tempObserver.OnNotify(status))
 	}
 
 	return nil

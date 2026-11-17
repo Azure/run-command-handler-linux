@@ -32,7 +32,7 @@ func TestSystemdClarifications(t *testing.T) {
 	cause := errors.New("systemd failure")
 	assertCode := func(err error, want int) {
 		t.Helper()
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok, "%v", err)
 		require.Equal(t, want, code)
 	}

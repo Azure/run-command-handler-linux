@@ -60,7 +60,7 @@ func TestFailToExtractVersion(t *testing.T) {
 	for _, content := range versionsToTest {
 		extractedVersion, err := ExtractFromServiceDefinition(content, ctx)
 		require.NotNil(t, err, "extracting the version from invalid service definition should return an error")
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, errorutil.Internal_invalidServiceDefinition, code)
 		require.Equal(t, "", extractedVersion)

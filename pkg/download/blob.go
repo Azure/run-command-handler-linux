@@ -47,7 +47,7 @@ func (b blobDownload) GetRequest() (*http.Request, error) {
 	if req != nil {
 		req.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())
 	}
-	return req, errorutil.WithCode(errorutil.FileDownload_failedToCreateBlobRequest, err)
+	return req, errorutil.EnsureClarification(errorutil.FileDownload_failedToCreateBlobRequest, err)
 }
 
 // getURL returns publicly downloadable URL of the Azure Blob
@@ -56,7 +56,7 @@ func (b blobDownload) getURL() (string, error) {
 	client, err := newStorageClient(b.accountName, b.accountKey,
 		b.blob.StorageBase, storage.DefaultAPIVersion, true)
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.Storage_failedToInitializeClient, errors.Wrap(err, "failed to initialize azure storage client"))
+		return "", errorutil.EnsureClarification(errorutil.Storage_failedToInitializeClient, errors.Wrap(err, "failed to initialize azure storage client"))
 	}
 
 	// get read-only
@@ -72,7 +72,7 @@ func (b blobDownload) getURL() (string, error) {
 	sasURL, err := blobSASURI(blob, options)
 
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.Storage_failedToGenerateSas, errors.Wrap(err, "failed to generate SAS key for blob"))
+		return "", errorutil.EnsureClarification(errorutil.Storage_failedToGenerateSas, errors.Wrap(err, "failed to generate SAS key for blob"))
 	}
 	return sasURL, nil
 }
@@ -91,28 +91,28 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 
 	resp, err := sasHTTPGet(blobFullURL)
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.FileDownload_sasRequestFailed, errors.Wrapf(err, "Failed to download file: %q", loggableBlobUri))
+		return "", errorutil.EnsureClarification(errorutil.FileDownload_sasRequestFailed, errors.Wrapf(err, "Failed to download file: %q", loggableBlobUri))
 	}
 	defer resp.Body.Close() // Ensure the response body is closed after we're done
 
 	// Check if the HTTP status code indicates success (e.g., 200 OK)
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode >= http.StatusInternalServerError {
-			return "", errorutil.WithCode(errorutil.Storage_sasDownloadInternalServerError, fmt.Errorf("Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status))
+			return "", errorutil.EnsureClarification(errorutil.Storage_sasDownloadInternalServerError, fmt.Errorf("Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status))
 		}
-		return "", errorutil.WithCode(errorutil.FileDownload_sasDownloadErrorStatus, fmt.Errorf("Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status))
+		return "", errorutil.EnsureClarification(errorutil.FileDownload_sasDownloadErrorStatus, fmt.Errorf("Failed to download file: %q, Http status code: %s", loggableBlobUri, resp.Status))
 	}
 
 	blobParsedurl, err := url.Parse(blobURI)
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.CustomerInput_invalidSasBlobUrl, errors.Wrapf(err, "unable to parse URL: %q", loggableBlobUri))
+		return "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidSasBlobUrl, errors.Wrapf(err, "unable to parse URL: %q", loggableBlobUri))
 	}
 	// Extract container name from Path of the url https://<hostName>/<Path>   For ex. Path = "containerName/dir1/dir2/file.sh"
 	trimmedPath := strings.Trim(blobParsedurl.Path, "/")
 	splitStrings := strings.Split(trimmedPath, "/")
 	fileName := splitStrings[len(splitStrings)-1]
 	if fileName == "" {
-		return "", errorutil.WithCode(errorutil.CustomerInput_missingSasBlobFileName, fmt.Errorf("cannot extract file name from URL: %q", loggableBlobUri))
+		return "", errorutil.EnsureClarification(errorutil.CustomerInput_missingSasBlobFileName, fmt.Errorf("cannot extract file name from URL: %q", loggableBlobUri))
 	}
 
 	// Create the local file
@@ -120,7 +120,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	const mode = 0500 // scripts should have execute permissions
 	outFile, err := openDownloadFile(scriptFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.FileDownload_failedToOpenSasDestination, errors.Wrapf(err, "Failed to open file '%s' for writing: ", scriptFilePath))
+		return "", errorutil.EnsureClarification(errorutil.FileDownload_failedToOpenSasDestination, errors.Wrapf(err, "Failed to open file '%s' for writing: ", scriptFilePath))
 	}
 	defer outFile.Close() // Ensure the file is closed after we're done
 
@@ -129,7 +129,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	// loading the entire file into memory.
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.FileDownload_failedToWriteSasDestination, errors.Wrapf(err, "Failed to copy data to file '%s'", scriptFilePath))
+		return "", errorutil.EnsureClarification(errorutil.FileDownload_failedToWriteSasDestination, errors.Wrapf(err, "Failed to copy data to file '%s'", scriptFilePath))
 	}
 
 	return scriptFilePath, nil
@@ -140,18 +140,18 @@ func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 
 	bloburl, err := url.Parse(blobURI + blobSas)
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.CustomerInput_invalidAppendBlobSasUrl, err)
+		return nil, errorutil.EnsureClarification(errorutil.CustomerInput_invalidAppendBlobSasUrl, err)
 	}
 
 	containerRef, err := containerFromSAS(*bloburl)
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.Storage_failedToGetSasContainer, err)
+		return nil, errorutil.EnsureClarification(errorutil.Storage_failedToGetSasContainer, err)
 	}
 
 	fileName, blobPathError := getBlobPathAfterContainerName(blobURI, containerRef.Name)
 	if fileName == "" {
 		if blobPathError == nil {
-			blobPathError = errorutil.WithCode(errorutil.CustomerInput_emptyAppendBlobPath, errors.New("blob path is empty"))
+			blobPathError = errorutil.EnsureClarification(errorutil.CustomerInput_emptyAppendBlobPath, errors.New("blob path is empty"))
 		}
 		return nil, errors.Wrapf(blobPathError, "cannot extract blob path name from URL: %q", GetUriForLogging(blobURI))
 	}
@@ -159,7 +159,7 @@ func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 	blobref := containerRef.GetBlobReference(fileName)
 	err = putAppendBlob(blobref) // Create the append blob
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.Storage_failedToCreateAppendBlob, err)
+		return nil, errorutil.EnsureClarification(errorutil.Storage_failedToCreateAppendBlob, err)
 	}
 
 	return blobref, nil
@@ -171,7 +171,7 @@ func CreateOrReplaceAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
 func getBlobPathAfterContainerName(blobURI string, containerName string) (string, error) {
 	blobURL, err := url.Parse(blobURI)
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.CustomerInput_invalidBlobPathUrl, err)
+		return "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidBlobPathUrl, err)
 	}
 
 	containerNameSearchString := containerName + "/"
@@ -180,6 +180,6 @@ func getBlobPathAfterContainerName(blobURI string, containerName string) (string
 	if index >= 0 {
 		return blobPathWithoutHost[index+len(containerNameSearchString):], nil
 	} else {
-		return "", errorutil.WithCode(errorutil.CustomerInput_missingBlobContainerPath, fmt.Errorf("Unable to find '%s' in blobURI '%s'. Unable to get blob path suffix after container name.", containerNameSearchString, GetUriForLogging(blobURI)))
+		return "", errorutil.EnsureClarification(errorutil.CustomerInput_missingBlobContainerPath, fmt.Errorf("Unable to find '%s' in blobURI '%s'. Unable to get blob path suffix after container name.", containerNameSearchString, GetUriForLogging(blobURI)))
 	}
 }

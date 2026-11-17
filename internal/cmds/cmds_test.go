@@ -329,7 +329,7 @@ func Test_update_immediateRunCommandFails_traditionalStillUpdates(t *testing.T) 
 
 	// Simulate the immediate run command update failing.
 	originalImmediateUpdate := immediateUpdate
-	updateFailure := errorutil.WithCode(errorutil.Os_FailedToMakeServiceBinaryExecutable, errors.New("simulated immediate run command update failure"))
+	updateFailure := errorutil.EnsureClarification(errorutil.Os_FailedToMakeServiceBinaryExecutable, errors.New("simulated immediate run command update failure"))
 	immediateUpdate = func(ctx *log.Context, h types.HandlerEnvironment, name string, seqNum int, extensionEvents *extensionevents.ExtensionEventManager) (int, error) {
 		return constants.ExitCode_UpgradeInstalledServiceFailed, updateFailure
 	}
@@ -590,7 +590,7 @@ func enable_extension(t *testing.T, fakeEnv types.HandlerEnvironment, tempDir st
 	} else {
 		// Already processed is a control-flow sentinel, not a classified failure.
 		require.Equal(t, ErrAlreadyProcessed, err)
-		code, classified := errorutil.Code(err)
+		code, classified := errorutil.FindClarification(err)
 		require.False(t, classified, "already-processed sentinel must remain unclassified")
 		require.Zero(t, code)
 	}
@@ -651,7 +651,7 @@ func Test_runCmd_fail(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Ensure that the script fails
-	executionFailure := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("the chipmunks have risen in revolt"))
+	executionFailure := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("the chipmunks have risen in revolt"))
 	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
 		return executionFailure, 42
 	}
@@ -893,7 +893,7 @@ func Test_TreatFailureAsDeploymentFailureIsTrue_Fails(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	// Ensure that the script fails
-	executionFailure := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("the chipmunks do not like the script"))
+	executionFailure := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("the chipmunks do not like the script"))
 	ExecCmdInDir = func(ctx *log.Context, scriptFilePath, workdir string, cfg *handlersettings.HandlerSettings) (error, int) {
 		return executionFailure, 127
 	}

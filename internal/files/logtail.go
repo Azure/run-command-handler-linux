@@ -25,13 +25,13 @@ func TailFile(path string, max int64) ([]byte, error) {
 	if err != nil && os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
-		return nil, errorutil.WithCode(errorutil.Os_FailedToOpenTailFile, errors.Wrap(err, "error opening file"))
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToOpenTailFile, errors.Wrap(err, "error opening file"))
 	}
 	defer f.Close()
 
 	fi, err := f.Stat()
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.Os_FailedToStatTailFile, errors.Wrap(err, "error retrieving file info"))
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToStatTailFile, errors.Wrap(err, "error retrieving file info"))
 	}
 	size := fi.Size()
 
@@ -41,11 +41,11 @@ func TailFile(path string, max int64) ([]byte, error) {
 	}
 	_, err = f.Seek(-n, io.SeekEnd)
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.Os_FailedToSeekTailFile, errors.Wrapf(err, "error seeking file: offset=%d whence=%v", n, io.SeekEnd))
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToSeekTailFile, errors.Wrapf(err, "error seeking file: offset=%d whence=%v", n, io.SeekEnd))
 	}
 
 	b, err := io.ReadAll(io.LimitReader(f, max))
-	return b, errorutil.WithCode(errorutil.Os_FailedToReadTailFile, errors.Wrap(err, "error reading from file"))
+	return b, errorutil.EnsureClarification(errorutil.Os_FailedToReadTailFile, errors.Wrap(err, "error reading from file"))
 }
 
 func GetFileFromPosition(path string, position int64) ([]byte, error) {
@@ -53,13 +53,13 @@ func GetFileFromPosition(path string, position int64) ([]byte, error) {
 	if err != nil && os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
-		return nil, errorutil.WithCode(errorutil.Os_FailedToOpenOutputFile, errors.Wrap(err, "error opening file"))
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToOpenOutputFile, errors.Wrap(err, "error opening file"))
 	}
 	defer f.Close()
 
 	fi, err := f.Stat()
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.Os_FailedToStatOutputFile, errors.Wrap(err, "error retrieving file info"))
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToStatOutputFile, errors.Wrap(err, "error retrieving file info"))
 	}
 	size := fi.Size()
 	if position >= size {
@@ -69,9 +69,9 @@ func GetFileFromPosition(path string, position int64) ([]byte, error) {
 
 	_, err = f.Seek(position, io.SeekStart)
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.Os_FailedToSeekOutputFile, errors.Wrapf(err, "error seeking file: %s, offset=%d", path, position))
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToSeekOutputFile, errors.Wrapf(err, "error seeking file: %s, offset=%d", path, position))
 	}
 
 	b, err := io.ReadAll(io.LimitReader(f, size-position))
-	return b, errorutil.WithCode(errorutil.Os_FailedToReadOutputFile, errors.Wrap(err, "error reading from file: "+path))
+	return b, errorutil.EnsureClarification(errorutil.Os_FailedToReadOutputFile, errors.Wrap(err, "error reading from file: "+path))
 }

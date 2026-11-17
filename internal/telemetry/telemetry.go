@@ -54,25 +54,25 @@ func (w *telemetryEventWriter) Write(bs []byte) (n int, err error) {
 
 	fh, err := openTelemetryFile(temp)
 	if err != nil {
-		return 0, errorutil.WithCode(errorutil.Os_FailedToOpenTelemetryFile, errors.Wrap(err, "failed to open telemetry file"))
+		return 0, errorutil.EnsureClarification(errorutil.Os_FailedToOpenTelemetryFile, errors.Wrap(err, "failed to open telemetry file"))
 	}
 
 	w.fh = fh
 	n, err = w.fh.Write(bs)
 	if err != nil {
-		return n, errorutil.WithCode(errorutil.Os_FailedToWriteTelemetryFile, errors.Wrap(err, "failed to write telemetry file"))
+		return n, errorutil.EnsureClarification(errorutil.Os_FailedToWriteTelemetryFile, errors.Wrap(err, "failed to write telemetry file"))
 	}
 	if n != len(bs) {
-		return n, errorutil.WithCode(errorutil.Os_ShortTelemetryFileWrite, io.ErrShortWrite)
+		return n, errorutil.EnsureClarification(errorutil.Os_ShortTelemetryFileWrite, io.ErrShortWrite)
 	}
-	err = errorutil.WithCode(errorutil.Os_FailedToPublishTelemetryFile, errors.Wrap(renameTelemetryFile(temp, fn), "failed to publish telemetry file"))
+	err = errorutil.EnsureClarification(errorutil.Os_FailedToPublishTelemetryFile, errors.Wrap(renameTelemetryFile(temp, fn), "failed to publish telemetry file"))
 
 	return
 }
 
 func (w *telemetryEventWriter) Close() (err error) {
 	if w.fh != nil {
-		err = errorutil.WithCode(errorutil.Os_FailedToCloseTelemetryFile, errors.Wrap(w.fh.Close(), "failed to close telemetry file"))
+		err = errorutil.EnsureClarification(errorutil.Os_FailedToCloseTelemetryFile, errors.Wrap(w.fh.Close(), "failed to close telemetry file"))
 		w.fh = nil
 	}
 	return
@@ -100,21 +100,21 @@ func newTelemetryEventSenderWithWriteCloser(writer io.WriteCloser) *telemetryEve
 func (w *telemetryEventSender) send(e telemetryEvent) (result error) {
 	defer func() {
 		if closeErr := w.writer.Close(); result == nil {
-			result = errorutil.WithCode(errorutil.Os_FailedToCloseTelemetryWriter, errors.Wrap(closeErr, "failed to close telemetry event writer"))
+			result = errorutil.EnsureClarification(errorutil.Os_FailedToCloseTelemetryWriter, errors.Wrap(closeErr, "failed to close telemetry event writer"))
 		}
 	}()
 
 	bs, err := json.Marshal(e)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Internal_failedToMarshalTelemetryEvent, errors.Wrap(err, "failed to marshal telemetry event"))
+		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalTelemetryEvent, errors.Wrap(err, "failed to marshal telemetry event"))
 	}
 
 	n, err := w.writer.Write(bs)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Os_FailedToWriteTelemetryEvent, errors.Wrap(err, "failed to write telemetry event"))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToWriteTelemetryEvent, errors.Wrap(err, "failed to write telemetry event"))
 	}
 	if n != len(bs) {
-		return errorutil.WithCode(errorutil.Os_ShortTelemetryEventWrite, io.ErrShortWrite)
+		return errorutil.EnsureClarification(errorutil.Os_ShortTelemetryEventWrite, io.ErrShortWrite)
 	}
 
 	return nil

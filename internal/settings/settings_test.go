@@ -55,7 +55,7 @@ func Test_FailedToUnmarshalSettingsFromVMSettingsAPI(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonBadFormatVMSettingsAPI), &settings)
 	// Invalid JSON syntax is rejected by encoding/json before the production unmarshaler runs.
 	require.ErrorContains(t, err, "invalid character")
-	_, classified := errorutil.Code(err)
+	_, classified := errorutil.FindClarification(err)
 	require.False(t, classified)
 }
 

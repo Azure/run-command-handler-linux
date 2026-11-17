@@ -25,7 +25,7 @@ func TestServiceClarifications(t *testing.T) {
 	reportServiceError = func(*extensionevents.ExtensionEventManager, string, string) {}
 	systemdPresent = func() bool { return false }
 	err := Register(ctx, nil)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.Os_SystemdNotSupported, code)
 	dir, err := os.MkdirTemp(".", ".clarification-")
@@ -36,7 +36,7 @@ func TestServiceClarifications(t *testing.T) {
 	cause := errors.New("permission denied")
 	markExecutable = func(string, os.FileMode) error { return cause }
 	err = Register(ctx, nil)
-	code, ok = errorutil.Code(err)
+	code, ok = errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.Os_FailedToMakeServiceBinaryExecutable, code)
 	require.ErrorIs(t, err, cause)

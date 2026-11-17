@@ -36,14 +36,14 @@ func GetHandlerEnv() (he types.HandlerEnvironment, _ error) {
 	for _, p := range paths {
 		o, err := readSettingsFile(p)
 		if err != nil && !os.IsNotExist(err) {
-			return he, errorutil.WithCode(errorutil.Os_FailedToExamineHandlerEnvironment, fmt.Errorf("vmextension: error examining HandlerEnvironment at '%s': %w", p, err))
+			return he, errorutil.EnsureClarification(errorutil.Os_FailedToExamineHandlerEnvironment, fmt.Errorf("vmextension: error examining HandlerEnvironment at '%s': %w", p, err))
 		} else if err == nil {
 			b = o
 			break
 		}
 	}
 	if b == nil {
-		return he, errorutil.WithCode(errorutil.Os_CouldNotFindHandlerEnvironment, fmt.Errorf("vmextension: Cannot find HandlerEnvironment at paths: %s", strings.Join(paths, ", ")))
+		return he, errorutil.EnsureClarification(errorutil.Os_CouldNotFindHandlerEnvironment, fmt.Errorf("vmextension: Cannot find HandlerEnvironment at paths: %s", strings.Join(paths, ", ")))
 	}
 	return ParseHandlerEnv(b)
 }
@@ -52,7 +52,7 @@ func GetHandlerEnv() (he types.HandlerEnvironment, _ error) {
 func scriptDir() (string, error) {
 	p, err := settingsAbsPath(os.Args[0])
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.Os_FailedToGetWorkingDirectory, err)
+		return "", errorutil.EnsureClarification(errorutil.Os_FailedToGetWorkingDirectory, err)
 	}
 	return filepath.Dir(p), nil
 }
@@ -63,10 +63,10 @@ func ParseHandlerEnv(b []byte) (he types.HandlerEnvironment, _ error) {
 	var hf []types.HandlerEnvironment
 
 	if err := json.Unmarshal(b, &hf); err != nil {
-		return he, errorutil.WithCode(errorutil.Os_InvalidHandlerEnvironmentJson, fmt.Errorf("vmextension: failed to parse handler env: %w", err))
+		return he, errorutil.EnsureClarification(errorutil.Os_InvalidHandlerEnvironmentJson, fmt.Errorf("vmextension: failed to parse handler env: %w", err))
 	}
 	if len(hf) != 1 {
-		return he, errorutil.WithCode(errorutil.Os_UnexpectedHandlerEnvironmentCount, fmt.Errorf("vmextension: expected 1 config in parsed HandlerEnvironment, found: %v", len(hf)))
+		return he, errorutil.EnsureClarification(errorutil.Os_UnexpectedHandlerEnvironmentCount, fmt.Errorf("vmextension: expected 1 config in parsed HandlerEnvironment, found: %v", len(hf)))
 	}
 	return hf[0], nil
 }

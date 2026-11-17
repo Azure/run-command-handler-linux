@@ -22,7 +22,7 @@ func TestTextFileClarifications(t *testing.T) {
 		pointer := vmextension.NewErrorWithClarificationPtr(1998, errors.New("injected classified file failure"))
 		for _, cause := range []error{errors.New("injected file failure"), pointer, *pointer} {
 			expected := code
-			if _, ok := errorutil.Code(cause); ok {
+			if _, ok := errorutil.FindClarification(cause); ok {
 				expected = 1998
 			}
 			openTextFile = func(string) (io.ReadCloser, error) {
@@ -32,7 +32,7 @@ func TestTextFileClarifications(t *testing.T) {
 				return failingTextReader{cause}, nil
 			}
 			_, err := IsTextFile("script")
-			actual, ok := errorutil.Code(err)
+			actual, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, expected, actual)
 			require.True(t, errors.Is(err, cause))

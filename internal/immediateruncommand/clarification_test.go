@@ -28,13 +28,13 @@ func TestImmediateRunCommandClarifications(t *testing.T) {
 		{ExtensionState: &state, SeqNo: &seq},
 	} {
 		_, _, err := getGoalStatesToProcess([]hostgacommunicator.ImmediateExtensionGoalState{{Settings: []settings.SettingsCommon{s}}}, 1)
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, errorutil.Internal_incompleteFetchedGoalState, code)
 	}
 
 	err := newConcurrencyLimitError(5, valid)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.CommandExecution_concurrentGoalStateLimitExceeded, code)
 	require.Contains(t, err.Error(), "Allowed new goal state count: 5")
@@ -55,7 +55,7 @@ func TestExecutionFailureFallbackPreservesOriginalResult(t *testing.T) {
 				recorder := &immediateStatusRecorder{}
 				notifier := &observer.Notifier{}
 				notifier.Register(recorder)
-				scriptErr := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("script failed"))
+				scriptErr := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("script failed"))
 				view := types.RunCommandInstanceView{
 					ExecutionState: types.Failed, ExecutionMessage: "Execution failed: script failed",
 					ExitCode: 12, Output: "stdout", Error: "stderr",
@@ -94,7 +94,7 @@ func TestSetupFailureStillReportsFallback(t *testing.T) {
 	recorder := &immediateStatusRecorder{}
 	notifier := &observer.Notifier{}
 	notifier.Register(recorder)
-	cause := errorutil.WithCode(errorutil.Internal_failedToProcessImmediateCommand, errors.New("setup failed"))
+	cause := errorutil.EnsureClarification(errorutil.Internal_failedToProcessImmediateCommand, errors.New("setup failed"))
 	key := types.GoalStateKey{ExtensionName: "script", SeqNumber: 1, RuntimeSettingsState: "enabled"}
 	require.NoError(t, reportImmediateGoalStateFailure(log.NewContext(log.NewNopLogger()), notifier, key, "start", constants.ExitCode_ImmediateTaskFailed, cause))
 	require.Len(t, recorder.events, 1)

@@ -26,7 +26,7 @@ func NewStatusReport(statusType StatusType, operation string, message string, ex
 		},
 	}
 	for _, err := range clarificationErrors {
-		if code, ok := errorutil.Code(err); ok {
+		if code, ok := errorutil.FindClarification(err); ok {
 			report[0].Status.Substatuses = []platformstatus.Substatus{{
 				Name:   platformstatus.ErrorClarificationSubStatusName,
 				Status: string(StatusError),

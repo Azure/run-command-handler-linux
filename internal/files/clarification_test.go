@@ -32,7 +32,7 @@ func (w fakeScriptWriter) Close() error                      { return w.closeErr
 
 func assertFileCode(t *testing.T, err error, want int) {
 	t.Helper()
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "%v", err)
 	require.Equal(t, want, code)
 }

@@ -52,7 +52,7 @@ func TestCleanupClarifications(t *testing.T) {
 			user = "test"
 		}
 		RunCommandCleanup(log.NewContext(logger), types.RCMetadata{DownloadPath: "."}, types.HandlerEnvironment{}, user)
-		code, ok := errorutil.Code(logger.err)
+		code, ok := errorutil.FindClarification(logger.err)
 		require.True(t, ok)
 		require.Equal(t, want, code)
 		require.ErrorIs(t, logger.err, cause)
@@ -65,7 +65,7 @@ func TestCleanupPreservesLowerClarification(t *testing.T) {
 		clearExceptMostRecent, deleteDirectoriesExcept, openDownloadDirectory = oldClear, oldDelete, oldOpen
 	})
 	cause := errors.New("directory read failed")
-	classified := errorutil.WithCode(errorutil.Os_FailedToReadCleanupParentDirectory, cause)
+	classified := errorutil.EnsureClarification(errorutil.Os_FailedToReadCleanupParentDirectory, cause)
 	openDownloadDirectory = func(string) (io.Closer, error) { return cleanupDirectory{}, nil }
 	for _, user := range []string{"", "test"} {
 		t.Run("runAsUser="+user, func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestCleanupPreservesLowerClarification(t *testing.T) {
 			deleteDirectoriesExcept = func(*log.Context, string, string) error { return classified }
 			logger := &cleanupErrorLogger{}
 			RunCommandCleanup(log.NewContext(logger), types.RCMetadata{DownloadPath: "."}, types.HandlerEnvironment{}, user)
-			code, ok := errorutil.Code(logger.err)
+			code, ok := errorutil.FindClarification(logger.err)
 			require.True(t, ok)
 			require.Equal(t, errorutil.Os_FailedToReadCleanupParentDirectory, code)
 			require.ErrorIs(t, logger.err, cause)

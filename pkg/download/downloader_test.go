@@ -22,7 +22,7 @@ type badDownloader struct{ calls int }
 func requireDownloadCode(t *testing.T, expected errorutil.ErrorClarificationCode, err error) {
 	t.Helper()
 	require.Error(t, err)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "missing clarification: %v", err)
 	require.Equal(t, expected, code)
 }

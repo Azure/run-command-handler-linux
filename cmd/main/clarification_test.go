@@ -18,7 +18,7 @@ func TestCommandLineClarifications(t *testing.T) {
 		{[]string{"handler", "invalid"}, errorutil.CustomerInput_unknownCommandLineOperation},
 	} {
 		_, err := parseCommand(tc.args)
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, tc.code, code)
 	}

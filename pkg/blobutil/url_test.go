@@ -19,7 +19,7 @@ func TestParseBlobURL_badURL(t *testing.T) {
 	} {
 		_, err := blobutil.ParseBlobURL(tc.url)
 		require.NotNil(t, err, "invalid URL: %q", tc.url)
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, tc.code, code)
 	}
@@ -38,7 +38,7 @@ func TestParseBlobURL_badHost(t *testing.T) {
 	} {
 		_, err := blobutil.ParseBlobURL(tc.url)
 		require.NotNil(t, err, "bad host: %q", tc.url)
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, tc.code, code)
 	}
@@ -69,7 +69,7 @@ func TestParseBlobURL_unsupportedScheme(t *testing.T) {
 		_, err := blobutil.ParseBlobURL(v)
 		require.NotNil(t, err, "url: %q", v)
 		require.Contains(t, err.Error(), "unsupported scheme in URL", "url: %q")
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, errorutil.CustomerInput_unsupportedBlobUrlScheme, code)
 	}
@@ -89,7 +89,7 @@ func TestParseBlobURL_scheme(t *testing.T) {
 func TestParseBlobURL_containerMissing(t *testing.T) {
 	_, err := blobutil.ParseBlobURL("http://acct.blob.core.windows.net/")
 	require.NotNil(t, err, "missing blob/container name")
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.CustomerInput_missingBlobContainerOrName, code)
 	require.Contains(t, err.Error(), "cannot extract Azure container/blob name")

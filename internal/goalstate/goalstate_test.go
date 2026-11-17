@@ -132,7 +132,7 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 		ExitCode:           constants.ExitCode_SkippedImmediateGoalState,
 		Output:             "",
 		Error:              errorMsg,
-		ClarificationError: errorutil.WithCode(errorutil.CommandExecution_concurrentGoalStateLimitExceeded, errors.New(errorMsg)),
+		ClarificationError: errorutil.EnsureClarification(errorutil.CommandExecution_concurrentGoalStateLimitExceeded, errors.New(errorMsg)),
 		StartTime:          time.Now().UTC().Format(time.RFC3339),
 		EndTime:            time.Now().UTC().Format(time.RFC3339),
 	}

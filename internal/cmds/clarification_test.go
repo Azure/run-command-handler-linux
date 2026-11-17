@@ -93,7 +93,7 @@ func mockCommandDependencies(t *testing.T) {
 func requireCommandCode(t *testing.T, expected int, err error) {
 	t.Helper()
 	require.Error(t, err)
-	actual, ok := errorutil.Code(err)
+	actual, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "unclassified error: %v", err)
 	require.Equal(t, expected, actual)
 }

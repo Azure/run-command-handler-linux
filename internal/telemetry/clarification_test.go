@@ -48,7 +48,7 @@ func TestTelemetryClarifications(t *testing.T) {
 				require.NoError(t, err)
 				err = w.Close()
 			}
-			code, ok := errorutil.Code(err)
+			code, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, tc.code, code)
 			if tc.code == errorutil.Os_ShortTelemetryFileWrite {
@@ -70,7 +70,7 @@ func TestTelemetryClarifications(t *testing.T) {
 	} {
 		s := newTelemetryEventSenderWithWriteCloser(tc.writer)
 		err := s.send(tc.event)
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, tc.code, code)
 	}
@@ -78,7 +78,7 @@ func TestTelemetryClarifications(t *testing.T) {
 	s := newTelemetryEventSenderWithWriteCloser(failingTelemetryWriter{writeErr: cause, closeErr: io.EOF})
 	err := s.send(telemetryEvent{})
 	require.ErrorIs(t, err, cause)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.Os_FailedToWriteTelemetryEvent, code)
 }

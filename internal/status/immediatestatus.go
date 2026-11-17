@@ -183,19 +183,19 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Internal_failedToMarshalImmediateStatus, fmt.Errorf("status: failed to marshal immediate status into json: %w", err))
+		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalImmediateStatus, fmt.Errorf("status: failed to marshal immediate status into json: %w", err))
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
 	response, err := o.Reporter.ReportStatus(o.ctx, string(rootStatusJson))
 
 	if err != nil {
-		return errorutil.WithCode(errorutil.HostGA_failedToReportImmediateStatus, errors.Wrap(err, "failed to report status to HGAP"))
+		return errorutil.EnsureClarification(errorutil.HostGA_failedToReportImmediateStatus, errors.Wrap(err, "failed to report status to HGAP"))
 	}
 	o.ctx.Log("message", fmt.Sprintf("Status received from request: %v", response.Status))
 
 	if response.StatusCode != 200 {
-		return errorutil.WithCode(errorutil.HostGA_immediateStatusReturnedErrorStatus, errors.New("failed to report status with error code "+response.Status))
+		return errorutil.EnsureClarification(errorutil.HostGA_immediateStatusReturnedErrorStatus, errors.New("failed to report status with error code "+response.Status))
 	}
 
 	return nil

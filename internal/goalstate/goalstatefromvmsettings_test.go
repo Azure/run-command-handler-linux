@@ -112,7 +112,7 @@ func Test_GetFilteredImmediateVMSettingsFailedToRetrieve(t *testing.T) {
 	badCommunicator := new(BadCommunicator)
 	_, _, err := goalstate.GetImmediateRunCommandGoalStates(ctx, badCommunicator, "")
 	require.ErrorContains(t, err, "failed to retrieve immediate VMSettings")
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.HostGA_failedToRetrieveVmSettings, code)
 	require.ErrorContains(t, err, "http expected failure")

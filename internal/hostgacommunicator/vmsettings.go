@@ -66,7 +66,7 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 	request, err := http.NewRequest("GET", u.url, nil)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to create request to %v", u.url)
-		return nil, errorutil.WithCode(errorutil.HostGA_failedToCreateVmSettings, errors.Wrap(err, errMsg))
+		return nil, errorutil.EnsureClarification(errorutil.HostGA_failedToCreateVmSettings, errors.Wrap(err, errMsg))
 	}
 
 	if eTag != "" {
@@ -78,7 +78,7 @@ func (u requestFactory) GetRequest(ctx *log.Context, eTag string) (*http.Request
 func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) {
 	he, err := readHandlerEnv()
 	if err != nil {
-		return false, errorutil.WithCode(errorutil.HostGA_failedToParseHandlerEnvironment, errors.Wrap(err, "failed to parse handlerenv"))
+		return false, errorutil.EnsureClarification(errorutil.HostGA_failedToParseHandlerEnvironment, errors.Wrap(err, "failed to parse handlerenv"))
 	}
 
 	configFolder := he.HandlerEnvironment.ConfigFolder
@@ -90,7 +90,7 @@ func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) 
 		}
 
 		if s.SettingsCertThumbprint == "" {
-			return false, errorutil.WithCode(errorutil.HostGA_missingSettingsCertificateThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
+			return false, errorutil.EnsureClarification(errorutil.HostGA_missingSettingsCertificateThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
 		}
 
 		// go two levels up where certs are placed (/var/lib/waagent)
@@ -100,7 +100,7 @@ func (goalState *ImmediateExtensionGoalState) ValidateSignature() (bool, error) 
 		for _, certificate := range []string{crt, prv} {
 			if _, err := statCertificate(certificate); err != nil {
 				message := fmt.Sprintf("Certificate %v needed by %v is unavailable in the goal state", s.SettingsCertThumbprint, s.ExtensionName)
-				return false, errorutil.WithCode(errorutil.HostGA_failedToDecryptProtectedSettings, errors.Wrap(err, message))
+				return false, errorutil.EnsureClarification(errorutil.HostGA_failedToDecryptProtectedSettings, errors.Wrap(err, message))
 			}
 		}
 	}

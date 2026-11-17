@@ -68,7 +68,7 @@ func HandleImmediateGoalState(ctx *log.Context, handlerName string, setting sett
 		return constants.ExitCode_Okay, nil
 	case <-time.After(goalStateTimeout):
 		ctx.Log("message", "timeout when trying to execute goal state")
-		return constants.ExitCode_ImmediateTaskTimeout, errorutil.WithCode(errorutil.CommandExecution_immediateGoalStateTimedOut, errors.New("timeout when trying to execute goal state"))
+		return constants.ExitCode_ImmediateTaskTimeout, errorutil.EnsureClarification(errorutil.CommandExecution_immediateGoalStateTimedOut, errors.New("timeout when trying to execute goal state"))
 	}
 }
 
@@ -79,17 +79,17 @@ func HandleImmediateGoalState(ctx *log.Context, handlerName string, setting sett
 // The instance view is normally added as a message to the status item.
 func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer.Notifier, goalStateKey types.GoalStateKey, statusType types.StatusType, instanceview *types.RunCommandInstanceView) error {
 	if notifier == nil {
-		return errorutil.WithCode(errorutil.Internal_nilGoalStateNotifier, errors.New("notifier is nil. Cannot report status to HGAP"))
+		return errorutil.EnsureClarification(errorutil.Internal_nilGoalStateNotifier, errors.New("notifier is nil. Cannot report status to HGAP"))
 	}
 	if instanceview == nil {
-		return errorutil.WithCode(errorutil.Internal_nilGoalStateInstanceView, errors.New("instance view is nil. Cannot report status to HGAP"))
+		return errorutil.EnsureClarification(errorutil.Internal_nilGoalStateInstanceView, errors.New("instance view is nil. Cannot report status to HGAP"))
 	}
 
 	extensionState := goalStateKey.RuntimeSettingsState
 	cmdToReport := statusToCommandMap[extensionState]
 	cmd, ok := commands.Cmds[cmdToReport]
 	if !ok {
-		return errorutil.WithCode(errorutil.Internal_unknownGoalStateCommand, errors.New(fmt.Sprintf("missing command %v", extensionState)))
+		return errorutil.EnsureClarification(errorutil.Internal_unknownGoalStateCommand, errors.New(fmt.Sprintf("missing command %v", extensionState)))
 	}
 
 	if !cmd.ShouldReportStatus {
@@ -99,12 +99,12 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 
 	msg, err := instanceview.Marshal()
 	if err != nil {
-		return errorutil.WithCode(errorutil.Internal_failedToMarshalGoalStateInstanceView, errors.Wrapf(err, "failed to marshal instance view"))
+		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalGoalStateInstanceView, errors.Wrapf(err, "failed to marshal instance view"))
 	}
 
 	statusItem, err := buildStatusItem(ctx, statusType, cmd, string(msg), goalStateKey.ExtensionName, instanceview.ClarificationError)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Internal_failedToCreateGoalStateStatus, errors.Wrap(err, "failed to get status item"))
+		return errorutil.EnsureClarification(errorutil.Internal_failedToCreateGoalStateStatus, errors.Wrap(err, "failed to get status item"))
 	}
 
 	ctx.Log("message", "reporting status of skipped goal state by notifying the observer to then send to HGAP")
@@ -119,11 +119,11 @@ func ReportFinalStatusForImmediateGoalState(ctx *log.Context, notifier *observer
 // The function to cleanup the command is overwritten to cleanup the command immediately after it has been executed.
 func startAsync(ctx *log.Context, handlerName string, setting settings.SettingsCommon, notifier *observer.Notifier, done chan bool, err chan error) {
 	if notifier == nil {
-		err <- errorutil.WithCode(errorutil.Internal_nilImmediateCommandNotifier, errors.New("notifier is nil. Cannot report status to HGAP"))
+		err <- errorutil.EnsureClarification(errorutil.Internal_nilImmediateCommandNotifier, errors.New("notifier is nil. Cannot report status to HGAP"))
 		return
 	}
 	if setting.ExtensionState == nil || setting.ExtensionName == nil || setting.SeqNo == nil {
-		err <- errorutil.WithCode(errorutil.Internal_incompleteImmediateCommandGoalState, errors.New("goal state is missing extension state, extension name or sequence number"))
+		err <- errorutil.EnsureClarification(errorutil.Internal_incompleteImmediateCommandGoalState, errors.New("goal state is missing extension state, extension name or sequence number"))
 		return
 	}
 
@@ -133,7 +133,7 @@ func startAsync(ctx *log.Context, handlerName string, setting settings.SettingsC
 	cmdToReport := statusToCommandMap[extensionState]
 	cmd, ok := commands.Cmds[cmdToReport]
 	if !ok {
-		err <- errorutil.WithCode(errorutil.Internal_unknownImmediateCommand, errors.New(fmt.Sprintf("missing command %v", extensionState)))
+		err <- errorutil.EnsureClarification(errorutil.Internal_unknownImmediateCommand, errors.New(fmt.Sprintf("missing command %v", extensionState)))
 		return
 	}
 
@@ -149,7 +149,7 @@ func startAsync(ctx *log.Context, handlerName string, setting settings.SettingsC
 		if statusType != types.StatusTransitioning {
 			var view types.RunCommandInstanceView
 			if err := json.Unmarshal([]byte(msg), &view); err != nil {
-				terminalReportErr = errorutil.WithCode(errorutil.Internal_failedToParseImmediateInstanceView, errors.Wrap(err, "failed to unmarshal immediate command instance view"))
+				terminalReportErr = errorutil.EnsureClarification(errorutil.Internal_failedToParseImmediateInstanceView, errors.Wrap(err, "failed to unmarshal immediate command instance view"))
 				return terminalReportErr
 			}
 			view.ClarificationError = metadata.ClarificationError
@@ -158,7 +158,7 @@ func startAsync(ctx *log.Context, handlerName string, setting settings.SettingsC
 
 		statusItem, err := buildStatusItem(ctx, statusType, c, msg, metadata.ExtName, metadata.ClarificationError)
 		if err != nil {
-			reportErr := errorutil.WithCode(errorutil.Internal_failedToCreateImmediateCommandStatus, errors.Wrap(err, "failed to get status item"))
+			reportErr := errorutil.EnsureClarification(errorutil.Internal_failedToCreateImmediateCommandStatus, errors.Wrap(err, "failed to get status item"))
 			if terminalResult != nil {
 				terminalReportErr = reportErr
 			}
@@ -209,7 +209,7 @@ func startAsync(ctx *log.Context, handlerName string, setting settings.SettingsC
 		}
 	}
 	if commandErr != nil {
-		err <- errorutil.WithCode(errorutil.Internal_failedToProcessImmediateCommand, errors.Wrap(commandErr, "failed to process immediate handler command"))
+		err <- errorutil.EnsureClarification(errorutil.Internal_failedToProcessImmediateCommand, errors.Wrap(commandErr, "failed to process immediate handler command"))
 		return
 	}
 	if terminalReportErr != nil {

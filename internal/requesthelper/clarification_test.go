@@ -51,7 +51,7 @@ func TestRequestClarifications(t *testing.T) {
 		if resp != nil {
 			resp.Body.Close()
 		}
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
 		require.Equal(t, want, code)
 		if want != errorutil.HostGA_requestReturnedErrorStatus {
@@ -69,7 +69,7 @@ func TestRequestRetriesThroughClarification(t *testing.T) {
 		return nil, temporaryClarificationError{}
 	})
 	_, err := WithRetries(ctx, rm, func(time.Duration) { sleeps++ }, "")
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.HostGA_failedToSendRequest, code)
 	require.Equal(t, expRetryN, attempts)

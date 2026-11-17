@@ -21,7 +21,7 @@ func Test_reportStatus_fails(t *testing.T) {
 	metadata := types.NewRCMetadata("", 1, constants.DownloadFolder, constants.DataDir)
 	err := ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusSuccess, types.CmdEnableTemplate, "")
 	require.NotNil(t, err)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.Os_FailedToCreateTemporaryStatusFile, code)
 	require.Contains(t, err.Error(), "failed to save handler status")
@@ -37,7 +37,7 @@ func Test_reportStatus_fileExists(t *testing.T) {
 	fakeEnv.HandlerEnvironment.StatusFolder = tmpDir
 
 	metadata := types.NewRCMetadata(extName, 1, constants.DownloadFolder, constants.DataDir)
-	metadata.ClarificationError = errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("FOO ERROR"))
+	metadata.ClarificationError = errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("FOO ERROR"))
 	require.Nil(t, ReportStatusToLocalFile(log.NewContext(log.NewNopLogger()), fakeEnv, metadata, types.StatusError, types.CmdEnableTemplate, "FOO ERROR"))
 
 	path := filepath.Join(tmpDir, "first.1.status")

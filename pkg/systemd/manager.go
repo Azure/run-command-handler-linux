@@ -50,37 +50,37 @@ func NewUnitManager() *Manager {
 func (mgr *Manager) StartUnit(unitName string, ctx *log.Context) error {
 	ctx.Log("message", "running command to start unit")
 	_, err := runSystemctl(systemctl_start, unitName)
-	return errorutil.WithCode(errorutil.Systemd_failedToStartUnit, errors.Wrap(err, "failed to start systemd unit"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToStartUnit, errors.Wrap(err, "failed to start systemd unit"))
 }
 
 func (mgr *Manager) StopUnit(unitName string, ctx *log.Context) error {
 	ctx.Log("message", "running command to stop unit")
 	_, err := runSystemctl(systemctl_stop, unitName)
-	return errorutil.WithCode(errorutil.Systemd_failedToStopUnit, errors.Wrap(err, "failed to stop systemd unit"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToStopUnit, errors.Wrap(err, "failed to stop systemd unit"))
 }
 
 func (mgr *Manager) EnableUnit(unitName string, ctx *log.Context) error {
 	ctx.Log("message", "running command to enable unit")
 	_, err := runSystemctl(systemctl_enable, unitName)
-	return errorutil.WithCode(errorutil.Systemd_failedToEnableUnit, errors.Wrap(err, "failed to enable systemd unit"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToEnableUnit, errors.Wrap(err, "failed to enable systemd unit"))
 }
 
 func (mgr *Manager) DisableUnit(unitName string, ctx *log.Context) error {
 	ctx.Log("message", "running command to disable unit")
 	_, err := runSystemctl(systemctl_disable, unitName)
-	return errorutil.WithCode(errorutil.Systemd_failedToDisableUnit, errors.Wrap(err, "failed to disable systemd unit"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToDisableUnit, errors.Wrap(err, "failed to disable systemd unit"))
 }
 
 func (mgr *Manager) DaemonReload(unitName string, ctx *log.Context) error {
 	ctx.Log("message", "running command to reload daemon")
 	_, err := runSystemctl(systemctl_daemonreload)
-	return errorutil.WithCode(errorutil.Systemd_failedToReloadDaemon, errors.Wrap(err, "failed to reload systemd daemon"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToReloadDaemon, errors.Wrap(err, "failed to reload systemd daemon"))
 }
 
 func (mgr *Manager) IsUnitActive(unitName string, ctx *log.Context) error {
 	ctx.Log("message", "running command to check if unit is active")
 	_, err := runSystemctl(systemctl_isactive, unitName)
-	return errorutil.WithCode(errorutil.Systemd_failedToCheckUnitActivity, errors.Wrap(err, "failed to check systemd unit activity"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToCheckUnitActivity, errors.Wrap(err, "failed to check systemd unit activity"))
 }
 
 func (mgr *Manager) IsUnitEnabled(unitName string, ctx *log.Context) (bool, error) {
@@ -94,7 +94,7 @@ func (mgr *Manager) IsUnitEnabled(unitName string, ctx *log.Context) (bool, erro
 		return false, nil
 	}
 
-	return false, errorutil.WithCode(errorutil.Systemd_failedToCheckUnitEnabled, errors.Wrap(err, "failed to check whether systemd unit is enabled"))
+	return false, errorutil.EnsureClarification(errorutil.Systemd_failedToCheckUnitEnabled, errors.Wrap(err, "failed to check whether systemd unit is enabled"))
 }
 
 func (mgr *Manager) IsUnitInstalled(unitName string, ctx *log.Context) (bool, error) {
@@ -109,7 +109,7 @@ func (mgr *Manager) IsUnitInstalled(unitName string, ctx *log.Context) (bool, er
 	if os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
-		return false, errorutil.WithCode(errorutil.Systemd_failedToCheckUnitFile, errors.Wrap(err, "Error occurred while checking file existence"))
+		return false, errorutil.EnsureClarification(errorutil.Systemd_failedToCheckUnitFile, errors.Wrap(err, "Error occurred while checking file existence"))
 	}
 
 	return true, nil
@@ -122,7 +122,7 @@ func (*Manager) CreateUnitConfigurationFile(unitName string, content []byte, ctx
 	}
 
 	ctx.Log("message", "creating unit configuration file in "+unitConfigPath)
-	return errorutil.WithCode(errorutil.Systemd_failedToWriteUnitConfiguration, errors.Wrap(writeUnitFile(unitConfigPath, content, unitConfigurationFilePermission), "failed to write systemd unit configuration"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToWriteUnitConfiguration, errors.Wrap(writeUnitFile(unitConfigPath, content, unitConfigurationFilePermission), "failed to write systemd unit configuration"))
 }
 
 func (*Manager) RemoveUnitConfigurationFile(unitName string, ctx *log.Context) error {
@@ -132,7 +132,7 @@ func (*Manager) RemoveUnitConfigurationFile(unitName string, ctx *log.Context) e
 	}
 
 	ctx.Log("message", "removing unit configuration file from "+unitConfigPath)
-	return errorutil.WithCode(errorutil.Systemd_failedToRemoveUnitConfiguration, errors.Wrap(removeUnitFile(unitConfigPath), "failed to remove systemd unit configuration"))
+	return errorutil.EnsureClarification(errorutil.Systemd_failedToRemoveUnitConfiguration, errors.Wrap(removeUnitFile(unitConfigPath), "failed to remove systemd unit configuration"))
 }
 
 // Gets the installed version of the extension. The version will look at the service definition and extract it from the
@@ -147,7 +147,7 @@ func (*Manager) GetInstalledVersion(unitName string, ctx *log.Context) (string, 
 	ctx.Log("message", "getting content from "+unitConfigPath)
 	content, err := readUnitFile(unitConfigPath)
 	if err != nil {
-		return "", errorutil.WithCode(errorutil.Systemd_failedToReadUnitConfiguration, errors.Wrap(err, "failed to read systemd unit configuration"))
+		return "", errorutil.EnsureClarification(errorutil.Systemd_failedToReadUnitConfiguration, errors.Wrap(err, "failed to read systemd unit configuration"))
 	}
 	return versionutil.ExtractFromServiceDefinition(string(content), ctx)
 }

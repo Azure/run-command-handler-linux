@@ -46,7 +46,7 @@ WantedBy=multi-user.target`
 func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventManager) error {
 	if !isSystemdSupported(ctx) {
 		reportServiceError(extensionEvents, "register", "Systemd not supported. Failed to register service")
-		return errorutil.WithCode(errorutil.Os_SystemdNotSupported, errors.New("Systemd not supported. Failed to register service"))
+		return errorutil.EnsureClarification(errorutil.Os_SystemdNotSupported, errors.New("Systemd not supported. Failed to register service"))
 	}
 	targetVersion := os.Getenv(constants.VersionEnvName)
 	ctx.Log("message", "trying to register extension with version: "+targetVersion)
@@ -81,7 +81,7 @@ func Register(ctx *log.Context, extensionEvents *extensionevents.ExtensionEventM
 	if err != nil {
 		errMessage := fmt.Sprintf("Error while marking the immediate run command binary as executable: %v", err)
 		reportServiceError(extensionEvents, "register", errMessage)
-		return errorutil.WithCode(errorutil.Os_FailedToMakeServiceBinaryExecutable, errors.Wrap(err, "error while marking the immediate run command binary as executable"))
+		return errorutil.EnsureClarification(errorutil.Os_FailedToMakeServiceBinaryExecutable, errors.Wrap(err, "error while marking the immediate run command binary as executable"))
 	}
 
 	err = serviceHandler.Register(ctx, systemdUnitContent)

@@ -147,7 +147,7 @@ func TestExecutionClarificationErrors(t *testing.T) {
 				path = "/unexpected/script.sh"
 			}
 			_, err := Exec(testContext, path, "/mock/workdir", out, stderr, &cfg)
-			code, ok := errorutil.Code(err)
+			code, ok := errorutil.FindClarification(err)
 			require.True(t, ok, "error was not classified: %v", err)
 			require.Equal(t, test.code, code)
 			require.True(t, out.closed)
@@ -170,7 +170,7 @@ func TestOutputFileClarificationErrors(t *testing.T) {
 				return out, nil
 			}
 			err, _ := ExecCmdInDir(testContext, "unused", "/mock", &handlersettings.HandlerSettings{})
-			actual, ok := errorutil.Code(err)
+			actual, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, code, actual)
 			if code == errorutil.Os_FailedToOpenStdErr {
@@ -182,10 +182,10 @@ func TestOutputFileClarificationErrors(t *testing.T) {
 
 func TestExecutionPreservesLowerClarification(t *testing.T) {
 	mockExecution(t)
-	cause := errorutil.WithCode(errorutil.CustomerInput_invalidSettingsJson, errors.New("lower failure"))
+	cause := errorutil.EnsureClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("lower failure"))
 	runCommand = func(*osexec.Cmd) error { return cause }
 	_, err := Exec(testContext, "unused", "/mock", &clarificationFile{}, &clarificationFile{}, &handlersettings.HandlerSettings{})
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.CustomerInput_invalidSettingsJson, code)
 	require.ErrorIs(t, err, cause)

@@ -566,7 +566,7 @@ func Test_reportStatusToEndpointNotFound(t *testing.T) {
 
 func requireImmediateStatusCode(t *testing.T, err error, want int) {
 	t.Helper()
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "expected classified error: %v", err)
 	require.Equal(t, want, code)
 }

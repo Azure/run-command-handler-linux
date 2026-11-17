@@ -58,7 +58,7 @@ func StringToAllowedScriptTypeFlag(s string) (AllowedScriptTypeFlag, error) {
 			flag |= AllowAll
 		// TO-DO: consider the case where 'none' scripts are allowed to run.
 		default:
-			return 0, errorutil.WithCode(errorutil.ExtensionPolicySettings_invalidPolicyFileFormat, fmt.Errorf("Unknown script type in policy: %s", part))
+			return 0, errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_invalidPolicyFileFormat, fmt.Errorf("Unknown script type in policy: %s", part))
 		}
 	}
 	return flag, nil
@@ -97,13 +97,13 @@ func (rceps RCv2ExtensionPolicySettings) ValidateFormat() error {
 	// 3. If DownloadedScriptsAllowlist is not empty, limit scripts must allow "downloaded" scripts.
 	if len(rceps.DownloadedScriptsAllowlist) > 0 {
 		if (flag & AllowedDownloaded) == 0 {
-			return errorutil.WithCode(errorutil.ExtensionPolicySettings_inconsistentDownloadedScriptAllowlist, fmt.Errorf("DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts"))
+			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_inconsistentDownloadedScriptAllowlist, fmt.Errorf("DownloadedScriptsAllowlist not empty, but LimitScripts does not allow 'downloaded' scripts"))
 		}
 	}
 	// 4. If CommandIdAllowlist is not empty, limit scripts must allow "commandId" scripts.
 	if len(rceps.CommandIdAllowlist) > 0 {
 		if (flag & AllowedCommandId) == 0 {
-			return errorutil.WithCode(errorutil.ExtensionPolicySettings_inconsistentCommandIdAllowlist, fmt.Errorf("CommandIdAllowlist not empty, but LimitScripts does not allow 'commandId' scripts"))
+			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_inconsistentCommandIdAllowlist, fmt.Errorf("CommandIdAllowlist not empty, but LimitScripts does not allow 'commandId' scripts"))
 		}
 	}
 	return nil
@@ -117,26 +117,26 @@ func CompareScriptTypeToAllowedScriptType(scriptType handlersettings.ScriptType,
 	switch scriptType {
 	case handlersettings.InlineScript:
 		if (allowedScriptTypes & Inline) == 0 {
-			return errorutil.WithCode(errorutil.ExtensionPolicySettings_scriptNotAllowed, fmt.Errorf("inline scripts are not allowed by policy"))
+			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_scriptNotAllowed, fmt.Errorf("inline scripts are not allowed by policy"))
 		}
 	case handlersettings.DownloadedScript:
 		if (allowedScriptTypes & AllowedDownloaded) == 0 {
-			return errorutil.WithCode(errorutil.ExtensionPolicySettings_downloadedScriptTypeNotAllowed, fmt.Errorf("downloaded scripts are not allowed by policy"))
+			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_downloadedScriptTypeNotAllowed, fmt.Errorf("downloaded scripts are not allowed by policy"))
 		}
 	case handlersettings.GalleryScript:
 		if (allowedScriptTypes & Gallery) == 0 {
-			return errorutil.WithCode(errorutil.ExtensionPolicySettings_galleryScriptNotAllowed, fmt.Errorf("gallery scripts are not allowed by policy"))
+			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_galleryScriptNotAllowed, fmt.Errorf("gallery scripts are not allowed by policy"))
 		}
 	case handlersettings.DiagnosticScript:
 		if (allowedScriptTypes & Diagnostic) == 0 {
-			return errorutil.WithCode(errorutil.ExtensionPolicySettings_diagnosticScriptNotAllowed, fmt.Errorf("diagnostic scripts are not allowed by policy"))
+			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_diagnosticScriptNotAllowed, fmt.Errorf("diagnostic scripts are not allowed by policy"))
 		}
 	case handlersettings.CommandIdScript:
 		if (allowedScriptTypes & AllowedCommandId) == 0 {
-			return errorutil.WithCode(errorutil.ExtensionPolicySettings_commandIdScriptNotAllowed, fmt.Errorf("commandId scripts are not allowed by policy"))
+			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_commandIdScriptNotAllowed, fmt.Errorf("commandId scripts are not allowed by policy"))
 		}
 	default:
-		return errorutil.WithCode(errorutil.ExtensionPolicySettings_unknownScriptType, fmt.Errorf("unknown script type: %v", scriptType))
+		return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_unknownScriptType, fmt.Errorf("unknown script type: %v", scriptType))
 	}
 	return nil
 }

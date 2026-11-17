@@ -21,13 +21,13 @@ func TestSettingsClarifications(t *testing.T) {
 		t.Run(tc.input, func(t *testing.T) {
 			var settings SettingsCommon
 			err := json.Unmarshal([]byte(tc.input), &settings)
-			code, ok := errorutil.Code(err)
+			code, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, tc.code, code)
 		})
 	}
 	_, err := (SettingsCommon{PublicSettings: map[string]interface{}{"bad": make(chan int)}}).MarshalJSON()
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.Internal_failedToMarshalPublicSettings, code)
 	for _, input := range []string{`{}`, `{"publicSettings":null}`, `{"publicSettings":{}}`, `{"publicSettings":"{}"}`} {

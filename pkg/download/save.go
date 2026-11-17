@@ -24,16 +24,16 @@ var openDownloadFile = func(path string, flag int, mode os.FileMode) (io.WriteCl
 func SaveTo(ctx *log.Context, downloaders []Downloader, dst string, mode os.FileMode) (int64, error) {
 	f, err := openDownloadFile(dst, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
-		return 0, errorutil.WithCode(errorutil.FileDownload_failedToOpenDestination, errors.Wrapf(err, "failed to open file for writing: %s", dst))
+		return 0, errorutil.EnsureClarification(errorutil.FileDownload_failedToOpenDestination, errors.Wrapf(err, "failed to open file for writing: %s", dst))
 	}
 	defer f.Close()
 
 	body, err := WithRetries(ctx, downloaders, ActualSleep)
 	if err != nil {
-		return 0, errorutil.WithCode(errorutil.Internal_failedToDownloadToFile, errors.Wrapf(err, "failed to download file '%s'", dst))
+		return 0, errorutil.EnsureClarification(errorutil.Internal_failedToDownloadToFile, errors.Wrapf(err, "failed to download file '%s'", dst))
 	}
 	defer body.Close()
 
 	n, err := io.CopyBuffer(f, body, make([]byte, writeBufSize))
-	return n, errorutil.WithCode(errorutil.FileDownload_failedToWriteDestination, errors.Wrapf(err, "failed to write to file: %s", dst))
+	return n, errorutil.EnsureClarification(errorutil.FileDownload_failedToWriteDestination, errors.Wrapf(err, "failed to write to file: %s", dst))
 }

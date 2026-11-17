@@ -66,10 +66,10 @@ func UnmarshalHandlerSettings(publicSettings, protectedSettings map[string]inter
 func unmarshalSettings(in interface{}, v interface{}) error {
 	s, err := json.Marshal(in)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Internal_failedToMarshalHandlerSettings, fmt.Errorf("failed to marshal into json: %w", err))
+		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalHandlerSettings, fmt.Errorf("failed to marshal into json: %w", err))
 	}
 	if err := json.Unmarshal(s, &v); err != nil {
-		return errorutil.WithCode(errorutil.CustomerInput_invalidHandlerSettingsJson, fmt.Errorf("failed to unmarshal json: %w", err))
+		return errorutil.EnsureClarification(errorutil.CustomerInput_invalidHandlerSettingsJson, fmt.Errorf("failed to unmarshal json: %w", err))
 	}
 	return nil
 }
@@ -79,7 +79,7 @@ func unmarshalSettings(in interface{}, v interface{}) error {
 func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) {
 	b, err := readSettingsFile(path)
 	if err != nil {
-		return h, errorutil.WithCode(errorutil.Os_FailedToReadHandlerSettings, fmt.Errorf("error reading %s: %w", path, err))
+		return h, errorutil.EnsureClarification(errorutil.Os_FailedToReadHandlerSettings, fmt.Errorf("error reading %s: %w", path, err))
 	}
 	if len(b) == 0 { // if no config is specified, we get an empty file
 		return h, nil
@@ -87,10 +87,10 @@ func parseHandlerSettingsFile(path string) (h settings.SettingsCommon, _ error) 
 
 	var f HandlerSettingsFile
 	if err := json.Unmarshal(b, &f); err != nil {
-		return h, errorutil.WithCode(errorutil.Internal_badConfig, fmt.Errorf("error parsing json: %w", err))
+		return h, errorutil.EnsureClarification(errorutil.Internal_badConfig, fmt.Errorf("error parsing json: %w", err))
 	}
 	if len(f.RuntimeSettings) != 1 {
-		return h, errorutil.WithCode(errorutil.CustomerInput_unexpectedRuntimeSettingsCount, fmt.Errorf("wrong runtimeSettings count. expected:1, got:%d", len(f.RuntimeSettings)))
+		return h, errorutil.EnsureClarification(errorutil.CustomerInput_unexpectedRuntimeSettingsCount, fmt.Errorf("wrong runtimeSettings count. expected:1, got:%d", len(f.RuntimeSettings)))
 	}
 	return f.RuntimeSettings[0].HandlerSettings, nil
 }
@@ -103,12 +103,12 @@ func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon,
 		return nil
 	}
 	if hs.SettingsCertThumbprint == "" {
-		return errorutil.WithCode(errorutil.CustomerInput_missingCertificateThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
+		return errorutil.EnsureClarification(errorutil.CustomerInput_missingCertificateThumbprint, errors.New("HandlerSettings has protected settings but no cert thumbprint"))
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(hs.ProtectedSettingsBase64)
 	if err != nil {
-		return errorutil.WithCode(errorutil.CustomerInput_invalidProtectedSettingsBase64, fmt.Errorf("failed to decode base64: %w", err))
+		return errorutil.EnsureClarification(errorutil.CustomerInput_invalidProtectedSettingsBase64, fmt.Errorf("failed to decode base64: %w", err))
 	}
 
 	// go two levels up where certs are placed (/var/lib/waagent)
@@ -118,17 +118,17 @@ func unmarshalProtectedSettings(configFolder string, hs settings.SettingsCommon,
 	// Prefer cms for FIPS 140-3, falling back to smime on older installations.
 	output, stderr, err := decryptSettings("cms", crt, prv, decoded)
 	if err != nil {
-		cmsErr := errorutil.WithCode(errorutil.Os_FailedToDecryptSettingsWithCms, fmt.Errorf("decrypting protected settings with cms command failed: error=%w stderr=%s", err, stderr))
+		cmsErr := errorutil.EnsureClarification(errorutil.Os_FailedToDecryptSettingsWithCms, fmt.Errorf("decrypting protected settings with cms command failed: error=%w stderr=%s", err, stderr))
 		output, stderr, err = decryptSettings("smime", crt, prv, decoded)
 		if err != nil {
-			smimeErr := errorutil.WithCode(errorutil.Os_FailedToDecryptSettingsWithSmime, fmt.Errorf("decrypting protected settings with smime command failed: error=%w stderr=%s", err, stderr))
+			smimeErr := errorutil.EnsureClarification(errorutil.Os_FailedToDecryptSettingsWithSmime, fmt.Errorf("decrypting protected settings with smime command failed: error=%w stderr=%s", err, stderr))
 			return fmt.Errorf("%w; previous attempt: %w", smimeErr, cmsErr)
 		}
 	}
 
 	// decrypted: json object for protected settings
 	if err := json.Unmarshal(output, &v); err != nil {
-		return errorutil.WithCode(errorutil.CustomerInput_invalidDecryptedSettingsJson, fmt.Errorf("failed to unmarshal decrypted settings json: %w", err))
+		return errorutil.EnsureClarification(errorutil.CustomerInput_invalidDecryptedSettingsJson, fmt.Errorf("failed to unmarshal decrypted settings json: %w", err))
 	}
 	return nil
 }

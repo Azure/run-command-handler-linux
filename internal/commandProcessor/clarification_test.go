@@ -31,7 +31,7 @@ func TestCommandFailurePreservesClarificationAndDeploymentBehavior(t *testing.T)
 		for _, settingsFailure := range []bool{false, true} {
 			t.Run(strconv.FormatBool(treatAsFailure)+strconv.FormatBool(settingsFailure), func(t *testing.T) {
 				mockProcessor(t)
-				cause := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("original script error"))
+				cause := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("original script error"))
 				readHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
 					cfg := handlersettings.HandlerSettings{}
 					cfg.PublicSettings.TreatFailureAsDeploymentFailure = treatAsFailure
@@ -125,7 +125,7 @@ func TestProcessorClarificationErrors(t *testing.T) {
 				require.Contains(t, output.String(), "clarificationCode="+strconv.Itoa(errorutil.Os_FailedToDeleteRuntimePolicy))
 				return
 			}
-			actual, ok := errorutil.Code(err)
+			actual, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, code, actual)
 		})
@@ -134,7 +134,7 @@ func TestProcessorClarificationErrors(t *testing.T) {
 
 func TestReportingFailureDoesNotReplaceCommandError(t *testing.T) {
 	mockProcessor(t)
-	cause := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("script failed"))
+	cause := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("script failed"))
 	readHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
 		cfg := handlersettings.HandlerSettings{}
 		cfg.PublicSettings.TreatFailureAsDeploymentFailure = true
@@ -151,21 +151,21 @@ func TestReportingFailureDoesNotReplaceCommandError(t *testing.T) {
 			if calls == 2 {
 				report := processorStatusReport(t, ctx, metadata, state, cmd, message)
 				requireProcessorStatusCode(t, report, errorutil.CommandExecution_failureExitCode)
-				return errorutil.WithCode(errorutil.Os_FailedToPublishStatusFile, errors.New("status failed"))
+				return errorutil.EnsureClarification(errorutil.Os_FailedToPublishStatusFile, errors.New("status failed"))
 			}
 			return nil
 		},
 	})
 	err := ProcessHandlerCommandWithDetails(log.NewContext(log.NewNopLogger()), cmd, types.HandlerEnvironment{}, "command", 1, "download", "/mock")
 	require.ErrorIs(t, err, cause)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.CommandExecution_failureExitCode, code)
 }
 
 func requireProcessorCode(t *testing.T, err error, want int) {
 	t.Helper()
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "expected classified error: %v", err)
 	require.Equal(t, want, code)
 }
@@ -176,7 +176,7 @@ func TestPrecheckClarificationStatus(t *testing.T) {
 		code     int
 	}{
 		{errors.New("unclassified precheck failure"), errorutil.Internal_unclassifiedPrecheckFailure},
-		{errorutil.WithCode(errorutil.CustomerInput_invalidSettingsJson, errors.New("classified precheck failure")), errorutil.CustomerInput_invalidSettingsJson},
+		{errorutil.EnsureClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("classified precheck failure")), errorutil.CustomerInput_invalidSettingsJson},
 		// Already processed is intentional control flow, not a production failure.
 		{types.ErrAlreadyProcessed, 0},
 	} {
@@ -188,7 +188,7 @@ func TestPrecheckClarificationStatus(t *testing.T) {
 				ReportStatus: func(_ *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, state types.StatusType, _ types.Cmd, _ string) error {
 					reported = true
 					require.Equal(t, types.StatusError, state)
-					code, ok := errorutil.Code(metadata.ClarificationError)
+					code, ok := errorutil.FindClarification(metadata.ClarificationError)
 					require.True(t, ok)
 					require.Equal(t, tc.code, code)
 					report := processorStatusReport(t, log.NewContext(log.NewNopLogger()), metadata, state, types.CmdEnableTemplate, "precheck failed")
@@ -201,7 +201,7 @@ func TestPrecheckClarificationStatus(t *testing.T) {
 			if tc.code != 0 {
 				requireProcessorCode(t, err, tc.code)
 			} else {
-				_, classified := errorutil.Code(err)
+				_, classified := errorutil.FindClarification(err)
 				require.False(t, classified, "already-processed control flow must remain unclassified")
 			}
 			require.Equal(t, !errors.Is(original, types.ErrAlreadyProcessed), reported)

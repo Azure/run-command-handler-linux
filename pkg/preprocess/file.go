@@ -33,13 +33,13 @@ func IsTextFile(path string) (bool, error) {
 	}
 	f, err := openTextFile(path)
 	if err != nil {
-		return false, errorutil.WithCode(errorutil.Os_FailedToOpenTextFile, errors.Wrap(err, "failed to open file"))
+		return false, errorutil.EnsureClarification(errorutil.Os_FailedToOpenTextFile, errors.Wrap(err, "failed to open file"))
 	}
 	defer f.Close()
 	b := make([]byte, peekLen)
 	_, err = f.Read(b)
 	if err != nil && err != io.EOF {
-		return false, errorutil.WithCode(errorutil.Os_FailedToReadTextFile, errors.Wrap(err, "failed to read file"))
+		return false, errorutil.EnsureClarification(errorutil.Os_FailedToReadTextFile, errors.Wrap(err, "failed to read file"))
 	}
 	return hasShebang(b), nil
 }

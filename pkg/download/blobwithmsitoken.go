@@ -57,15 +57,15 @@ var MockReturnErrorForMockMsiDownloader = false // Used only for test
 func (self *blobWithMsiToken) GetRequest() (*http.Request, error) {
 	msi, err := self.msiProvider()
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.Msi_failedToGetDownloadToken, err)
+		return nil, errorutil.EnsureClarification(errorutil.Msi_failedToGetDownloadToken, err)
 	}
 	if msi.AccessToken == "" {
-		return nil, errorutil.WithCode(errorutil.Msi_emptyToken, errors.New("MSI token is empty"))
+		return nil, errorutil.EnsureClarification(errorutil.Msi_emptyToken, errors.New("MSI token is empty"))
 	}
 
 	request, err := http.NewRequest(http.MethodGet, self.url, nil)
 	if err != nil {
-		return nil, errorutil.WithCode(errorutil.CustomerInput_invalidMsiDownloadUrl, err)
+		return nil, errorutil.EnsureClarification(errorutil.CustomerInput_invalidMsiDownloadUrl, err)
 	}
 
 	request.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())
@@ -86,7 +86,7 @@ func (prodMsiDownloader ProdMsiDownloader) GetMsiProvider(blobUri string) MsiPro
 	return func() (msi.Msi, error) {
 		msi, err := msiProvider.GetMsiForResource(GetResourceNameFromBlobUri(blobUri))
 		if err != nil {
-			return msi, errorutil.WithCode(errorutil.Msi_failedToGetSystemIdentity, errors.Wrapf(err, "Unable to get managed identity. "+
+			return msi, errorutil.EnsureClarification(errorutil.Msi_failedToGetSystemIdentity, errors.Wrapf(err, "Unable to get managed identity. "+
 				"Please make sure that system assigned managed identity is enabled on the VM "+
 				"or user assigned identity is added to the system."))
 		}
@@ -102,7 +102,7 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProvider(blobUri string) MsiPro
 			Resource:    "Msi by System Identity for blob " + blobUri,
 		}
 		if MockReturnErrorForMockMsiDownloader {
-			return mockMsi, errorutil.WithCode(errorutil.Imds_mockSystemIdentityError, errors.New("Error getting msi"))
+			return mockMsi, errorutil.EnsureClarification(errorutil.Imds_mockSystemIdentityError, errors.New("Error getting msi"))
 		} else {
 			return mockMsi, nil
 		}
@@ -116,7 +116,7 @@ func (prodMsiDownloader ProdMsiDownloader) GetMsiProviderByClientId(blobUri, cli
 	return func() (msi.Msi, error) {
 		msi, err := msiProvider.GetMsiUsingClientId(clientId, GetResourceNameFromBlobUri(blobUri))
 		if err != nil {
-			return msi, errorutil.WithCode(errorutil.Msi_failedToGetClientIdentity, errors.Wrapf(err, "Unable to get managed identity with client id %s. "+
+			return msi, errorutil.EnsureClarification(errorutil.Msi_failedToGetClientIdentity, errors.Wrapf(err, "Unable to get managed identity with client id %s. "+
 				"Please make sure that the user assigned managed identity is added to the VM ", clientId))
 		}
 		return msi, nil
@@ -131,7 +131,7 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProviderByClientId(blobUri stri
 			Resource:    "Msi by clientId for blob " + blobUri,
 		}
 		if MockReturnErrorForMockMsiDownloader {
-			return mockMsi, errorutil.WithCode(errorutil.Imds_mockClientIdentityError, errors.New("Error getting msi"))
+			return mockMsi, errorutil.EnsureClarification(errorutil.Imds_mockClientIdentityError, errors.New("Error getting msi"))
 		} else {
 			return mockMsi, nil
 		}
@@ -144,7 +144,7 @@ func (prodMsiDownloader ProdMsiDownloader) GetMsiProviderByObjectId(blobUri, obj
 	return func() (msi.Msi, error) {
 		msi, err := msiProvider.GetMsiUsingObjectId(objectId, GetResourceNameFromBlobUri(blobUri))
 		if err != nil {
-			return msi, errorutil.WithCode(errorutil.Msi_failedToGetObjectIdentity, errors.Wrapf(err, "Unable to get managed identity with object id %s. "+
+			return msi, errorutil.EnsureClarification(errorutil.Msi_failedToGetObjectIdentity, errors.Wrapf(err, "Unable to get managed identity with object id %s. "+
 				"Please make sure that the user assigned managed identity is added to the VM ", objectId))
 		}
 		return msi, nil
@@ -159,7 +159,7 @@ func (mockMsiDownloader MockMsiDownloader) GetMsiProviderByObjectId(blobUri, obj
 			Resource:    "Msi by objectId for blob " + blobUri,
 		}
 		if MockReturnErrorForMockMsiDownloader {
-			return mockMsi, errorutil.WithCode(errorutil.Imds_mockObjectIdentityError, errors.New("Error getting msi"))
+			return mockMsi, errorutil.EnsureClarification(errorutil.Imds_mockObjectIdentityError, errors.New("Error getting msi"))
 		} else {
 			return mockMsi, nil
 		}

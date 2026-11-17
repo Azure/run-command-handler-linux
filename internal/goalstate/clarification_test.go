@@ -34,7 +34,7 @@ func TestGoalStateClarifications(t *testing.T) {
 	cause := errors.New("goal state failure")
 	assertCode := func(err error, want int) {
 		t.Helper()
-		code, ok := errorutil.Code(err)
+		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok, "%v", err)
 		require.Equal(t, want, code)
 	}
@@ -107,7 +107,7 @@ func TestGoalStateStatusCarriesClarification(t *testing.T) {
 	oldExecute, oldBuild := executeImmediateCommand, buildStatusItem
 	t.Cleanup(func() { executeImmediateCommand, buildStatusItem = oldExecute, oldBuild })
 	ctx := log.NewContext(log.NewLogfmtLogger(io.Discard))
-	lower := errorutil.WithCode(errorutil.CustomerInput_invalidSettingsJson, errors.New("customer error"))
+	lower := errorutil.EnsureClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("customer error"))
 	calls := 0
 	buildStatusItem = func(ctx *log.Context, state types.StatusType, cmd types.Cmd, message string, name string, clarifications ...error) (types.StatusItem, error) {
 		require.Equal(t, []error{lower}, clarifications)
@@ -154,7 +154,7 @@ func TestImmediateScriptFailureRetainsExecutionResult(t *testing.T) {
 				}
 				env := types.HandlerEnvironment{}
 				env.HandlerEnvironment.ConfigFolder = t.TempDir()
-				scriptErr := errorutil.WithCode(errorutil.CommandExecution_failureExitCode, errors.New("script exited with code 12"))
+				scriptErr := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("script exited with code 12"))
 				executeImmediateCommand = func(cmd types.Cmd, hs handlersettings.HandlerSettingsFile, extension string, sequence int) error {
 					payload, err := json.Marshal(hs)
 					if err != nil {
@@ -196,7 +196,7 @@ func TestImmediateScriptFailureRetainsExecutionResult(t *testing.T) {
 				terminal := recorder.items[1].Status
 				require.Equal(t, expectedStatus, terminal.Status)
 				requireGoalStateStatusCode(t, terminal, errorutil.CommandExecution_failureExitCode)
-				code, ok := errorutil.Code(err)
+				code, ok := errorutil.FindClarification(err)
 				require.True(t, ok)
 				require.Equal(t, errorutil.CommandExecution_failureExitCode, code)
 				require.Positive(t, code, "script failure is a customer error")

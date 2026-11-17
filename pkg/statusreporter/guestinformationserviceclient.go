@@ -37,7 +37,7 @@ func (c GuestInformationServiceClient) GetPutStatusUri() string {
 
 func (c GuestInformationServiceClient) ReportStatus(ctx *log.Context, statusToUpload string) (*http.Response, error) {
 	if statusToUpload == "" {
-		return nil, errorutil.WithCode(errorutil.Internal_emptyStatusUpload, errors.New("provided status to upload is empty"))
+		return nil, errorutil.EnsureClarification(errorutil.Internal_emptyStatusUpload, errors.New("provided status to upload is empty"))
 	}
 
 	return ReportStatus(ctx, c.GetPutStatusUri(), statusToUpload)

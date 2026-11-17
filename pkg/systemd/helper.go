@@ -27,9 +27,9 @@ func GetSystemDConfigurationBasePath(ctx *log.Context) (string, error) {
 			errorstring := fmt.Sprintf("ERROR: neither %s nor %s path was not found on the system", unitConfigurationBasePath_preferred, unitConfigurationBasePath_alternative)
 			ctx.Log("message", errorstring)
 			if err != nil {
-				return "", errorutil.WithCode(errorutil.Systemd_failedToInspectUnitDirectory, errors.Wrap(err, errorstring))
+				return "", errorutil.EnsureClarification(errorutil.Systemd_failedToInspectUnitDirectory, errors.Wrap(err, errorstring))
 			}
-			return "", errorutil.WithCode(errorutil.Systemd_noUnitConfigurationDirectory, errors.New(errorstring))
+			return "", errorutil.EnsureClarification(errorutil.Systemd_noUnitConfigurationDirectory, errors.New(errorstring))
 		}
 
 		ctx.Log("message", fmt.Sprintf("Alternative path was found on the system: %s", unitConfigurationBasePath_alternative))

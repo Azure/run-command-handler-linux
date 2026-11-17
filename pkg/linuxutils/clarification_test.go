@@ -85,7 +85,7 @@ func TestLinuxFilesystemClarifications(t *testing.T) {
 				require.NoError(t, err, "cleanup remains best effort")
 				err = logger.err
 			}
-			code, ok := errorutil.Code(err)
+			code, ok := errorutil.FindClarification(err)
 			require.True(t, ok, "%v", err)
 			require.Equal(t, want, code)
 			if want > 0 {
@@ -169,7 +169,7 @@ func TestMostRecentCleanupClarifications(t *testing.T) {
 			}
 			err := TryClearExtensionScriptsDirectoriesAndSettingsFilesExceptMostRecent(
 				log.NewContext(log.NewNopLogger()), "downloads", "config", "", 5, test.pattern, "%d.settings")
-			code, ok := errorutil.Code(err)
+			code, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, test.want, code)
 			if test.directory != "" {
@@ -208,7 +208,7 @@ func TestMostRecentCleanupTruncatesSettingsAfterScriptsFailure(t *testing.T) {
 				log.NewContext(log.NewNopLogger()), "downloads", config, "extension", 5,
 				`^extension\.\d+\.settings$`, "extension.%d.settings")
 			require.ErrorIs(t, err, cause)
-			actual, ok := errorutil.Code(err)
+			actual, ok := errorutil.FindClarification(err)
 			require.True(t, ok)
 			require.Equal(t, code, actual)
 			for _, name := range []string{"extension.1.settings", "extension.5.settings", "other.1.settings"} {
@@ -264,7 +264,7 @@ func TestMostRecentCleanupPreservesBothDirectoryErrors(t *testing.T) {
 				causes := combined.Unwrap()
 				require.Len(t, causes, 2)
 				for i, want := range []errorutil.ErrorClarificationCode{scriptsFailure.dirCode, settingsFailure.fileCode} {
-					code, ok := errorutil.Code(causes[i])
+					code, ok := errorutil.FindClarification(causes[i])
 					require.True(t, ok)
 					require.Equal(t, want, code, "each cause must retain its own clarification code")
 				}

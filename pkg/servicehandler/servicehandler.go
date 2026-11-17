@@ -44,56 +44,56 @@ func NewConfiguration(unitName string) Configuration {
 
 func (handler *Handler) Start() error {
 	err := handler.manager.StartUnit(handler.config.Name, handler.ctx)
-	return errorutil.WithCode(errorutil.Service_failedToStart, err)
+	return errorutil.EnsureClarification(errorutil.Service_failedToStart, err)
 }
 
 func (handler *Handler) Stop() error {
 	err := handler.manager.StopUnit(handler.config.Name, handler.ctx)
-	return errorutil.WithCode(errorutil.Service_failedToStop, err)
+	return errorutil.EnsureClarification(errorutil.Service_failedToStop, err)
 }
 
 func (handler *Handler) Enable() error {
 	err := handler.manager.EnableUnit(handler.config.Name, handler.ctx)
-	return errorutil.WithCode(errorutil.Service_failedToEnable, err)
+	return errorutil.EnsureClarification(errorutil.Service_failedToEnable, err)
 }
 
 func (handler *Handler) Disable() error {
 	err := handler.manager.DisableUnit(handler.config.Name, handler.ctx)
-	return errorutil.WithCode(errorutil.Service_failedToDisable, err)
+	return errorutil.EnsureClarification(errorutil.Service_failedToDisable, err)
 }
 
 func (handler *Handler) DaemonReload() error {
 	err := handler.manager.DaemonReload(handler.config.Name, handler.ctx)
-	return errorutil.WithCode(errorutil.Service_failedToReloadDaemon, err)
+	return errorutil.EnsureClarification(errorutil.Service_failedToReloadDaemon, err)
 }
 
 func (handler *Handler) IsActive() (bool, error) {
 	err := handler.manager.IsUnitActive(handler.config.Name, handler.ctx)
 	if err != nil {
-		return false, errorutil.WithCode(errorutil.Service_failedToCheckActivity, err)
+		return false, errorutil.EnsureClarification(errorutil.Service_failedToCheckActivity, err)
 	}
 	return true, nil
 }
 
 func (handler *Handler) IsEnabled() (bool, error) {
 	enabled, err := handler.manager.IsUnitEnabled(handler.config.Name, handler.ctx)
-	return enabled, errorutil.WithCode(errorutil.Service_failedToCheckEnabled, err)
+	return enabled, errorutil.EnsureClarification(errorutil.Service_failedToCheckEnabled, err)
 }
 
 func (handler *Handler) IsInstalled() (bool, error) {
 	installed, err := handler.manager.IsUnitInstalled(handler.config.Name, handler.ctx)
-	return installed, errorutil.WithCode(errorutil.Service_failedToCheckInstalled, err)
+	return installed, errorutil.EnsureClarification(errorutil.Service_failedToCheckInstalled, err)
 }
 
 func (handler *Handler) Register(ctx *log.Context, unitConfigContent string) error {
 	err := handler.manager.RemoveUnitConfigurationFile(handler.config.Name, ctx)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errorutil.WithCode(errorutil.Service_failedToRemoveOldConfiguration, fmt.Errorf("error while removing old unit configuration file: %w", err))
+		return errorutil.EnsureClarification(errorutil.Service_failedToRemoveOldConfiguration, fmt.Errorf("error while removing old unit configuration file: %w", err))
 	}
 
 	err = handler.manager.CreateUnitConfigurationFile(handler.config.Name, []byte(unitConfigContent), ctx)
 	if err != nil {
-		return errorutil.WithCode(errorutil.Service_failedToCreateConfiguration, fmt.Errorf("error while creating unit configuration file: %w", err))
+		return errorutil.EnsureClarification(errorutil.Service_failedToCreateConfiguration, fmt.Errorf("error while creating unit configuration file: %w", err))
 	}
 
 	err = handler.DaemonReload()
@@ -133,7 +133,7 @@ func (handler *Handler) DeRegister(ctx *log.Context) error {
 
 		err = handler.manager.RemoveUnitConfigurationFile(handler.config.Name, ctx)
 		if err != nil {
-			return errorutil.WithCode(errorutil.Service_failedToUnregister, fmt.Errorf("error while removing unit configuration: %w", err))
+			return errorutil.EnsureClarification(errorutil.Service_failedToUnregister, fmt.Errorf("error while removing unit configuration: %w", err))
 		}
 	} else {
 		ctx.Log("message", "Skipping action. Target version is not current installed")
@@ -144,5 +144,5 @@ func (handler *Handler) DeRegister(ctx *log.Context) error {
 
 func (handler *Handler) GetInstalledVersion(ctx *log.Context) (string, error) {
 	version, err := handler.manager.GetInstalledVersion(handler.config.Name, ctx)
-	return version, errorutil.WithCode(errorutil.Internal_failedToReadServiceVersion, err)
+	return version, errorutil.EnsureClarification(errorutil.Internal_failedToReadServiceVersion, err)
 }

@@ -11,7 +11,7 @@ import (
 
 func requireRedactedErrorCode(t *testing.T, err error) {
 	t.Helper()
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok, "missing clarification: %v", err)
 	require.Equal(t, errorutil.FileDownload_redactedUrlError, code)
 }

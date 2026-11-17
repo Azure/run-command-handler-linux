@@ -3,21 +3,21 @@ package errorutil
 
 import "github.com/Azure/azure-extension-platform/vmextension"
 
-// WithCode classifies an error only if a lower layer has not already done so.
+// EnsureClarification classifies an error only if a lower layer has not already done so.
 // Positive codes identify customer input or VM problems; negative codes identify
 // handler or Azure infrastructure failures. Each code belongs to one call site.
-func WithCode(code ErrorClarificationCode, err error) error {
+func EnsureClarification(code ErrorClarificationCode, err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := Code(err); ok {
+	if _, ok := FindClarification(err); ok {
 		return err
 	}
 	return vmextension.NewErrorWithClarificationPtr(code, err)
 }
 
-// Code supports both pointer and value platform errors through wrapping.
-func Code(err error) (int, bool) {
+// FindClarification supports both pointer and value platform errors through wrapping.
+func FindClarification(err error) (int, bool) {
 	switch err := err.(type) {
 	case *vmextension.ErrorWithClarification:
 		if err != nil {
@@ -27,12 +27,12 @@ func Code(err error) (int, bool) {
 		return err.ErrorCode, true
 	case interface{ Unwrap() []error }:
 		for _, cause := range err.Unwrap() {
-			if code, ok := Code(cause); ok {
+			if code, ok := FindClarification(cause); ok {
 				return code, true
 			}
 		}
 	case interface{ Unwrap() error }:
-		return Code(err.Unwrap())
+		return FindClarification(err.Unwrap())
 	}
 	return 0, false
 }

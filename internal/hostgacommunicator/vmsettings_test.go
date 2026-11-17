@@ -45,7 +45,7 @@ func Test_GetImmediateVMSettingsFailedToParseJson(t *testing.T) {
 
 	_, err := communicator.GetImmediateVMSettings(ctx, "")
 	require.NotNil(t, err)
-	code, ok := errorutil.Code(err)
+	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
 	require.Equal(t, errorutil.HostGA_failedToParseVmSettingsResponse, code)
 	require.ErrorContains(t, err, "failed to parse immediate VMSettings json")
