@@ -52,8 +52,7 @@ func ProcessImmediateHandlerCommand(cmd types.Cmd, hs handlersettings.HandlerSet
 		return errors.Wrap(err, "failed when trying to store handler settings locally")
 	}
 
-	// Store handler settings locally before moving forward...
-	return ProcessHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.ImmediateDownloadFolder, constants.DataDir)
+	return processHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, constants.ImmediateDownloadFolder, constants.DataDir, true)
 }
 
 func ProcessHandlerCommand(cmd types.Cmd) error {
@@ -76,6 +75,10 @@ func ProcessHandlerCommand(cmd types.Cmd) error {
 }
 
 func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string, dataDir string) error {
+	return processHandlerCommandWithDetails(ctx, cmd, hEnv, extensionName, seqNum, downloadFolder, dataDir, false)
+}
+
+func processHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironment, extensionName string, seqNum int, downloadFolder string, dataDir string, cleanupAfterReporting bool) error {
 	ctx.Log("message", fmt.Sprintf("processing command for extensionName: %v and seqNum: %v", extensionName, seqNum))
 	instView := types.RunCommandInstanceView{
 		ExecutionState:   types.Running,
@@ -93,7 +96,15 @@ func ProcessHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 	}
 
 	// execute the subcommand
-	stdout, stderr, cmdInvokeError, exitCode := cmd.Functions.Invoke(ctx, hEnv, &instView, metadata, cmd)
+	stdout, stderr, cmdInvokeError, exitCode, cleanup := cmd.Functions.Invoke(ctx, hEnv, &instView, metadata, cmd)
+	if cleanup != nil && cmd.Functions.Cleanup != nil {
+		if cleanupAfterReporting {
+			// Immediate status reporting still needs the settings that cleanup removes.
+			defer cmd.Functions.Cleanup(ctx, metadata, hEnv, cleanup.RunAsUser)
+		} else {
+			cmd.Functions.Cleanup(ctx, metadata, hEnv, cleanup.RunAsUser)
+		}
+	}
 
 	// after the subcommand, delete the policy file if it exists, regardless of the execution outcome
 	deleteRuntimePolicySettingsFile(ctx, hEnv)
