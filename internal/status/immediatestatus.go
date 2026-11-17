@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
@@ -26,6 +27,7 @@ type ImmediateHandlerStatus struct {
 
 // Status of an immediate extension processed by a given handler
 type ImmediateStatus struct {
+	HandlerName    string       `json:"-"`
 	SequenceNumber int          `json:"sequenceNumber" validate:"required"`
 	TimestampUTC   string       `json:"timestampUTC" validate:"required"`
 	Status         types.Status `json:"status" validate:"required"`
@@ -56,13 +58,39 @@ func (o *StatusObserver) OnDemandNotify() error {
 }
 
 func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
+	if status.StatusKey.HandlerName == "" {
+		return errors.New("cannot report immediate status without a handler name")
+	}
 	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
 	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
+	// The local copy is for debugging only; HTTP reporting remains authoritative.
+	if status.TopLevelStatus != (types.StatusItem{}) {
+		if err := saveImmediateStatusToLocalFile(status); err != nil {
+			o.ctx.Log("message", "failed to save local immediate status debug copy; continuing HTTP reporting",
+				"goalState", status.StatusKey, "error", err)
+		}
+	}
 	return o.OnDemandNotify()
+}
+
+func saveImmediateStatusToLocalFile(status types.StatusEventArgs) error {
+	hEnv, err := handlersettings.GetHandlerEnv()
+	if err != nil {
+		return errors.Wrap(err, "could not get handler environment for immediate status debug copy")
+	}
+	if hEnv.HandlerEnvironment.StatusFolder == "" {
+		return errors.New("handler environment has no status folder for immediate status debug copy")
+	}
+	data, err := MarshalStatusReportIntoJson(types.StatusReport{status.TopLevelStatus}, true)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal immediate status debug copy")
+	}
+	return SaveStatusReport(hEnv.HandlerEnvironment.StatusFolder, status.StatusKey.ExtensionName, status.StatusKey.SeqNumber, data)
 }
 
 func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelStatus {
 	latestStatusToReport := []ImmediateStatus{}
+	statusByHandler := map[string][]ImmediateStatus{}
 	goalStateKeysToCheckToRemove := []types.GoalStateKey{}
 	newStatusInTerminalState := []ImmediateStatus{}
 
@@ -70,11 +98,13 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	o.goalStateEventMap.Range(func(key, value interface{}) bool {
 		// Only report the latest active status for each goal state
 		goalStateKey := key.(types.GoalStateKey)
+		statusByHandler[goalStateKey.HandlerName] = []ImmediateStatus{}
 		if goalStateKey.RuntimeSettingsState != "disabled" {
 			if value.(types.StatusItem) != (types.StatusItem{}) {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
+					HandlerName:    goalStateKey.HandlerName,
 					SequenceNumber: goalStateKey.SeqNumber,
 					TimestampUTC:   statusItem.TimestampUTC,
 					Status:         statusItem.Status,
@@ -128,13 +158,23 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 	}
 
 	o.ctx.Log("message", "Creating immediate status to report")
+	for _, status := range latestStatusToReport {
+		statusByHandler[status.HandlerName] = append(statusByHandler[status.HandlerName], status)
+	}
+	handlerNames := make([]string, 0, len(statusByHandler))
+	for name := range statusByHandler {
+		handlerNames = append(handlerNames, name)
+	}
+	slices.Sort(handlerNames)
+	handlers := make([]ImmediateHandlerStatus, 0, len(handlerNames))
+	for _, name := range handlerNames {
+		handlers = append(handlers, ImmediateHandlerStatus{
+			HandlerName:              name,
+			AggregateImmediateStatus: statusByHandler[name],
+		})
+	}
 	return ImmediateTopLevelStatus{
-		AggregateHandlerImmediateStatus: []ImmediateHandlerStatus{
-			{
-				HandlerName:              "Microsoft.CPlat.Core.RunCommandHandlerLinux",
-				AggregateImmediateStatus: latestStatusToReport,
-			},
-		},
+		AggregateHandlerImmediateStatus: handlers,
 	}
 }
 
@@ -175,6 +215,7 @@ func (o *StatusObserver) RemoveProcessedGoalStates(goalStateKeys []types.GoalSta
 			if goalStateKey.RuntimeSettingsState != "disabled" {
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
+					HandlerName:    goalStateKey.HandlerName,
 					SequenceNumber: goalStateKey.SeqNumber,
 					TimestampUTC:   statusItem.TimestampUTC,
 					Status:         statusItem.Status,

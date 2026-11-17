@@ -5,6 +5,21 @@ These scripts can be used to bootstrap/install software, run administrative task
 automation tasks. RunCommand can run an inline script you specify or
 download a script file from the Internet or Azure Storage.
 
+## Immediate status reporting
+
+The immediate service uses each goal state's top-level `name` as the handler
+identity in `aggregateHandlerImmediateStatus`. Production and EDP test handler
+results are grouped separately, including progress, completion, failure, and
+skipped-command reports.
+
+Immediate commands defer requested cleanup until final status reporting has been
+attempted. This keeps command settings available when evaluating
+`treatFailureAsDeploymentFailure`. Traditional-command cleanup ordering is unchanged.
+
+The handler identity is retained in the local terminal-status cache for reporting
+after a service restart. Legacy cache entries without a handler identity are
+ignored with a warning rather than reported under an assumed handler name.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
