@@ -155,7 +155,7 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 			notifier := &observer.Notifier{}
 			notifier.Register(&goalStateEventObserver)
 
-			skippedErr := newConcurrencyLimitError(maxTasksToFetch, skippedGoalState)
+			skippedErr := newConcurrencyLimitError(maxTasksToFetch, skippedGoalState.SettingsCommon)
 			instView := types.RunCommandInstanceView{
 				ExecutionState:     types.Failed,
 				ExecutionMessage:   "Execution was skipped due to reaching the maximum concurrent tasks",

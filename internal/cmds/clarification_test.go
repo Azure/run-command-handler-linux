@@ -124,13 +124,13 @@ func TestLifecycleClarifications(t *testing.T) {
 			switch code {
 			case errorutil.Os_FailedToCreateDataDir:
 				commandMkdirAll = func(string, os.FileMode) error { return failure }
-				_, _, err, _ = install(ctx, types.HandlerEnvironment{}, nil, types.RCMetadata{}, types.CmdInstallTemplate)
+				_, _, err, _, _ = install(ctx, types.HandlerEnvironment{}, nil, types.RCMetadata{}, types.CmdInstallTemplate)
 			case errorutil.Os_FailedToDeleteDataDir:
 				commandRemoveAll = func(string) error { return failure }
-				_, _, err, _ = uninstall(ctx, types.HandlerEnvironment{}, nil, types.RCMetadata{}, types.CmdUninstallTemplate)
+				_, _, err, _, _ = uninstall(ctx, types.HandlerEnvironment{}, nil, types.RCMetadata{}, types.CmdUninstallTemplate)
 			case errorutil.Os_FailedToStatRuntimePolicy:
 				commandStat = func(string) (os.FileInfo, error) { return nil, failure }
-				_, _, err, _ = enable(ctx, types.HandlerEnvironment{}, nil, types.RCMetadata{}, types.CmdEnableTemplate)
+				_, _, err, _, _ = enable(ctx, types.HandlerEnvironment{}, nil, types.RCMetadata{}, types.CmdEnableTemplate)
 			case errorutil.Storage_failedToAppendOutputWithSas:
 				appendSASBlock = func(*storage.Blob, []byte) error { return failure }
 				_, err = appendToBlob("mock", &storage.Blob{}, nil, 0, ctx)

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
@@ -106,7 +107,7 @@ func TestClarificationsInManagedAndImmediateStatus(t *testing.T) {
 					payload:  &uploaded,
 				}
 				require.NoError(t, statusObserver.OnNotify(types.StatusEventArgs{
-					StatusKey:      types.GoalStateKey{ExtensionName: "command", SeqNumber: 9, RuntimeSettingsState: "enabled"},
+					StatusKey:      types.GoalStateKey{HandlerName: constants.RunCommandTestExtensionName, ExtensionName: "command", SeqNumber: 9, RuntimeSettingsState: "enabled"},
 					TopLevelStatus: immediate,
 				}))
 				var aggregate ImmediateTopLevelStatus

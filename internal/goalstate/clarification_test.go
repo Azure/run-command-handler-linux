@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/commandProcessor"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/observer"
@@ -57,7 +58,7 @@ func TestGoalStateClarifications(t *testing.T) {
 	runAsync := func(s settings.SettingsCommon, n *observer.Notifier) error {
 		t.Helper()
 		done, failed := make(chan bool, 1), make(chan error, 1)
-		startAsync(ctx, s, n, done, failed)
+		startAsync(ctx, constants.RunCommandTestExtensionName, s, n, done, failed)
 		select {
 		case err := <-failed:
 			return err
@@ -96,7 +97,7 @@ func TestGoalStateClarifications(t *testing.T) {
 		return nil
 	}
 	goalStateTimeout = time.Nanosecond
-	_, err = HandleImmediateGoalState(ctx, setting, n)
+	_, err = HandleImmediateGoalState(ctx, constants.RunCommandTestExtensionName, setting, n)
 	close(release)
 	<-finished
 	assertCode(err, errorutil.CommandExecution_immediateGoalStateTimedOut)
@@ -122,7 +123,7 @@ func TestGoalStateStatusCarriesClarification(t *testing.T) {
 	}
 	name, state, seq := "test", "enabled", 1
 	done, failed := make(chan bool, 1), make(chan error, 1)
-	startAsync(ctx, settings.SettingsCommon{ExtensionName: &name, ExtensionState: &state, SeqNo: &seq}, n, done, failed)
+	startAsync(ctx, constants.RunCommandTestExtensionName, settings.SettingsCommon{ExtensionName: &name, ExtensionState: &state, SeqNo: &seq}, n, done, failed)
 	require.Len(t, failed, 1)
 	var executionErr *ImmediateCommandExecutionError
 	require.ErrorAs(t, <-failed, &executionErr)
@@ -162,8 +163,8 @@ func TestImmediateScriptFailureRetainsExecutionResult(t *testing.T) {
 					if err := os.WriteFile(handlersettings.GetConfigFilePath(env.HandlerEnvironment.ConfigFolder, sequence, extension), payload, 0600); err != nil {
 						return err
 					}
-					cmd.Functions.Invoke = func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int) {
-						return "script output", "script stderr", scriptErr, 12
+					cmd.Functions.Invoke = func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int, *types.CleanupRequest) {
+						return "script output", "script stderr", scriptErr, 12, nil
 					}
 					return commandProcessor.ProcessHandlerCommandWithDetails(ctx, cmd, env, extension, sequence, "download", "data")
 				}
@@ -173,7 +174,7 @@ func TestImmediateScriptFailureRetainsExecutionResult(t *testing.T) {
 				}
 				notifier := &observer.Notifier{}
 				notifier.Register(recorder)
-				exitCode, err := HandleImmediateGoalState(ctx, setting, notifier)
+				exitCode, err := HandleImmediateGoalState(ctx, constants.RunCommandTestExtensionName, setting, notifier)
 				require.Equal(t, 12, exitCode)
 				require.ErrorIs(t, err, scriptErr)
 				var executionErr *ImmediateCommandExecutionError
@@ -224,7 +225,7 @@ func TestImmediateSuccessfulCommandReturnsSuccess(t *testing.T) {
 		}
 		return cmd.Functions.ReportStatus(ctx, types.HandlerEnvironment{}, types.NewRCMetadata(name, seq, "download", "data"), types.StatusSuccess, cmd, string(message))
 	}
-	exitCode, err := HandleImmediateGoalState(ctx, setting, notifier)
+	exitCode, err := HandleImmediateGoalState(ctx, constants.RunCommandTestExtensionName, setting, notifier)
 	require.NoError(t, err)
 	require.Zero(t, exitCode)
 	require.Len(t, recorder.items, 1)

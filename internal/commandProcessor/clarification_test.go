@@ -44,8 +44,8 @@ func TestCommandFailurePreservesClarificationAndDeploymentBehavior(t *testing.T)
 				var reports []types.StatusReport
 				var reported error
 				cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
-					Invoke: func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int) {
-						return "stdout", "stderr", cause, 12
+					Invoke: func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int, *types.CleanupRequest) {
+						return "stdout", "stderr", cause, 12, nil
 					},
 					ReportStatus: func(ctx *log.Context, _ types.HandlerEnvironment, m types.RCMetadata, state types.StatusType, cmd types.Cmd, message string) error {
 						states = append(states, state)
@@ -96,8 +96,8 @@ func TestProcessorClarificationErrors(t *testing.T) {
 					return cfg, nil
 				}
 				cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
-					Invoke: func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int) {
-						return "", "", failure, 1
+					Invoke: func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int, *types.CleanupRequest) {
+						return "", "", failure, 1, nil
 					},
 					ReportStatus: func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, state types.StatusType, cmd types.Cmd, message string) error {
 						report := processorStatusReport(t, ctx, metadata, state, cmd, message)
@@ -143,8 +143,8 @@ func TestReportingFailureDoesNotReplaceCommandError(t *testing.T) {
 
 	calls := 0
 	cmd := types.CmdEnableTemplate.InitializeFunctions(types.CmdFunctions{
-		Invoke: func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int) {
-			return "", "", cause, 1
+		Invoke: func(*log.Context, types.HandlerEnvironment, *types.RunCommandInstanceView, types.RCMetadata, types.Cmd) (string, string, error, int, *types.CleanupRequest) {
+			return "", "", cause, 1, nil
 		},
 		ReportStatus: func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, state types.StatusType, cmd types.Cmd, message string) error {
 			calls++

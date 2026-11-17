@@ -126,7 +126,14 @@ func Test_ProcessImmediateHandlerCommand_CleanupAfterFinalStatus(t *testing.T) {
 					require.NoError(t, os.Remove(configPath))
 				},
 			})
-			require.NoError(t, ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(test.policy), name, seq))
+			err := ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(test.policy), name, seq)
+			if test.scriptFails && test.policy {
+				require.ErrorContains(t, err, "script failed")
+			} else if !test.scriptFails && test.reportFails {
+				require.ErrorContains(t, err, "status reporting failed")
+			} else {
+				require.NoError(t, err)
+			}
 			require.Equal(t, []string{"progress", "invoke", "invoke returned", "final status", "cleanup"}, events)
 			require.Equal(t, 1, cleanupCalls)
 			require.NoFileExists(t, configPath)
@@ -186,13 +193,13 @@ func Test_ProcessImmediateHandlerCommand_PrecheckCleanupRemainsImmediate(t *test
 		Pre: func(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, c types.Cmd) error {
 			c.Functions.Cleanup(ctx, metadata, hEnv, "")
 			require.True(t, cleaned)
-			return errors.New("already processed")
+			return types.ErrAlreadyProcessed
 		},
 		Cleanup: func(_ *log.Context, _ types.RCMetadata, _ types.HandlerEnvironment, _ string) {
 			cleaned = true
 		},
 	})
-	require.ErrorContains(t, ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(false), "cleanup-test", 1), "already processed")
+	require.ErrorIs(t, ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(false), "cleanup-test", 1), types.ErrAlreadyProcessed)
 	require.True(t, cleaned)
 }
 

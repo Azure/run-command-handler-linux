@@ -65,7 +65,7 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
 	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
 	// The local copy is for debugging only; HTTP reporting remains authoritative.
-	if status.TopLevelStatus != (types.StatusItem{}) {
+	if item := status.TopLevelStatus; item.Version != 0 || item.TimestampUTC != "" || item.Status.Name != "" || item.Status.Operation != "" || item.Status.Status != "" || item.Status.FormattedMessage != (types.FormattedMessage{}) || len(item.Status.Substatuses) > 0 {
 		if err := saveImmediateStatusToLocalFile(status); err != nil {
 			o.ctx.Log("message", "failed to save local immediate status debug copy; continuing HTTP reporting",
 				"goalState", status.StatusKey, "error", err)
