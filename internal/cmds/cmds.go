@@ -7,7 +7,6 @@ import (
 	"container/list"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -41,6 +40,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/telemetry"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	seqnum "github.com/Azure/run-command-handler-linux/pkg/seqnumutil"
 	"github.com/Azure/run-command-handler-linux/pkg/versionutil"
 	"github.com/go-kit/kit/log"
@@ -59,6 +59,36 @@ const (
 )
 
 var (
+	immediateInstall         = immediatecmds.Install
+	immediateUninstall       = immediatecmds.Uninstall
+	immediateEnable          = immediatecmds.Enable
+	readCommandSettings      = handlersettings.GetHandlerSettings
+	readOutputFromPosition   = files.GetFileFromPosition
+	processDownloadedScript  = files.DownloadAndProcessScript
+	validateDownloadedScript = func(path string, policy *extensionpolicysettingsrc.RCv2ExtensionPolicySettings) error {
+		return extensionpolicysettings.ValidateFileHashInAllowlist(path, policy.DownloadedScriptsAllowlist, hashutils.HashTypeSHA256)
+	}
+	commandMkdirAll              = os.MkdirAll
+	commandMkdir                 = os.Mkdir
+	commandRemove                = os.Remove
+	commandRemoveAll             = os.RemoveAll
+	commandReadFile              = os.ReadFile
+	commandWriteFile             = os.WriteFile
+	commandStat                  = os.Stat
+	commandCopy                  = io.Copy
+	commandOpen                  = func(path string) (commandFile, error) { return os.Open(path) }
+	commandCreate                = func(path string) (commandFile, error) { return os.Create(path) }
+	newManagedIdentityCredential = azidentity.NewManagedIdentityCredential
+	newAppendBlobClient          = appendblob.NewClient
+	createManagedAppendBlob      = func(client *appendblob.Client) error {
+		_, err := client.Create(context.Background(), nil)
+		return err
+	}
+	appendSASBlock     = func(blob *storage.Blob, data []byte) error { return blob.AppendBlock(data, nil) }
+	appendManagedBlock = func(client *appendblob.Client, data []byte) error {
+		_, err := client.AppendBlock(context.Background(), streaming.NopCloser(bytes.NewReader(data)), nil)
+		return err
+	}
 	cmdDefaultReportStatusFunc = status.ReportStatusToLocalFile
 	cmdDefaultCleanupFunc      = cleanup.RunCommandCleanup
 	telemetryResult            = telemetry.SendTelemetry(telemetry.NewTelemetryEventSender(), fullName, versionutil.Version)
@@ -86,8 +116,13 @@ var (
 	// Used by unit tests to mock out the immediate run command update step
 	immediateUpdate = immediatecmds.Update
 
-	ErrAlreadyProcessed = errors.New("the script configuration has already been processed, will not run again")
+	ErrAlreadyProcessed = types.ErrAlreadyProcessed
 )
+
+type commandFile interface {
+	io.ReadWriteCloser
+	ReadDir(int) ([]os.DirEntry, error)
+}
 
 func update(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
@@ -143,15 +178,15 @@ func disable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 
 func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
-	exitCode, err := immediatecmds.Install()
+	exitCode, err := immediateInstall()
 	if err != nil {
 		return "", "", err, exitCode, nil
 	}
 
-	if err := os.MkdirAll(DataDir, 0755); err != nil {
+	if err := commandMkdirAll(DataDir, 0755); err != nil {
 		errMessage := fmt.Sprintf("Failed to create data dir: %v due to: %v", DataDir, err)
 		extensionEvents.LogErrorEvent("install", errMessage)
-		return "", "", errors.Wrap(err, errMessage), constants.ExitCode_CreateDataDirectoryFailed, nil
+		return "", "", errorutil.EnsureClarification(errorutil.Os_FailedToCreateDataDir, errors.Wrap(err, errMessage)), constants.ExitCode_CreateDataDirectoryFailed, nil
 	}
 
 	ctx.Log("event", "created data dir", "path", DataDir)
@@ -162,7 +197,7 @@ func install(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComm
 
 func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCommandInstanceView, metadata types.RCMetadata, c types.Cmd) (string, string, error, int, *types.CleanupRequest) {
 	extensionEvents := createExtensionEventManager(ctx, h)
-	exitCode, err := immediatecmds.Uninstall(ctx, h, metadata.ExtName, metadata.SeqNum, extensionEvents)
+	exitCode, err := immediateUninstall(ctx, h, metadata.ExtName, metadata.SeqNum, extensionEvents)
 	if err != nil {
 		return "", "", err, exitCode, nil
 	}
@@ -170,10 +205,10 @@ func uninstall(ctx *log.Context, h types.HandlerEnvironment, report *types.RunCo
 	{ // a new context scope with path
 		ctx = ctx.With("path", DataDir)
 		ctx.Log("event", "removing data dir", "path", DataDir)
-		if err := os.RemoveAll(DataDir); err != nil {
+		if err := commandRemoveAll(DataDir); err != nil {
 			errMessage := fmt.Sprintf("Failed to delete data directory: %v due to: %v", DataDir, err)
 			extensionEvents.LogErrorEvent("uninstall", errMessage)
-			return "", "", errors.Wrap(err, errMessage), constants.ExitCode_RemoveDataDirectoryFailed, nil
+			return "", "", errorutil.EnsureClarification(errorutil.Os_FailedToDeleteDataDir, errors.Wrap(err, errMessage)), constants.ExitCode_RemoveDataDirectoryFailed, nil
 		}
 		ctx.Log("event", "removed data dir")
 		extensionEvents.LogInformationalEvent("uninstall", fmt.Sprintf("removed data dir %v", DataDir))
@@ -204,14 +239,14 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	extensionEvents := createExtensionEventManager(ctx, h)
 
 	// parse the extension handler settings (not available prior to 'enable')
-	cfg, err1 := handlersettings.GetHandlerSettings(h.HandlerEnvironment.ConfigFolder, metadata.ExtName, metadata.SeqNum, ctx)
+	cfg, err1 := readCommandSettings(h.HandlerEnvironment.ConfigFolder, metadata.ExtName, metadata.SeqNum, ctx)
 	if err1 != nil {
 		errMessage := fmt.Sprintf("Failed to get configuration: %v", err1)
 		extensionEvents.LogErrorEvent("enable", errMessage)
 		return "", "", errors.Wrap(err1, "failed to get configuration"), constants.ExitCode_GetHandlerSettingsFailed, nil
 	}
 
-	exitCode, err := immediatecmds.Enable(ctx, h, metadata.ExtName, metadata.SeqNum, cfg, extensionEvents)
+	exitCode, err := immediateEnable(ctx, h, metadata.ExtName, metadata.SeqNum, cfg, extensionEvents)
 
 	// If there is an error or the customer requested to install the script as a service, return the error and exit code immediately.
 	if err != nil || cfg.InstallAsService() {
@@ -224,7 +259,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	policyPath := filepath.Join(h.HandlerEnvironment.ConfigFolder, constants.PolicyFileName)
 	var rceps *extensionpolicysettingsrc.RCv2ExtensionPolicySettings
 
-	if _, err := os.Stat(policyPath); err == nil {
+	if _, err := commandStat(policyPath); err == nil {
 		extensionPolicyManagerPtr, rceps, err, exitCode = extensionpolicysettingsrc.InitializeExtensionPolicySettings(ctx, policyPath)
 		if err != nil {
 			// TODO: In the future, fail the command if the policy file was invalid and return the exitCode.
@@ -238,7 +273,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 		ctx.Log("message", "extension policy settings file does not exist. No policy applied.", "error", err)
 		extensionPolicyManagerPtr = nil
 	} else {
-		return "", "", errors.Wrap(err, "failed to stat extension policy settings file"), constants.ExitCode_LoadExtensionPolicySettingsFailed, nil
+		return "", "", errorutil.EnsureClarification(errorutil.Os_FailedToStatRuntimePolicy, errors.Wrap(err, "failed to stat extension policy settings file")), constants.ExitCode_LoadExtensionPolicySettingsFailed, nil
 	}
 
 	// Validate handler settings against policy settings.
@@ -290,7 +325,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed, nil
+				constants.ExitCode_OutputBlobCreateOrReplaceFailed, nil
 		}
 	}
 
@@ -308,7 +343,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed, nil
+				constants.ExitCode_ErrorBlobCreateOrReplaceFailed, nil
 		}
 	}
 
@@ -322,6 +357,18 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}
 
 	stdoutF, stderrF := exec.LogPaths(dir)
+
+	appendFailureLogged := false
+	appendOutput := func(sourceFilePath string, blobRef *storage.Blob, blobClient *appendblob.Client, position int64) int64 {
+		newPosition, appendErr := appendToBlob(sourceFilePath, blobRef, blobClient, position)
+		if appendErr != nil && !appendFailureLogged {
+			appendFailureLogged = true
+			message := fmt.Sprintf("Failed to append command output from '%s' to blob; blob appends are best effort and do not affect the command result: %v", sourceFilePath, appendErr)
+			ctx.Log("message", message, "error", appendErr)
+			extensionEvents.LogErrorEvent("enable", message)
+		}
+		return newPosition
+	}
 
 	// Implement ticker to update extension status periodically
 	ticker := time.NewTicker(updateStatusInSeconds * time.Second)
@@ -337,8 +384,8 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 				report.Output = stdoutTail
 				report.Error = stderrTail
 				instanceview.ReportInstanceView(ctx, h, metadata, statusToReport, c, report)
-				outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
-				errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
+				outputFilePosition = appendOutput(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition)
+				errorFilePosition = appendOutput(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition)
 			}
 		}
 	}()
@@ -362,8 +409,8 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}
 
 	// Report the output streams to blobs
-	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
-	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
+	outputFilePosition = appendOutput(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition)
+	errorFilePosition = appendOutput(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition)
 
 	return stdoutTail, stderrTail, runErr, exitCode, &types.CleanupRequest{RunAsUser: cfg.PublicSettings.RunAsUser}
 }
@@ -377,45 +424,40 @@ func createExtensionEventManager(ctx *log.Context, hEnv types.HandlerEnvironment
 
 // Converts from the local HandlerEnvironment to the azure-extension-platform HandlerEnvironment
 func convertToPlatformHandlerEnv(myEnv types.HandlerEnvironment) *handlerenv.HandlerEnvironment {
-	data, err := json.Marshal(myEnv.HandlerEnvironment)
-	if err != nil {
-		return nil
+	env := myEnv.HandlerEnvironment
+	return &handlerenv.HandlerEnvironment{
+		HeartbeatFile:       env.HeartbeatFile,
+		StatusFolder:        env.StatusFolder,
+		ConfigFolder:        env.ConfigFolder,
+		LogFolder:           env.LogFolder,
+		EventsFolder:        env.EventsFolder,
+		DeploymentID:        env.DeploymentID,
+		RoleName:            env.RoleName,
+		Instance:            env.Instance,
+		HostResolverAddress: env.HostResolverAddress,
 	}
-
-	var result handlerenv.HandlerEnvironment
-	err = json.Unmarshal(data, &result)
-	if err != nil {
-		return nil
-	}
-
-	return &result
 }
 
 // appendToBlob saves a file (from seeking position to the end of the file) to AppendBlob. Returns the new position (end of the file)
-func appendToBlob(sourceFilePath string, appendBlobRef *storage.Blob, appendBlobClient *appendblob.Client, outputFilePosition int64, ctx *log.Context) (int64, error) {
+func appendToBlob(sourceFilePath string, appendBlobRef *storage.Blob, appendBlobClient *appendblob.Client, outputFilePosition int64) (int64, error) {
 	var err error
 	var newOutput []byte
 	if appendBlobRef != nil || appendBlobClient != nil {
 		// Save to blob
-		newOutput, err = files.GetFileFromPosition(sourceFilePath, outputFilePosition)
+		newOutput, err = readOutputFromPosition(sourceFilePath, outputFilePosition)
 		if err == nil {
 			newOutputSize := len(newOutput)
 			if newOutputSize > 0 {
 				if appendBlobRef != nil {
-					err = appendBlobRef.AppendBlock(newOutput, nil)
+					err = errorutil.EnsureClarification(errorutil.Storage_failedToAppendOutputWithSas, appendSASBlock(appendBlobRef, newOutput))
 				} else if appendBlobClient != nil {
-					ctx.Log("message", fmt.Sprintf("inside appendBlobClient. Output is '%s'", newOutput))
-					_, err = appendBlobClient.AppendBlock(context.Background(), streaming.NopCloser(bytes.NewReader(newOutput)), nil)
+					err = errorutil.EnsureClarification(errorutil.Storage_failedToAppendOutputWithManagedIdentity, appendManagedBlock(appendBlobClient, newOutput))
 				}
 
 				if err == nil {
 					outputFilePosition += int64(newOutputSize)
-				} else {
-					ctx.Log("message", "AppendToBlob failed", "error", err)
 				}
 			}
-		} else {
-			ctx.Log("message", "AppendToBlob - GetFileFromPosition failed.", "error", err)
 		}
 	}
 
@@ -463,7 +505,9 @@ func resetSeqNum(ctx log.Logger, mrseqPath string, extensionEvents *extensioneve
 	message := fmt.Sprintf("Resetting seqnum by deleting file '%s'", mrseqPath)
 	ctx.Log("message", message)
 	extensionEvents.LogInformationalEvent("resetseqnum", message)
-	os.Remove(mrseqPath)
+	if err := commandRemove(mrseqPath); err != nil && !os.IsNotExist(err) {
+		ctx.Log("error", errorutil.EnsureClarification(errorutil.Os_FailedToResetSequenceNumber, errors.Wrap(err, "failed to reset sequence number")), "clarificationCode", errorutil.Os_FailedToResetSequenceNumber)
+	}
 }
 
 // Copy state of the extension from old version to new version during update (.mrseq files, .status files)
@@ -587,11 +631,11 @@ func padTo(in []int, size int) []int {
 func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersionDirectory string, updateToVersionDirectory string, extensionEvents *extensionevents.ExtensionEventManager) error {
 	oldExtensionStatusDirectory := filepath.Join(updateFromVersionDirectory, constants.StatusFileDirectory)
 
-	extensionStatusDirectoryFDRef, err := os.Open(oldExtensionStatusDirectory)
+	extensionStatusDirectoryFDRef, err := commandOpen(oldExtensionStatusDirectory)
 	if err != nil {
 		errMessage := fmt.Sprintf("Failed to open status directory '%s' due to '%v'", oldExtensionStatusDirectory, err)
 		extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
-		return errors.Wrap(err, errMessage)
+		return errorutil.EnsureClarification(errorutil.Os_FailedToOpenRehydrationStatusDirectory, errors.Wrap(err, errMessage))
 	}
 	defer extensionStatusDirectoryFDRef.Close()
 
@@ -603,7 +647,7 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersi
 		errMessage := fmt.Sprintf("could not read directory entries from status directory %s", updateFromVersionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
-		return errors.Wrap(err, errMessage)
+		return errorutil.EnsureClarification(errorutil.Os_FailedToReadRehydrationStatusDirectory, errors.Wrap(err, errMessage))
 	}
 
 	for _, statusFile := range statusFiles {
@@ -616,22 +660,25 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersi
 			} else {
 				extensionName := parts[0]
 				seqNo := parts[1]
-				seqNoAsInt, _ := strconv.Atoi(seqNo)
+				seqNoAsInt, parseErr := strconv.Atoi(seqNo)
+				if parseErr != nil {
+					return errorutil.EnsureClarification(errorutil.Internal_invalidStatusFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in status filename"))
+				}
 				mrSeqFileName := extensionName + constants.MrSeqFileExtension
 				mrSeqFilePath := filepath.Join(updateToVersionDirectory, mrSeqFileName)
 
-				_, err = os.Stat(mrSeqFilePath)
+				_, err = commandStat(mrSeqFilePath)
 				if err != nil {
 					if errors.Is(err, os.ErrNotExist) {
 						message := fmt.Sprintf("Rehydrating mrseq file for '%s' because it was mistakenly deleted during disable", extensionName)
 						ctx.Log("message", message)
 						extensionEvents.LogInformationalEvent("rehydratemrseq", message)
-						err = os.WriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
+						err = commandWriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
 						if err != nil {
 							errMessage := fmt.Sprintf("Could not write file '%s'", mrSeqFilePath)
 							ctx.Log("message", errMessage)
 							extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
-							return errors.Wrap(err, errMessage)
+							return errorutil.EnsureClarification(errorutil.Os_FailedToRehydrateSequenceNumber, errors.Wrap(err, errMessage))
 						}
 						message = fmt.Sprintf("Successfully rehydrated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath)
 						ctx.Log("message", message)
@@ -640,26 +687,29 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersi
 						errMessage := fmt.Sprintf("Could not access file '%s' even though it exists", mrSeqFilePath)
 						ctx.Log("message", errMessage)
 						extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
-						return errors.Wrap(err, errMessage)
+						return errorutil.EnsureClarification(errorutil.Os_FailedToStatRehydrationSequenceFile, errors.Wrap(err, errMessage))
 					}
 				} else {
 					// Overwrite mrseq this seqNo is greater than the one it contains (simple solution for multiple status files)
-					contents, err := os.ReadFile(mrSeqFilePath)
+					contents, err := commandReadFile(mrSeqFilePath)
 					if err != nil {
 						errMessage := fmt.Sprintf("Could not read file '%s'", mrSeqFilePath)
 						ctx.Log("message", errMessage)
 						extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
-						return errors.Wrap(err, errMessage)
+						return errorutil.EnsureClarification(errorutil.Os_FailedToReadRehydrationSequenceFile, errors.Wrap(err, errMessage))
 					}
 
-					currentSeqNo, _ := strconv.Atoi(string(contents))
+					currentSeqNo, parseErr := strconv.Atoi(string(contents))
+					if parseErr != nil {
+						return errorutil.EnsureClarification(errorutil.Internal_invalidMrseqFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in mrseq file"))
+					}
 					if seqNoAsInt > currentSeqNo {
-						err = os.WriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
+						err = commandWriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
 						if err != nil {
 							errMessage := fmt.Sprintf("Could not write file '%s'", mrSeqFilePath)
 							ctx.Log("message", errMessage)
 							extensionEvents.LogErrorEvent("rehydratemrseq", errMessage)
-							return errors.Wrap(err, errMessage)
+							return errorutil.EnsureClarification(errorutil.Os_FailedToUpdateRehydratedSequenceFile, errors.Wrap(err, errMessage))
 						}
 						message := fmt.Sprintf("Updated mrseq file for '%s' with seqNo '%s'. File location '%s'", extensionName, seqNo, mrSeqFilePath)
 						ctx.Log("message", message)
@@ -686,38 +736,41 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 		upgradeFromVersionDirectory = filepath.Join(upgradeFromVersionDirectory, extensionSubdirectory)
 
 		// Create subdirectory like "status" directory if it does not exist
-		_, err := os.Open(upgradeToVersionDirectory)
+		directory, err := commandOpen(upgradeToVersionDirectory)
 		if err != nil {
-			errr := os.Mkdir(upgradeToVersionDirectory, 0700)
+			errr := commandMkdir(upgradeToVersionDirectory, 0700)
 			if errr != nil {
 				errMessage := fmt.Sprintf("Failed to create directory '%s'", upgradeToVersionDirectory)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return nil, errors.Wrap(errr, errMessage)
+				return nil, errorutil.EnsureClarification(errorutil.Os_FailedToCreateUpgradeStatusDirectory, errors.Wrap(errr, errMessage))
 			}
+		} else {
+			directory.Close()
 		}
 	}
 
 	if upgradeFromVersionDirectory == "" || upgradeToVersionDirectory == "" {
 		errMessage := "oldExtesionDirectory or newExtensionDirectory is empty"
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, errors.New(errMessage)
+		return nil, errorutil.EnsureClarification(errorutil.Internal_emptyUpgradeDirectories, errors.New(errMessage))
 	}
 
 	// Check if the directory exists
-	sourceDirectoryFDRef, err := os.Open(upgradeFromVersionDirectory)
+	sourceDirectoryFDRef, err := commandOpen(upgradeFromVersionDirectory)
 	if err != nil {
 		errMessage := fmt.Sprintf("could not open sourceDirectory %s", upgradeFromVersionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, errors.Wrap(err, errMessage)
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToOpenUpgradeSourceDirectory, errors.Wrap(err, errMessage))
 	}
+	defer sourceDirectoryFDRef.Close()
 
 	directoryEntries, err := sourceDirectoryFDRef.ReadDir(0)
 	if err != nil {
 		errMessage := fmt.Sprintf("could not read directory entries from sourceDirectory %s", upgradeFromVersionDirectory)
 		ctx.Log("message", errMessage)
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, errors.Wrap(err, errMessage)
+		return nil, errorutil.EnsureClarification(errorutil.Os_FailedToReadUpgradeSourceDirectory, errors.Wrap(err, errMessage))
 	}
 
 	numberOfFilesMigrated := 0
@@ -730,31 +783,31 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 			sourceFileFullPath := filepath.Join(upgradeFromVersionDirectory, fileName)
 			destinationFileFullPath := filepath.Join(upgradeToVersionDirectory, fileName)
 
-			sourceFile, sourceFileOpenError := os.Open(sourceFileFullPath)
+			sourceFile, sourceFileOpenError := commandOpen(sourceFileFullPath)
 			if sourceFileOpenError != nil {
 				errMessage := "Failed to open '%s' file '%s' for reading. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, sourceFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrap(sourceFileOpenError, errMessage)
+				return fileNamesMigrated, errorutil.EnsureClarification(errorutil.Os_FailedToOpenUpgradeSourceFile, errors.Wrap(sourceFileOpenError, errMessage))
 			}
 			defer sourceFile.Close()
 
-			destFile, destFileCreateError := os.Create(destinationFileFullPath)
+			destFile, destFileCreateError := commandCreate(destinationFileFullPath)
 			if destFileCreateError != nil {
 				errMessage := "Failed to create '%s' file '%s'. Contact ICM team AzureRT\\Extensions for this service error."
 				ctx.Log("message", fmt.Sprintf(errMessage, fileExtensionSuffix, destinationFileFullPath))
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrap(destFileCreateError, errMessage)
+				return fileNamesMigrated, errorutil.EnsureClarification(errorutil.Os_FailedToCreateUpgradeDestinationFile, errors.Wrap(destFileCreateError, errMessage))
 			}
 			defer destFile.Close()
 
-			_, copyError := io.Copy(destFile, sourceFile)
+			_, copyError := commandCopy(destFile, sourceFile)
 			if copyError != nil {
 				errMessage := fmt.Sprintf("Failed to copy '%s' file '%s' to path '%s'. Contact ICM team AzureRT\\Extensions for this service error.",
 					fileExtensionSuffix, sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", errMessage)
 				extensionEvents.LogErrorEvent("copyfiles", errMessage)
-				return fileNamesMigrated, errors.Wrap(copyError, errMessage)
+				return fileNamesMigrated, errorutil.EnsureClarification(errorutil.Os_FailedToCopyUpgradeStateFile, errors.Wrap(copyError, errMessage))
 			} else {
 				message := fmt.Sprintf("File '%s' was copied successfully to '%s'", sourceFileFullPath, destinationFileFullPath)
 				ctx.Log("message", message)
@@ -792,19 +845,21 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 	var instanceViewMessage string
 	var err error
 	var content []byte
-	var allErr error = errors.New("Refer to all error messages above.")
+	var allErr error
 
 	for mreSeqFileNameElement := mrseqFilesNameList.Front(); mreSeqFileNameElement != nil; mreSeqFileNameElement = mreSeqFileNameElement.Next() {
 		mrSeqFileName = (mreSeqFileNameElement.Value).(string)
 
 		// Read the most recently executed sequence number from the .mrseq file
 		mrSeqFileFullPath = filepath.Join(newExtensionDirectory, mrSeqFileName)
-		content, err = os.ReadFile(mrSeqFileFullPath)
+		content, err = commandReadFile(mrSeqFileFullPath)
 		if err != nil {
 			errorMessage = fmt.Sprintf("Reading mrseq (Most Recently executed Sequence number) from file '%s' failed with error '%s'", mrSeqFileFullPath, err.Error())
 			ctx.Log("error", errorMessage)
 			extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
-			allErr = errors.Wrap(allErr, errorMessage)
+			if allErr == nil {
+				allErr = errorutil.EnsureClarification(errorutil.Os_FailedToReadDummyStatusSequenceFile, errors.Wrap(err, errorMessage))
+			}
 			continue
 		}
 
@@ -816,14 +871,18 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 				errorMessage = fmt.Sprintf("mrseqNumberString to mrseqNumber conversion (string to int) of '%s' failed with error '%s'", mrseqNumberString, err.Error())
 				ctx.Log("error", errorMessage)
 				extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
-				allErr = errors.Wrap(allErr, errorMessage)
+				if allErr == nil {
+					allErr = errorutil.EnsureClarification(errorutil.Internal_invalidDummyStatusSequenceNumber, errors.Wrap(err, errorMessage))
+				}
 				continue
 			}
 		} else {
 			errorMessage = fmt.Sprintf("Empty .mrseq file content. No sequence number was found inside file  '%s' ", mrSeqFileFullPath)
 			ctx.Log("error", errorMessage)
 			extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
-			allErr = errors.Wrap(allErr, errorMessage)
+			if allErr == nil {
+				allErr = errorutil.EnsureClarification(errorutil.Internal_emptyDummyStatusSequenceFile, errors.New(errorMessage))
+			}
 			continue
 		}
 
@@ -833,7 +892,9 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 			errorMessage = fmt.Sprintf("Invalid mrseq file '%s'", mrSeqFileName)
 			ctx.Log("error", errorMessage)
 			extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
-			allErr = errors.Wrap(allErr, errorMessage)
+			if allErr == nil {
+				allErr = errorutil.EnsureClarification(errorutil.Internal_invalidDummyStatusSequenceFileName, errors.New(errorMessage))
+			}
 			continue
 		}
 		extensionName = mrSeqFileName[0:mrSeqFileExtensionIndex]
@@ -860,7 +921,9 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 			if err != nil {
 				errorMessage = fmt.Sprintf("Failed to serialize unknown instanceView, error is '%s'", err.Error())
 				extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
-				allErr = errors.Wrap(allErr, errorMessage)
+				if allErr == nil {
+					allErr = errors.Wrap(err, errorMessage)
+				}
 				continue
 			}
 
@@ -869,7 +932,9 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 			if err != nil {
 				errorMessage = fmt.Sprintf("failed to marshal status report into json for status file '%s' with error '%s'", statusFilePath, err.Error())
 				extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
-				allErr = errors.Wrap(allErr, errorMessage)
+				if allErr == nil {
+					allErr = errors.Wrap(err, errorMessage)
+				}
 				continue
 			}
 
@@ -877,7 +942,9 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 			if err != nil {
 				errorMessage = fmt.Sprintf("Failed to create a dummy status file '%s' as it was not existing for .mrseq file '%s' with error '%s'", statusFilePath, mrSeqFileFullPath, err.Error())
 				extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
-				allErr = errors.Wrap(allErr, errorMessage)
+				if allErr == nil {
+					allErr = errors.Wrap(err, errorMessage)
+				}
 				continue
 			}
 		}
@@ -891,8 +958,8 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 	// - prepare the output directory for files and the command output
 	// - create the directory if missing
 	ctx.Log("event", "creating output directory", "path", dir)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", errors.Wrap(err, "failed to prepare output directory")
+	if err := commandMkdirAll(dir, 0700); err != nil {
+		return "", errorutil.EnsureClarification(errorutil.FileDownload_unableToCreateDownloadDirectory, errors.Wrap(err, "failed to prepare output directory"))
 	}
 	ctx.Log("event", "created output directory")
 
@@ -905,7 +972,7 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 	if scriptURI != "" {
 		telemetryResult("scenario", fmt.Sprintf("source.scriptUri;dos2unix=%d", dos2unix), true, 0*time.Millisecond)
 		ctx.Log("event", "download start")
-		file, err := files.DownloadAndProcessScript(ctx, scriptURI, dir, cfg)
+		file, err := processDownloadedScript(ctx, scriptURI, dir, cfg)
 		if err != nil {
 			ctx.Log("event", "download failed", "error", err)
 			return "", errors.Wrapf(err, "failed to download file %s. ", scriptURI)
@@ -915,15 +982,15 @@ func downloadScript(ctx *log.Context, dir string, cfg *handlersettings.HandlerSe
 
 		if rceps != nil && cfg.ScriptType() != handlersettings.GalleryScript {
 			// Assume the downloaded script TYPE is already allowed, since this was already validated earlier in enable().
-			err = extensionpolicysettings.ValidateFileHashInAllowlist(scriptFilePath, rceps.DownloadedScriptsAllowlist, hashutils.HashTypeSHA256)
+			err = validateDownloadedScript(scriptFilePath, rceps)
 			if err != nil {
 				ctx.Log("message", "downloaded script file is not in the allowlist, attempting to delete", "scriptFilePath", scriptFilePath)
-				if delErr := os.Remove(scriptFilePath); delErr != nil {
-					ctx.Log("message", "failed to delete downloaded script file", "scriptFilePath", scriptFilePath, "error", delErr)
+				if delErr := commandRemove(scriptFilePath); delErr != nil {
+					ctx.Log("message", "failed to delete downloaded script file", "scriptFilePath", scriptFilePath, "error", errorutil.EnsureClarification(errorutil.Os_FailedToDeleteBlockedDownloadedScript, delErr), "clarificationCode", errorutil.Os_FailedToDeleteBlockedDownloadedScript)
 				} else {
 					ctx.Log("message", "successfully deleted downloaded script file", "scriptFilePath", scriptFilePath)
 				}
-				return scriptFilePath, errors.Wrapf(err, "file %s blocked by policy", scriptFilePath)
+				return scriptFilePath, errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_downloadedScriptNotAllowed, errors.Wrapf(err, "file %s blocked by policy", scriptFilePath))
 			}
 		}
 	}
@@ -1005,7 +1072,7 @@ func decodeScript(script string) (string, string, error) {
 	// scripts must be base64 encoded
 	s, err := base64.StdEncoding.DecodeString(script)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to decode script")
+		return "", "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidEmbeddedScriptBase64, errors.Wrap(err, "failed to decode script"))
 	}
 
 	// scripts may be gzip'ed
@@ -1019,7 +1086,7 @@ func decodeScript(script string) (string, string, error) {
 
 	n, err := io.Copy(w, r)
 	if err != nil {
-		return "", "", errors.Wrap(err, "failed to decompress script")
+		return "", "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidCompressedScript, errors.Wrap(err, "failed to decompress script"))
 	}
 
 	w.Flush()
@@ -1035,32 +1102,32 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 		if managedIdentity.ClientId != "" {
 			ID = managedIdentity.ClientId
 		} else if managedIdentity.ObjectId != "" { //ObjectId is not supported by azidentity.NewManagedIdentityCredential
-			return nil, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead")
+			return nil, errorutil.EnsureClarification(errorutil.CustomerInput_outputIdentityObjectIdNotSupported, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead"))
 		}
 	}
 
 	if ID != "" { // Use user-assigned identity if clientId is provided
 		miCredentialOptions := azidentity.ManagedIdentityCredentialOptions{ID: azidentity.ClientID(ID)}
-		miCred, miCredError = azidentity.NewManagedIdentityCredential(&miCredentialOptions)
+		miCred, miCredError = newManagedIdentityCredential(&miCredentialOptions)
 	} else { // Use system-assigned identity if clientId not provided
-		miCred, miCredError = azidentity.NewManagedIdentityCredential(nil)
+		miCred, miCredError = newManagedIdentityCredential(nil)
 	}
 
 	var appendBlobClient *appendblob.Client
 	var appendBlobNewClientError error
 	if miCredError == nil {
-		appendBlobClient, appendBlobNewClientError = appendblob.NewClient(blobUri, miCred, nil)
+		appendBlobClient, appendBlobNewClientError = newAppendBlobClient(blobUri, miCred, nil)
 		if appendBlobNewClientError != nil {
-			return nil, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
+			return nil, errorutil.EnsureClarification(errorutil.Storage_failedToCreateManagedAppendBlobClient, errors.Wrap(appendBlobNewClientError, fmt.Sprintf("Error Creating client to Append Blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
 		} else {
 			// Create or Replace Append blob. If AppendBlob already exists, blob gets cleared.
-			_, createAppendBlobError := appendBlobClient.Create(context.Background(), nil)
+			createAppendBlobError := createManagedAppendBlob(appendBlobClient)
 			if createAppendBlobError != nil {
-				return nil, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri)))
+				return nil, errorutil.EnsureClarification(errorutil.Storage_failedToCreateManagedAppendBlob, errors.Wrap(createAppendBlobError, fmt.Sprintf("Error creating or replacing the Append blob '%s'. Make sure you are using Append blob. Other types of blob such as PageBlob, BlockBlob are not supported types.", download.GetUriForLogging(blobUri))))
 			}
 		}
 	} else {
-		return nil, errors.Wrap(miCredError, "Error while retrieving managed identity credential")
+		return nil, errorutil.EnsureClarification(errorutil.Imds_failedToCreateManagedIdentityCredential, errors.Wrap(miCredError, "Error while retrieving managed identity credential"))
 	}
 
 	return appendBlobClient, nil

@@ -13,6 +13,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
 	"github.com/ahmetb/go-httpbin"
 	"github.com/go-kit/kit/log"
@@ -305,7 +306,15 @@ func Test_getTerminalStatus_doesNotGuessLegacyHandlerName(t *testing.T) {
 	require.Contains(t, logs.String(), "ignoring cached immediate status without a handler name")
 }
 
+func isolateImmediateStatusPersistence(t *testing.T) {
+	t.Helper()
+	directory := t.TempDir()
+	t.Setenv(constants.ExtensionPathEnvName, directory)
+	require.NoError(t, os.Mkdir(filepath.Join(directory, constants.ImmediateStatusFileDirectory), 0755))
+}
+
 func Test_onNotify_success(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
@@ -338,6 +347,7 @@ func Test_onNotify_success(t *testing.T) {
 }
 
 func Test_onNotify_fails(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
@@ -367,6 +377,7 @@ func Test_onNotify_fails(t *testing.T) {
 	}
 	err := observer.OnNotify(topStatus)
 	require.NotNil(t, err, "OnNotify should return an error")
+	requireImmediateStatusCode(t, err, errorutil.HostGA_statusUploadReturnedErrorStatus)
 	require.Contains(t, err.Error(), strconv.Itoa(http.StatusNotFound))
 
 	status, ok := observer.GetStatusForKey(types.GoalStateKey{HandlerName: constants.RunCommandTestExtensionName, SeqNumber: 1, ExtensionName: "testExtension"})
@@ -375,6 +386,7 @@ func Test_onNotify_fails(t *testing.T) {
 }
 
 func Test_getImmediateTopLevelStatusToReport_filterNone(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
@@ -418,6 +430,7 @@ func Test_getImmediateTopLevelStatusToReport_filterNone(t *testing.T) {
 }
 
 func Test_getImmediateTopLevelStatusToReport_filterAllWithEmptyStatus(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
@@ -444,6 +457,7 @@ func Test_getImmediateTopLevelStatusToReport_filterAllWithEmptyStatus(t *testing
 }
 
 func Test_getImmediateTopLevelStatusToReport_filterSomeWithEmptyStatus(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	observer := StatusObserver{}
 	observer.Initialize(ctx)
@@ -546,7 +560,15 @@ func Test_reportStatusToEndpointNotFound(t *testing.T) {
 
 	err := observer.reportImmediateStatus(immediateStatus)
 	require.ErrorContains(t, err, strconv.Itoa(http.StatusNotFound))
+	requireImmediateStatusCode(t, err, errorutil.HostGA_statusUploadReturnedErrorStatus)
 	require.ErrorContains(t, err, "Not Found")
+}
+
+func requireImmediateStatusCode(t *testing.T, err error, want int) {
+	t.Helper()
+	code, ok := errorutil.FindClarification(err)
+	require.True(t, ok, "expected classified error: %v", err)
+	require.Equal(t, want, code)
 }
 
 func Test_getStatusForKey_statusFound(t *testing.T) {
@@ -583,6 +605,7 @@ func Test_getStatusForKey_statusNotFound(t *testing.T) {
 }
 
 func Test_removeProcessedGoalStates_RemoveAll(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	ctx.Log("msg", "Creating status observer")
 	observer := StatusObserver{}
@@ -604,6 +627,7 @@ func Test_removeProcessedGoalStates_RemoveAll(t *testing.T) {
 }
 
 func Test_removeProcessedGoalStates_RemoveNone(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	ctx.Log("msg", "Creating status observer")
 	observer := StatusObserver{}
@@ -629,6 +653,7 @@ func Test_removeProcessedGoalStates_RemoveNone(t *testing.T) {
 }
 
 func Test_removeProcessedGoalStates_RemoveOne(t *testing.T) {
+	isolateImmediateStatusPersistence(t)
 	ctx := log.NewContext(log.NewSyncLogger(log.NewLogfmtLogger(os.Stdout))).With("time", log.DefaultTimestamp)
 	ctx.Log("msg", "Creating status observer")
 	observer := StatusObserver{}

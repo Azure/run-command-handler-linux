@@ -82,9 +82,9 @@ func Uninstall(ctx *log.Context, h types.HandlerEnvironment, extName string, seq
 	}
 
 	if isInstalled {
-		error := service.DeRegister(ctx, extensionEvents)
-		if error != nil {
-			errMessage := fmt.Sprintf("Failed to uninstall run command service: %v", error)
+		err := service.DeRegister(ctx, extensionEvents)
+		if err != nil {
+			errMessage := fmt.Sprintf("Failed to uninstall run command service: %v", err)
 			extensionEvents.LogErrorEvent("immediatedisable", errMessage)
 			return constants.ExitCode_UninstallInstalledServiceFailed, errors.Wrap(err, "failed to uninstall run command service")
 		}

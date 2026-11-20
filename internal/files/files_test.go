@@ -10,6 +10,7 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/download"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
@@ -61,6 +62,7 @@ func Test_getDownloaders_SystemIdentityVersusByClientIdOrObjectId(t *testing.T) 
 	d, err := getDownloaders("http://acct.blob.core.windows.net/", &mockManagedIdentityBoth, mockMsiDownloder)
 	fmt.Println(err.Error())
 	require.NotNil(t, err)
+	assertFileCode(t, err, errorutil.CustomerInput_clientIdObjectIdBothSpecified)
 	require.Equal(t, err.Error(), "use either ClientId or ObjectId for managed identity. Not both")
 
 	download.MockReturnErrorForMockMsiDownloader = false
@@ -98,6 +100,7 @@ func Test_urlToFileName_badURL(t *testing.T) {
 	_, err := UrlToFileName("http://192.168.0.%31/")
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), `unable to parse URL: "http://192.168.0.%31/"`)
+	assertFileCode(t, err, errorutil.CustomerInput_invalidDownloadFileUrl)
 }
 
 func Test_urlToFileName_noFileName(t *testing.T) {
@@ -116,6 +119,7 @@ func Test_urlToFileName_noFileName(t *testing.T) {
 	for _, c := range cases {
 		_, err := UrlToFileName(c)
 		require.NotNil(t, err, "not failed: %s", "url=%s", c)
+		assertFileCode(t, err, errorutil.CustomerInput_missingDownloadFileName)
 		require.Contains(t, err.Error(), "cannot extract file name from URL", "url=%s", c)
 	}
 }
@@ -136,7 +140,9 @@ func Test_urlToFileName(t *testing.T) {
 }
 
 func Test_postProcessFile_fail(t *testing.T) {
-	require.NotNil(t, PostProcessFile("/non/existing/path"))
+	err := PostProcessFile("/non/existing/path")
+	require.NotNil(t, err)
+	assertFileCode(t, err, errorutil.Os_FailedToOpenTextFile)
 }
 
 func Test_postProcessFile(t *testing.T) {

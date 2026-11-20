@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/pkg/download"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +21,7 @@ func TestSaveTo_invalidDir(t *testing.T) {
 	d := download.NewURLDownload(srv.URL + "/bytes/65536")
 
 	_, err := download.SaveTo(nopLog(), []download.Downloader{d}, "/nonexistent-dir/dst", 0600)
+	requireDownloadCode(t, errorutil.FileDownload_failedToOpenDestination, err)
 	require.Contains(t, err.Error(), "failed to open file for writing")
 }
 

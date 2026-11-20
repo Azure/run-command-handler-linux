@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Azure/run-command-handler-linux/internal/requesthelper"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
@@ -60,6 +61,7 @@ func TestWithRetries_noRecovery(t *testing.T) {
 	sr := new(sleepRecorder)
 	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.NotNil(t, err, "should have failed")
+	requireRequestCode(t, err, errorutil.HostGA_requestReturnedErrorStatus)
 	require.Nil(t, resp, "response exists")
 	require.Equal(t, []time.Duration(nil), []time.Duration(*sr), "sleep should not be called")
 }
@@ -79,6 +81,7 @@ func TestWithRetries_noResponse(t *testing.T) {
 	sr := new(sleepRecorder)
 	resp, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.NotNil(t, err, "should have failed")
+	requireRequestCode(t, err, errorutil.HostGA_failedToSendRequest)
 	require.Nil(t, resp, "response exists")
 	require.Equal(t, []time.Duration(nil), []time.Duration(*sr), "sleep should not be called")
 }
@@ -94,6 +97,7 @@ func TestWithRetries_failing_validateNumberOfCalls(t *testing.T) {
 	sr := new(sleepRecorder)
 	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, "unexpected status code: actual=429 expected=200")
+	requireRequestCode(t, err, errorutil.HostGA_requestReturnedErrorStatus)
 	require.EqualValues(t, 7, d.calls, "calls exactly expRetryN times")
 }
 
@@ -105,6 +109,7 @@ func TestWithRetries_failedCreateRequest(t *testing.T) {
 	sr := new(sleepRecorder)
 	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, badRequestorErrorMsg)
+	requireRequestCode(t, err, errorutil.HostGA_failedToCreateRequest)
 	require.EqualValues(t, 1, bd.calls, "called exactly one time")
 }
 
@@ -116,6 +121,7 @@ func TestWithRetries_requestFailedTimeout(t *testing.T) {
 	sr := new(sleepRecorder)
 	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, requestErrorMsg)
+	requireRequestCode(t, err, errorutil.HostGA_failedToCreateRequest)
 	require.EqualValues(t, 7, er.calls, "calls exactly expRetryN times")
 }
 
@@ -127,6 +133,7 @@ func TestWithRetries_requestFailedTemporary(t *testing.T) {
 	sr := new(sleepRecorder)
 	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, requestErrorMsg)
+	requireRequestCode(t, err, errorutil.HostGA_failedToCreateRequest)
 	require.EqualValues(t, 7, er.calls, "calls exactly expRetryN times")
 }
 
@@ -138,6 +145,7 @@ func TestWithRetries_requestFailedOther(t *testing.T) {
 	sr := new(sleepRecorder)
 	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, requestErrorMsg)
+	requireRequestCode(t, err, errorutil.HostGA_failedToCreateRequest)
 	require.EqualValues(t, 1, er.calls, "called exactly one time")
 }
 
@@ -152,6 +160,7 @@ func TestWithRetries_failingBadStatusCode_validateSleeps(t *testing.T) {
 	sr := new(sleepRecorder)
 	_, err := requesthelper.WithRetries(ctx, rm, sr.Sleep, "")
 	require.EqualError(t, err, "unexpected status code: actual=429 expected=200")
+	requireRequestCode(t, err, errorutil.HostGA_requestReturnedErrorStatus)
 	require.Equal(t, sleepSchedule, []time.Duration(*sr))
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
@@ -125,7 +126,14 @@ func Test_ProcessImmediateHandlerCommand_CleanupAfterFinalStatus(t *testing.T) {
 					require.NoError(t, os.Remove(configPath))
 				},
 			})
-			require.NoError(t, ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(test.policy), name, seq))
+			err := ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(test.policy), name, seq)
+			if test.scriptFails && test.policy {
+				require.ErrorContains(t, err, "script failed")
+			} else if !test.scriptFails && test.reportFails {
+				require.ErrorContains(t, err, "status reporting failed")
+			} else {
+				require.NoError(t, err)
+			}
 			require.Equal(t, []string{"progress", "invoke", "invoke returned", "final status", "cleanup"}, events)
 			require.Equal(t, 1, cleanupCalls)
 			require.NoFileExists(t, configPath)
@@ -185,13 +193,13 @@ func Test_ProcessImmediateHandlerCommand_PrecheckCleanupRemainsImmediate(t *test
 		Pre: func(ctx *log.Context, hEnv types.HandlerEnvironment, metadata types.RCMetadata, c types.Cmd) error {
 			c.Functions.Cleanup(ctx, metadata, hEnv, "")
 			require.True(t, cleaned)
-			return errors.New("already processed")
+			return types.ErrAlreadyProcessed
 		},
 		Cleanup: func(_ *log.Context, _ types.RCMetadata, _ types.HandlerEnvironment, _ string) {
 			cleaned = true
 		},
 	})
-	require.ErrorContains(t, ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(false), "cleanup-test", 1), "already processed")
+	require.ErrorIs(t, ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(false), "cleanup-test", 1), types.ErrAlreadyProcessed)
 	require.True(t, cleaned)
 }
 
@@ -259,10 +267,19 @@ func Test_ExecutePreStepsAndFailed(t *testing.T) {
 	ctx := initializeLogger(cmd)
 	extName, seqNum := "testExtension", 5
 	fakeEnv := types.HandlerEnvironment{}
+	fakeEnv.HandlerEnvironment.StatusFolder = t.TempDir()
 
 	err := executePreSteps(ctx, cmd, fakeEnv, extName, seqNum, constants.DownloadFolder)
 	require.ErrorContains(t, err, "pre-check step failed")
+	requireProcessorCode(t, err, errorutil.Internal_unclassifiedPrecheckFailure)
 	require.ErrorContains(t, err, "expected error")
+	payload, err := os.ReadFile(filepath.Join(fakeEnv.HandlerEnvironment.StatusFolder, "testExtension.5.status"))
+	require.NoError(t, err)
+	var report types.StatusReport
+	require.NoError(t, json.Unmarshal(payload, &report))
+	require.Len(t, report, 1)
+	require.Equal(t, types.StatusError, report[0].Status.Status)
+	requireProcessorStatusCode(t, report, errorutil.Internal_unclassifiedPrecheckFailure)
 }
 
 func Test_SaveConfigurationFileInConfigFolderSuccessfully(t *testing.T) {
@@ -362,14 +379,17 @@ func Test_GetSeqNumFromEnvVariableFailedToParse(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	_, err := getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
+	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "-")
 	_, err = getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
+	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "+")
 	_, err = getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
+	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
 }
 
 func Test_GetSeqNumFromFailedToFind(t *testing.T) {
@@ -387,6 +407,8 @@ func Test_GetSeqNumFromFailedToFind(t *testing.T) {
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "")
 	actualSeqNum, err := getSeqNum(&ctx, fakeEnv, extName)
-	require.Nil(t, err)
+	require.Error(t, err)
+	requireProcessorCode(t, err, errorutil.Internal_noSequenceConfigurationFiles)
+	require.Contains(t, err.Error(), "can't find out seqnum")
 	require.Equal(t, 0, actualSeqNum)
 }

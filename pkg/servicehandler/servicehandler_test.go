@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/systemd"
 	"github.com/go-kit/kit/log"
 )
@@ -229,6 +230,7 @@ func TestHandlerRegisterFailsOnUnitConfigurationFileDeletion(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful registration call")
 	}
+	requireServiceCode(t, errorutil.Service_failedToRemoveOldConfiguration, err)
 }
 
 func TestHandlerRegisterFailsOnUnitConfigurationFileCreation(t *testing.T) {
@@ -250,6 +252,7 @@ func TestHandlerRegisterFailsOnUnitConfigurationFileCreation(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful registration call")
 	}
+	requireServiceCode(t, errorutil.Service_failedToCreateConfiguration, err)
 }
 
 func TestHandlerRegisterFailsOnDaemonReload(t *testing.T) {
@@ -271,6 +274,7 @@ func TestHandlerRegisterFailsOnDaemonReload(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful registration call")
 	}
+	requireServiceCode(t, errorutil.Service_failedToReloadDaemon, err)
 }
 
 func TestHandlerRegisterFailsOnEnable(t *testing.T) {
@@ -292,6 +296,7 @@ func TestHandlerRegisterFailsOnEnable(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful registration call")
 	}
+	requireServiceCode(t, errorutil.Service_failedToEnable, err)
 }
 
 func TestHandlerSuccessfulDeRegister(t *testing.T) {
@@ -380,6 +385,7 @@ func TestHandlerFailsOnGettingInstalledVersionDeRegister(t *testing.T) {
 	if err == nil {
 		t.Errorf("an error should be thrown due to not being able to get the installed version")
 	}
+	requireServiceCode(t, errorutil.Internal_failedToReadServiceVersion, err)
 
 	if !m.functionCalled.getinstalledversion_f {
 		t.Errorf("missing call to verify target version")
@@ -441,6 +447,7 @@ func TestHandlerStartFailsOnStartUnit(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful start unit command")
 	}
+	requireServiceCode(t, errorutil.Service_failedToStart, err)
 }
 
 func TestHandlerSuccessfulStop(t *testing.T) {
@@ -482,6 +489,7 @@ func TestHandlerStopFailsOnStopUnit(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful stop unit command")
 	}
+	requireServiceCode(t, errorutil.Service_failedToStop, err)
 }
 
 func TestHandlerSuccessfulEnable(t *testing.T) {
@@ -523,6 +531,7 @@ func TestHandlerEnableFailsOnEnableUnit(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful enable unit command")
 	}
+	requireServiceCode(t, errorutil.Service_failedToEnable, err)
 }
 
 func TestHandlerSuccessfulDisable(t *testing.T) {
@@ -564,6 +573,7 @@ func TestHandlerDisableFailsOnDisableUnit(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful disable unit command")
 	}
+	requireServiceCode(t, errorutil.Service_failedToDisable, err)
 }
 
 func TestHandlerSuccessfulDaemonReload(t *testing.T) {
@@ -605,6 +615,7 @@ func TestHandlerDaemonReloadFailsOnDaemonReload(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected successful daemon reload command")
 	}
+	requireServiceCode(t, errorutil.Service_failedToReloadDaemon, err)
 }
 
 func TestHandlerIsActiveTrue(t *testing.T) {
@@ -646,7 +657,8 @@ func TestHandlerIsActiveFalse(t *testing.T) {
 		return fmt.Errorf("Failed to check if unit is active")
 	}
 
-	isActive, _ := handler.IsActive()
+	isActive, err := handler.IsActive()
+	requireServiceCode(t, errorutil.Service_failedToCheckActivity, err)
 	if !m.functionCalled.isunitactive_f {
 		t.Errorf("missing IsUnitActive method call")
 	}

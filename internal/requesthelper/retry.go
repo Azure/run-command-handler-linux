@@ -1,6 +1,7 @@
 package requesthelper
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -55,12 +56,10 @@ func WithRetries(ctx *log.Context, rm *RequestManager, sf SleepFunc, eTag string
 
 		// status == -1 means that there wasn't any http request
 		if status == -1 {
-			te, haste := lastErr.(interface {
-				Temporary() bool
-			})
-			to, hasto := lastErr.(interface {
-				Timeout() bool
-			})
+			var te interface{ Temporary() bool }
+			var to interface{ Timeout() bool }
+			haste := errors.As(lastErr, &te)
+			hasto := errors.As(lastErr, &to)
 
 			if haste || hasto {
 				if haste && te.Temporary() {

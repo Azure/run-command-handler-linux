@@ -2,6 +2,7 @@ package files
 
 import (
 	"bytes"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"os"
 	"testing"
 
@@ -21,6 +22,7 @@ func Test_tailFile_openError(t *testing.T) {
 	require.Nil(t, os.Chmod(tf, 0333)) // no read
 	_, err := TailFile(tf, 1024)
 	require.NotNil(t, err)
+	assertFileCode(t, err, errorutil.Os_FailedToOpenTailFile)
 	require.Regexp(t, `^error opening file:`, err.Error())
 }
 
