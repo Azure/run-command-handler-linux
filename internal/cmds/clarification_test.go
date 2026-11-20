@@ -5,17 +5,23 @@ import (
 	"compress/gzip"
 	"container/list"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-extension-platform/pkg/extensionevents"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/run-command-handler-linux/internal/constants"
+	"github.com/Azure/run-command-handler-linux/internal/exec"
 	"github.com/Azure/run-command-handler-linux/internal/extensionpolicysettingsrc"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/types"
@@ -133,10 +139,10 @@ func TestLifecycleClarifications(t *testing.T) {
 				_, _, err, _, _ = enable(ctx, types.HandlerEnvironment{}, nil, types.RCMetadata{}, types.CmdEnableTemplate)
 			case errorutil.Storage_failedToAppendOutputWithSas:
 				appendSASBlock = func(*storage.Blob, []byte) error { return failure }
-				_, err = appendToBlob("mock", &storage.Blob{}, nil, 0, ctx)
+				_, err = appendToBlob("mock", &storage.Blob{}, nil, 0)
 			case errorutil.Storage_failedToAppendOutputWithManagedIdentity:
 				appendManagedBlock = func(*appendblob.Client, []byte) error { return failure }
-				_, err = appendToBlob("mock", nil, &appendblob.Client{}, 0, ctx)
+				_, err = appendToBlob("mock", nil, &appendblob.Client{}, 0)
 			case errorutil.Os_FailedToResetSequenceNumber:
 				var output bytes.Buffer
 				ctx = log.NewContext(log.NewLogfmtLogger(&output))
@@ -298,8 +304,194 @@ func TestManagedBlobClarifications(t *testing.T) {
 					return nil, failure
 				}
 			}
+
 			_, err := createOrReplaceAppendBlobUsingManagedIdentity("https://mock/container/blob", identity)
 			requireCommandCode(t, code, err)
+		})
+	}
+}
+
+func TestEnableBlobCreateOrReplaceExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		outputURI    string
+		errorURI     string
+		wantExitCode int
+	}{
+		{"output", "https://mock/container/output", "", constants.ExitCode_OutputBlobCreateOrReplaceFailed},
+		{"error", "", "https://mock/container/error", constants.ExitCode_ErrorBlobCreateOrReplaceFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCommandDependencies(t)
+			commandStat = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+			readCommandSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
+				return handlersettings.HandlerSettings{
+					PublicSettings: handlersettings.PublicSettings{
+						OutputBlobURI: tc.outputURI,
+						ErrorBlobURI:  tc.errorURI,
+						Source:        &handlersettings.ScriptSource{},
+					},
+				}, nil
+			}
+			failure := errors.New("injected blob creation failure")
+			createManagedAppendBlob = func(*appendblob.Client) error { return failure }
+			originalRunCmd := RunCmd
+			t.Cleanup(func() { RunCmd = originalRunCmd })
+			RunCmd = func(*log.Context, string, string, *handlersettings.HandlerSettings, types.RCMetadata) (error, int) {
+				t.Fatal("script must not run after blob creation fails")
+				return nil, constants.ExitCode_Okay
+			}
+
+			stdout, stderr, err, exitCode, cleanup := enable(
+				log.NewContext(log.NewNopLogger()), types.HandlerEnvironment{},
+				&types.RunCommandInstanceView{}, types.RCMetadata{DownloadPath: t.TempDir()}, Cmds["enable"])
+
+			require.ErrorIs(t, err, failure)
+			requireCommandCode(t, errorutil.Storage_failedToCreateManagedAppendBlob, err)
+			require.Equal(t, tc.wantExitCode, exitCode)
+			require.NotEqual(t, constants.ExitCode_BlobCreateOrReplaceFailed, exitCode)
+			require.Empty(t, stdout)
+			require.Empty(t, stderr)
+			require.Nil(t, cleanup)
+		})
+	}
+	require.NotEqual(t, constants.ExitCode_OutputBlobCreateOrReplaceFailed, constants.ExitCode_ErrorBlobCreateOrReplaceFailed)
+}
+
+func TestEnableBlobAppendsBestEffort(t *testing.T) {
+	scriptFailure := errors.New("script failed")
+	for _, tc := range []struct {
+		name           string
+		failOutput     bool
+		failError      bool
+		failRead       bool
+		waitForTick    bool
+		scriptError    error
+		scriptExitCode int
+	}{
+		{name: "success"},
+		{name: "output failure", failOutput: true},
+		{name: "error failure", failError: true},
+		{name: "both fail", failOutput: true, failError: true},
+		{name: "read failure", failRead: true},
+		{name: "script failure preserved", failOutput: true, failError: true, scriptError: scriptFailure, scriptExitCode: 42},
+		{name: "periodic and final failures", failOutput: true, failError: true, waitForTick: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCommandDependencies(t)
+			commandStat = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+			readCommandSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
+				return handlersettings.HandlerSettings{
+					PublicSettings: handlersettings.PublicSettings{
+						OutputBlobURI: "https://mock/container/output",
+						ErrorBlobURI:  "https://mock/container/error",
+						Source:        &handlersettings.ScriptSource{},
+					},
+				}, nil
+			}
+
+			dataDir := t.TempDir()
+			eventsDir := t.TempDir()
+			dir := filepath.Join(dataDir, "0")
+			require.NoError(t, os.MkdirAll(dir, 0700))
+			stdoutPath, stderrPath := exec.LogPaths(dir)
+			require.NoError(t, os.WriteFile(stdoutPath, []byte("stdout"), 0600))
+			require.NoError(t, os.WriteFile(stderrPath, []byte("stderr"), 0600))
+			blobFailure := errors.New("injected append failure")
+			var outputClient, errorClient *appendblob.Client
+			newAppendBlobClient = func(uri string, _ azcore.TokenCredential, _ *appendblob.ClientOptions) (*appendblob.Client, error) {
+				client := &appendblob.Client{}
+				if strings.HasSuffix(uri, "/output") {
+					outputClient = client
+				} else {
+					errorClient = client
+				}
+				return client, nil
+			}
+			readCount := 0
+			readOutputFromPosition = func(_ string, position int64) ([]byte, error) {
+				readCount++
+				if tc.failRead {
+					return nil, blobFailure
+				}
+				if position > 0 {
+					return nil, nil
+				}
+				return []byte("output"), nil
+			}
+			periodicAppended := make(chan struct{})
+			outputAttempts, errorAttempts := 0, 0
+			appendManagedBlock = func(client *appendblob.Client, _ []byte) error {
+				if client == outputClient {
+					outputAttempts++
+					if tc.failOutput {
+						return blobFailure
+					}
+				} else if client == errorClient {
+					errorAttempts++
+					if tc.waitForTick && errorAttempts == 1 {
+						close(periodicAppended)
+					}
+					if tc.failError {
+						return blobFailure
+					}
+				}
+				return nil
+			}
+			originalRunCmd := RunCmd
+			t.Cleanup(func() { RunCmd = originalRunCmd })
+			RunCmd = func(*log.Context, string, string, *handlersettings.HandlerSettings, types.RCMetadata) (error, int) {
+				if tc.waitForTick {
+					select {
+					case <-periodicAppended:
+					case <-time.After(2 * updateStatusInSeconds * time.Second):
+						t.Error("periodic blob appends were not attempted")
+					}
+				}
+				return tc.scriptError, tc.scriptExitCode
+			}
+			var logs bytes.Buffer
+			env := types.HandlerEnvironment{}
+			env.HandlerEnvironment.EventsFolder = eventsDir
+			stdout, stderr, err, exitCode, cleanup := enable(
+				log.NewContext(log.NewLogfmtLogger(&logs)), env, &types.RunCommandInstanceView{},
+				types.RCMetadata{DownloadPath: dataDir}, types.Cmd{})
+
+			require.Equal(t, tc.scriptError, err)
+			require.Equal(t, tc.scriptExitCode, exitCode)
+			require.Equal(t, "stdout", stdout)
+			require.Equal(t, "stderr", stderr)
+			require.NotNil(t, cleanup)
+			expectedAttempts := 1
+			if tc.waitForTick {
+				expectedAttempts = 2
+			}
+			require.Equal(t, 2*expectedAttempts, readCount)
+			if !tc.failRead {
+				require.Equal(t, expectedAttempts, outputAttempts)
+				require.Equal(t, expectedAttempts, errorAttempts)
+			}
+			expectedFailures := 0
+			if tc.failOutput || tc.failError || tc.failRead {
+				expectedFailures = 1
+			}
+			require.Equal(t, expectedFailures, strings.Count(logs.String(), "Failed to append command output"))
+			events, eventErr := os.ReadDir(eventsDir)
+			require.NoError(t, eventErr)
+			require.Len(t, events, expectedFailures)
+			for _, event := range events {
+				content, readErr := os.ReadFile(filepath.Join(eventsDir, event.Name()))
+				require.NoError(t, readErr)
+				var recorded struct {
+					TaskName   string
+					EventLevel string
+					Message    string
+				}
+				require.NoError(t, json.Unmarshal(content, &recorded))
+				require.Equal(t, "enable", recorded.TaskName)
+				require.Equal(t, "Error", recorded.EventLevel)
+				require.Contains(t, recorded.Message, "injected append failure")
+			}
 		})
 	}
 }

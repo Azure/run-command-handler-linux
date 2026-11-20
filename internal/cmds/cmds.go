@@ -325,7 +325,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(outputBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.OutputBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed, nil
+				constants.ExitCode_OutputBlobCreateOrReplaceFailed, nil
 		}
 	}
 
@@ -343,7 +343,7 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 			return "",
 				"",
 				errors.Wrap(errorBlobAppendCreateOrReplaceError, fmt.Sprintf(blobCreateOrReplaceError, cfg.ErrorBlobURI)),
-				constants.ExitCode_BlobCreateOrReplaceFailed, nil
+				constants.ExitCode_ErrorBlobCreateOrReplaceFailed, nil
 		}
 	}
 
@@ -357,6 +357,18 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}
 
 	stdoutF, stderrF := exec.LogPaths(dir)
+
+	appendFailureLogged := false
+	appendOutput := func(sourceFilePath string, blobRef *storage.Blob, blobClient *appendblob.Client, position int64) int64 {
+		newPosition, appendErr := appendToBlob(sourceFilePath, blobRef, blobClient, position)
+		if appendErr != nil && !appendFailureLogged {
+			appendFailureLogged = true
+			message := fmt.Sprintf("Failed to append command output from '%s' to blob; blob appends are best effort and do not affect the command result: %v", sourceFilePath, appendErr)
+			ctx.Log("message", message, "error", appendErr)
+			extensionEvents.LogErrorEvent("enable", message)
+		}
+		return newPosition
+	}
 
 	// Implement ticker to update extension status periodically
 	ticker := time.NewTicker(updateStatusInSeconds * time.Second)
@@ -372,8 +384,8 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 				report.Output = stdoutTail
 				report.Error = stderrTail
 				instanceview.ReportInstanceView(ctx, h, metadata, statusToReport, c, report)
-				outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
-				errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
+				outputFilePosition = appendOutput(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition)
+				errorFilePosition = appendOutput(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition)
 			}
 		}
 	}()
@@ -397,14 +409,8 @@ func enable(ctx *log.Context, h types.HandlerEnvironment, report *types.RunComma
 	}
 
 	// Report the output streams to blobs
-	outputFilePosition, err = appendToBlob(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition, ctx)
-	if err != nil && runErr == nil {
-		runErr, exitCode = err, constants.ExitCode_BlobCreateOrReplaceFailed
-	}
-	errorFilePosition, err = appendToBlob(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition, ctx)
-	if err != nil && runErr == nil {
-		runErr, exitCode = err, constants.ExitCode_BlobCreateOrReplaceFailed
-	}
+	outputFilePosition = appendOutput(stdoutF, outputBlobSASRef, outputBlobAppendClient, outputFilePosition)
+	errorFilePosition = appendOutput(stderrF, errorBlobSASRef, errorBlobAppendClient, errorFilePosition)
 
 	return stdoutTail, stderrTail, runErr, exitCode, &types.CleanupRequest{RunAsUser: cfg.PublicSettings.RunAsUser}
 }
@@ -433,7 +439,7 @@ func convertToPlatformHandlerEnv(myEnv types.HandlerEnvironment) *handlerenv.Han
 }
 
 // appendToBlob saves a file (from seeking position to the end of the file) to AppendBlob. Returns the new position (end of the file)
-func appendToBlob(sourceFilePath string, appendBlobRef *storage.Blob, appendBlobClient *appendblob.Client, outputFilePosition int64, ctx *log.Context) (int64, error) {
+func appendToBlob(sourceFilePath string, appendBlobRef *storage.Blob, appendBlobClient *appendblob.Client, outputFilePosition int64) (int64, error) {
 	var err error
 	var newOutput []byte
 	if appendBlobRef != nil || appendBlobClient != nil {
@@ -445,18 +451,13 @@ func appendToBlob(sourceFilePath string, appendBlobRef *storage.Blob, appendBlob
 				if appendBlobRef != nil {
 					err = errorutil.EnsureClarification(errorutil.Storage_failedToAppendOutputWithSas, appendSASBlock(appendBlobRef, newOutput))
 				} else if appendBlobClient != nil {
-					ctx.Log("message", fmt.Sprintf("inside appendBlobClient. Output is '%s'", newOutput))
 					err = errorutil.EnsureClarification(errorutil.Storage_failedToAppendOutputWithManagedIdentity, appendManagedBlock(appendBlobClient, newOutput))
 				}
 
 				if err == nil {
 					outputFilePosition += int64(newOutputSize)
-				} else {
-					ctx.Log("message", "AppendToBlob failed", "error", err)
 				}
 			}
-		} else {
-			ctx.Log("message", "AppendToBlob - GetFileFromPosition failed.", "error", err)
 		}
 	}
 

@@ -28,6 +28,14 @@ permissions, connectivity, policy, or VM problems. Negative codes indicate handl
 or Azure infrastructure failures. Clarification codes are separate from script
 exit codes and handler process exit codes.
 
+Output-blob creation or replacement failures return exit code `-108`
+(`ExitCode_OutputBlobCreateOrReplaceFailed`); error-blob creation or replacement
+failures return `-109` (`ExitCode_ErrorBlobCreateOrReplaceFailed`). Once blobs
+are created, periodic and final appends are best effort: failures do not change
+the command result or exit code. Only the first append failure per command is
+logged and written as an extension error event, across both output and error
+blobs. Subsequent appends are still attempted.
+
 Managed and immediate status reports include a `substatus` entry with
 `name: "ErrorClarification"`, `status: "error"`, and the numeric `code`. The
 existing instance-view message, output, script exit code, and
