@@ -103,7 +103,7 @@ func TestRequestAndTransportClarifications(t *testing.T) {
 	requireDownloadCode(t, errorutil.FileDownload_exceededTimeout, err)
 	require.ErrorIs(t, err, timeout)
 	_, _, err = Download(clarificationLog(), clarificationDownloader{cause})
-	requireDownloadCode(t, errorutil.Internal_failedToCreateDownloadRequest, err)
+	requireDownloadCode(t, errorutil.FailedToCreateDownloadRequest, err)
 	require.True(t, errors.Is(err, cause))
 }
 
@@ -126,9 +126,9 @@ func TestDownloadNetworkAndStatusClarifications(t *testing.T) {
 		{404, errorutil.FileDownload_doesNotExist, errorutil.Msi_notFound},
 		{409, errorutil.FileDownload_genericError, errorutil.Msi_doesNotHaveRightPermissions},
 		{429, errorutil.FileDownload_genericError, errorutil.Msi_GenericRetrievalError},
-		{500, errorutil.Storage_internalServerError, errorutil.Imds_internalMsiError},
-		{502, errorutil.FileDownload_internalServerError, errorutil.Imds_downloadInternalServerError},
-		{503, errorutil.FileDownload_internalServerError, errorutil.Imds_downloadInternalServerError},
+		{500, errorutil.Storage_serverError, errorutil.Imds_msiError},
+		{502, errorutil.FileDownload_serverError, errorutil.Imds_downloadServerError},
+		{503, errorutil.FileDownload_serverError, errorutil.Imds_downloadServerError},
 	} {
 		for _, identity := range []bool{false, true} {
 			body := &clarificationReader{}
@@ -158,7 +158,7 @@ func TestDownloadNetworkAndStatusClarifications(t *testing.T) {
 
 func TestRetryAndSaveClarifications(t *testing.T) {
 	_, err := WithRetries(clarificationLog(), nil, func(time.Duration) {})
-	requireDownloadCode(t, errorutil.Internal_noDownloaders, err)
+	requireDownloadCode(t, errorutil.NoDownloaders, err)
 	first := vmextension.NewErrorWithClarificationPtr(1997, errors.New("first failure"))
 	last := vmextension.NewErrorWithClarificationPtr(1998, errors.New("last failure"))
 	_, err = WithRetries(clarificationLog(), []Downloader{
@@ -174,7 +174,7 @@ func TestRetryAndSaveClarifications(t *testing.T) {
 	requireDownloadCode(t, 1998, err)
 	require.True(t, errors.Is(err, *last))
 	require.True(t, errors.Is(err, first))
-	// errorutil.Internal_failedToAggregateDownloadAttempts is a defensive retry-wrapper fallback: Download always classifies its
+	// errorutil.FailedToAggregateDownloadAttempts is a defensive retry-wrapper fallback: Download always classifies its
 	// error first, so assigning it at runtime would overwrite a lower-level code.
 
 	cause := errors.New("injected file failure")
@@ -188,7 +188,7 @@ func TestRetryAndSaveClarifications(t *testing.T) {
 	_, err = SaveTo(clarificationLog(), []Downloader{clarificationDownloader{last}}, "script", 0500)
 	requireDownloadCode(t, 1998, err)
 	require.True(t, writer.closed)
-	// errorutil.Internal_failedToDownloadToFile is a defensive SaveTo wrapper fallback: WithRetries always returns
+	// errorutil.FailedToDownloadToFile is a defensive SaveTo wrapper fallback: WithRetries always returns
 	// a classified error (including the empty-downloader case), preserved here.
 
 	reader := &clarificationReader{err: cause}
@@ -250,7 +250,7 @@ func TestSASDownloadClarifications(t *testing.T) {
 		_, err = GetSASBlob("https://example.invalid/container/script", "", "unused")
 		expected := errorutil.FileDownload_sasDownloadErrorStatus
 		if status == 500 {
-			expected = errorutil.Storage_sasDownloadInternalServerError
+			expected = errorutil.Storage_sasDownloadServerError
 		}
 		requireDownloadCode(t, expected, err)
 		require.True(t, body.closed)
@@ -259,8 +259,8 @@ func TestSASDownloadClarifications(t *testing.T) {
 		uri  string
 		code int
 	}{
-		{"https://%", errorutil.CustomerInput_invalidSasBlobUrl},
-		{"https://example.invalid/", errorutil.CustomerInput_missingSasBlobFileName},
+		{"https://%", errorutil.InvalidSasBlobUrl},
+		{"https://example.invalid/", errorutil.MissingSasBlobFileName},
 	} {
 		stubSASResponse(t, 200, io.NopCloser(strings.NewReader("script")), nil)
 		_, err = GetSASBlob(tc.uri, "", "unused")
@@ -290,7 +290,7 @@ func TestSASDownloadClarifications(t *testing.T) {
 
 func TestAppendBlobClarifications(t *testing.T) {
 	_, err := CreateOrReplaceAppendBlob("https://%", "")
-	requireDownloadCode(t, errorutil.CustomerInput_invalidAppendBlobSasUrl, err)
+	requireDownloadCode(t, errorutil.InvalidAppendBlobSasUrl, err)
 	originalContainer := containerFromSAS
 	originalPut := putAppendBlob
 	t.Cleanup(func() { containerFromSAS = originalContainer; putAppendBlob = originalPut })
@@ -305,15 +305,15 @@ func TestAppendBlobClarifications(t *testing.T) {
 	container := service.GetContainerReference("container")
 	containerFromSAS = func(url.URL) (*storage.Container, error) { return container, nil }
 	_, err = CreateOrReplaceAppendBlob("https://example.invalid/container/", "")
-	requireDownloadCode(t, errorutil.CustomerInput_emptyAppendBlobPath, err)
+	requireDownloadCode(t, errorutil.EmptyAppendBlobPath, err)
 	putAppendBlob = func(*storage.Blob) error { return cause }
 	_, err = CreateOrReplaceAppendBlob("https://example.invalid/container/script", "")
 	requireDownloadCode(t, errorutil.Storage_failedToCreateAppendBlob, err)
 	require.True(t, errors.Is(err, cause))
 	_, err = getBlobPathAfterContainerName("https://%", "container")
-	requireDownloadCode(t, errorutil.CustomerInput_invalidBlobPathUrl, err)
+	requireDownloadCode(t, errorutil.InvalidBlobPathUrl, err)
 	_, err = getBlobPathAfterContainerName("https://example.invalid/other/script", "container")
-	requireDownloadCode(t, errorutil.CustomerInput_missingBlobContainerPath, err)
+	requireDownloadCode(t, errorutil.MissingBlobContainerPath, err)
 }
 
 type clarificationMSI struct{ err error }
@@ -342,7 +342,7 @@ func TestMSIClarifications(t *testing.T) {
 	_, err = NewBlobWithMsiDownload("https://%", func() (msi.Msi, error) {
 		return msi.Msi{AccessToken: "fake"}, nil
 	}).GetRequest()
-	requireDownloadCode(t, errorutil.CustomerInput_invalidMsiDownloadUrl, err)
+	requireDownloadCode(t, errorutil.InvalidMsiDownloadUrl, err)
 
 	old := newMSIProvider
 	t.Cleanup(func() { newMSIProvider = old })

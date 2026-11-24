@@ -13,10 +13,10 @@ func TestSettingsClarifications(t *testing.T) {
 		input string
 		code  int
 	}{
-		{`{"seqNo":"invalid"}`, errorutil.CustomerInput_invalidSettingsJson},
-		{`{"publicSettings":"{"}`, errorutil.CustomerInput_invalidPublicSettingsJson},
-		{`{"publicSettings":true}`, errorutil.CustomerInput_publicSettingsNotObject},
-		{`{"publicSettings":[]}`, errorutil.CustomerInput_publicSettingsNotObject},
+		{`{"seqNo":"invalid"}`, errorutil.InvalidSettingsJson},
+		{`{"publicSettings":"{"}`, errorutil.InvalidPublicSettingsJson},
+		{`{"publicSettings":true}`, errorutil.PublicSettingsNotObject},
+		{`{"publicSettings":[]}`, errorutil.PublicSettingsNotObject},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			var settings SettingsCommon
@@ -29,11 +29,11 @@ func TestSettingsClarifications(t *testing.T) {
 	_, err := (SettingsCommon{PublicSettings: map[string]interface{}{"bad": make(chan int)}}).MarshalJSON()
 	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
-	require.Equal(t, errorutil.Internal_failedToMarshalPublicSettings, code)
+	require.Equal(t, errorutil.FailedToMarshalPublicSettings, code)
 	for _, input := range []string{`{}`, `{"publicSettings":null}`, `{"publicSettings":{}}`, `{"publicSettings":"{}"}`} {
 		var settings SettingsCommon
 		require.NoError(t, json.Unmarshal([]byte(input), &settings))
 	}
-	// errorutil.Internal_failedToMarshalSettings cannot currently fail: the only interface field in the helper is
-	// replaced with a string after the independently tested errorutil.Internal_failedToMarshalPublicSettings marshal.
+	// errorutil.FailedToMarshalSettings cannot currently fail: the only interface field in the helper is
+	// replaced with a string after the independently tested errorutil.FailedToMarshalPublicSettings marshal.
 }

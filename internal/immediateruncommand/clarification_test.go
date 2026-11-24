@@ -8,7 +8,6 @@ import (
 
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/goalstate"
-	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/observer"
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/types"
@@ -17,22 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestImmediateRunCommandClarifications(t *testing.T) {
+func TestConcurrencyLimitClarification(t *testing.T) {
 	name, state, seq := "test", "enabled", 1
 	valid := settings.SettingsCommon{ExtensionName: &name, ExtensionState: &state, SeqNo: &seq}
-	require.NoError(t, validateGoalStateSettings(valid))
-	for _, s := range []settings.SettingsCommon{
-		{},
-		{ExtensionName: &name, SeqNo: &seq},
-		{ExtensionName: &name, ExtensionState: &state},
-		{ExtensionState: &state, SeqNo: &seq},
-	} {
-		_, _, err := getGoalStatesToProcess([]hostgacommunicator.ImmediateExtensionGoalState{{Settings: []settings.SettingsCommon{s}}}, 1)
-		code, ok := errorutil.FindClarification(err)
-		require.True(t, ok)
-		require.Equal(t, errorutil.Internal_incompleteFetchedGoalState, code)
-	}
-
 	err := newConcurrencyLimitError(5, valid)
 	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
@@ -90,11 +76,39 @@ func TestExecutionFailureFallbackPreservesOriginalResult(t *testing.T) {
 	}
 }
 
+func TestReportingFailureFallbackPreservesSuccessfulScriptResult(t *testing.T) {
+	recorder := &immediateStatusRecorder{}
+	notifier := &observer.Notifier{}
+	notifier.Register(recorder)
+	view := types.RunCommandInstanceView{
+		ExecutionState: types.Succeeded, ExecutionMessage: "Execution completed",
+		ExitCode: 0, Output: "stdout", Error: "stderr",
+		StartTime: "original start", EndTime: "original end",
+	}
+	executionErr := &goalstate.ImmediateCommandExecutionError{
+		InstanceView: view, Status: types.StatusSuccess, Err: errors.New("notification failed"),
+	}
+	key := types.GoalStateKey{ExtensionName: "script", SeqNumber: 1, RuntimeSettingsState: "enabled"}
+	err := reportImmediateGoalStateFailure(log.NewContext(log.NewNopLogger()), notifier, key, "fallback start", constants.ExitCode_ImmediateTaskFailed, fmt.Errorf("wrapped: %w", executionErr))
+	require.NoError(t, err)
+	require.Len(t, recorder.events, 1)
+	require.Equal(t, key, recorder.events[0].StatusKey)
+	payload, marshalErr := json.Marshal(recorder.events[0].TopLevelStatus)
+	require.NoError(t, marshalErr)
+	var item types.StatusItem
+	require.NoError(t, json.Unmarshal(payload, &item))
+	require.Equal(t, types.StatusSuccess, item.Status.Status)
+	expected, marshalErr := view.Marshal()
+	require.NoError(t, marshalErr)
+	require.JSONEq(t, string(expected), item.Status.FormattedMessage.Message)
+	require.Empty(t, item.Status.Substatuses)
+}
+
 func TestSetupFailureStillReportsFallback(t *testing.T) {
 	recorder := &immediateStatusRecorder{}
 	notifier := &observer.Notifier{}
 	notifier.Register(recorder)
-	cause := errorutil.EnsureClarification(errorutil.Internal_failedToProcessImmediateCommand, errors.New("setup failed"))
+	cause := errorutil.EnsureClarification(errorutil.FailedToProcessImmediateCommand, errors.New("setup failed"))
 	key := types.GoalStateKey{ExtensionName: "script", SeqNumber: 1, RuntimeSettingsState: "enabled"}
 	require.NoError(t, reportImmediateGoalStateFailure(log.NewContext(log.NewNopLogger()), notifier, key, "start", constants.ExitCode_ImmediateTaskFailed, cause))
 	require.Len(t, recorder.events, 1)
@@ -111,5 +125,5 @@ func TestSetupFailureStillReportsFallback(t *testing.T) {
 	require.Len(t, item.Status.Substatuses, 1)
 	require.Equal(t, "ErrorClarification", item.Status.Substatuses[0].Name)
 	require.Equal(t, string(types.StatusError), item.Status.Substatuses[0].Status)
-	require.Equal(t, errorutil.Internal_failedToProcessImmediateCommand, item.Status.Substatuses[0].Code)
+	require.Equal(t, errorutil.FailedToProcessImmediateCommand, item.Status.Substatuses[0].Code)
 }

@@ -41,17 +41,17 @@ func TestGoalStateClarifications(t *testing.T) {
 	n := &observer.Notifier{}
 	key := types.GoalStateKey{RuntimeSettingsState: "enabled"}
 	view := &types.RunCommandInstanceView{}
-	assertCode(ReportFinalStatusForImmediateGoalState(ctx, nil, key, types.StatusError, view), errorutil.Internal_nilGoalStateNotifier)
-	assertCode(ReportFinalStatusForImmediateGoalState(ctx, n, key, types.StatusError, nil), errorutil.Internal_nilGoalStateInstanceView)
+	assertCode(ReportFinalStatusForImmediateGoalState(ctx, nil, key, types.StatusError, view), errorutil.NilGoalStateNotifier)
+	assertCode(ReportFinalStatusForImmediateGoalState(ctx, n, key, types.StatusError, nil), errorutil.NilGoalStateInstanceView)
 	invalidKey := types.GoalStateKey{RuntimeSettingsState: "invalid"}
-	assertCode(ReportFinalStatusForImmediateGoalState(ctx, n, invalidKey, types.StatusError, view), errorutil.Internal_unknownGoalStateCommand)
-	// errorutil.Internal_failedToMarshalGoalStateInstanceView cannot fail with today's instance view: all serialized fields have
+	assertCode(ReportFinalStatusForImmediateGoalState(ctx, n, invalidKey, types.StatusError, view), errorutil.UnknownGoalStateCommand)
+	// errorutil.FailedToMarshalGoalStateInstanceView cannot fail with today's instance view: all serialized fields have
 	// JSON-supported scalar types, and ClarificationError is excluded from JSON.
 	buildStatusItem = func(*log.Context, types.StatusType, types.Cmd, string, string, ...error) (types.StatusItem, error) {
 		return types.StatusItem{}, cause
 	}
 	err := ReportFinalStatusForImmediateGoalState(ctx, n, key, types.StatusError, view)
-	assertCode(err, errorutil.Internal_failedToCreateGoalStateStatus)
+	assertCode(err, errorutil.FailedToCreateGoalStateStatus)
 	require.ErrorIs(t, err, cause)
 	name, state, seq := "test", "enabled", 1
 	setting := settings.SettingsCommon{ExtensionName: &name, ExtensionState: &state, SeqNo: &seq}
@@ -67,24 +67,24 @@ func TestGoalStateClarifications(t *testing.T) {
 			return nil
 		}
 	}
-	assertCode(runAsync(setting, nil), errorutil.Internal_nilImmediateCommandNotifier)
-	assertCode(runAsync(settings.SettingsCommon{}, n), errorutil.Internal_incompleteImmediateCommandGoalState)
+	assertCode(runAsync(setting, nil), errorutil.NilImmediateCommandNotifier)
+	assertCode(runAsync(settings.SettingsCommon{}, n), errorutil.IncompleteImmediateCommandGoalState)
 	invalidState := "invalid"
 	invalidSetting := setting
 	invalidSetting.ExtensionState = &invalidState
-	assertCode(runAsync(invalidSetting, n), errorutil.Internal_unknownImmediateCommand)
+	assertCode(runAsync(invalidSetting, n), errorutil.UnknownImmediateCommand)
 	executeImmediateCommand = func(cmd types.Cmd, _ handlersettings.HandlerSettingsFile, _ string, _ int) error {
 		return cmd.Functions.ReportStatus(ctx, types.HandlerEnvironment{}, types.RCMetadata{}, types.StatusError, cmd, "{}")
 	}
-	assertCode(runAsync(setting, n), errorutil.Internal_failedToCreateImmediateCommandStatus)
+	assertCode(runAsync(setting, n), errorutil.FailedToCreateImmediateCommandStatus)
 	executeImmediateCommand = func(cmd types.Cmd, _ handlersettings.HandlerSettingsFile, _ string, _ int) error {
 		return cmd.Functions.ReportStatus(ctx, types.HandlerEnvironment{}, types.RCMetadata{}, types.StatusError, cmd, "invalid json")
 	}
-	assertCode(runAsync(setting, n), errorutil.Internal_failedToParseImmediateInstanceView)
+	assertCode(runAsync(setting, n), errorutil.FailedToParseImmediateInstanceView)
 	executeImmediateCommand = func(types.Cmd, handlersettings.HandlerSettingsFile, string, int) error { return cause }
-	assertCode(runAsync(setting, n), errorutil.Internal_failedToProcessImmediateCommand)
+	assertCode(runAsync(setting, n), errorutil.FailedToProcessImmediateCommand)
 	_, _, err = GetImmediateRunCommandGoalStates(ctx, nil, "etag")
-	assertCode(err, errorutil.Internal_nilGoalStateCommunicator)
+	assertCode(err, errorutil.NilGoalStateCommunicator)
 	_, etag, err := GetImmediateRunCommandGoalStates(ctx, failingCommunicator{cause}, "etag")
 	assertCode(err, errorutil.HostGA_failedToRetrieveVmSettings)
 	require.Equal(t, "etag", etag)
@@ -107,7 +107,7 @@ func TestGoalStateStatusCarriesClarification(t *testing.T) {
 	oldExecute, oldBuild := executeImmediateCommand, buildStatusItem
 	t.Cleanup(func() { executeImmediateCommand, buildStatusItem = oldExecute, oldBuild })
 	ctx := log.NewContext(log.NewLogfmtLogger(io.Discard))
-	lower := errorutil.EnsureClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("customer error"))
+	lower := errorutil.EnsureClarification(errorutil.InvalidSettingsJson, errors.New("platform settings error"))
 	calls := 0
 	buildStatusItem = func(ctx *log.Context, state types.StatusType, cmd types.Cmd, message string, name string, clarifications ...error) (types.StatusItem, error) {
 		require.Equal(t, []error{lower}, clarifications)
@@ -133,7 +133,7 @@ func TestGoalStateStatusCarriesClarification(t *testing.T) {
 	require.Len(t, recorded.items, 2)
 	for _, item := range recorded.items {
 		require.Equal(t, types.StatusError, item.Status.Status)
-		requireGoalStateStatusCode(t, item.Status, errorutil.CustomerInput_invalidSettingsJson)
+		requireGoalStateStatusCode(t, item.Status, errorutil.InvalidSettingsJson)
 	}
 }
 
@@ -175,7 +175,7 @@ func TestImmediateScriptFailureRetainsExecutionResult(t *testing.T) {
 				notifier := &observer.Notifier{}
 				notifier.Register(recorder)
 				exitCode, err := HandleImmediateGoalState(ctx, constants.RunCommandTestExtensionName, setting, notifier)
-				require.Equal(t, 12, exitCode)
+				require.Equal(t, constants.ExitCode_ImmediateTaskFailed, exitCode)
 				require.ErrorIs(t, err, scriptErr)
 				var executionErr *ImmediateCommandExecutionError
 				require.ErrorAs(t, err, &executionErr)
@@ -231,6 +231,39 @@ func TestImmediateSuccessfulCommandReturnsSuccess(t *testing.T) {
 	require.Len(t, recorder.items, 1)
 	require.Equal(t, types.StatusSuccess, recorder.items[0].Status.Status)
 	require.Empty(t, recorder.items[0].Status.Substatuses)
+}
+
+func TestImmediateReportingFailureRetainsSuccessfulScriptResult(t *testing.T) {
+	oldExecute := executeImmediateCommand
+	t.Cleanup(func() { executeImmediateCommand = oldExecute })
+	ctx := log.NewContext(log.NewNopLogger())
+	name, state, seq := "script", "enabled", 1
+	setting := settings.SettingsCommon{ExtensionName: &name, ExtensionState: &state, SeqNo: &seq}
+	reportErr := errors.New("notification failed")
+	recorder := &goalStateStatusRecorder{terminalError: reportErr}
+	notifier := &observer.Notifier{}
+	notifier.Register(recorder)
+	view := types.RunCommandInstanceView{
+		ExecutionState: types.Succeeded, ExecutionMessage: "Execution completed",
+		ExitCode: 0, Output: "stdout", Error: "stderr",
+		StartTime: "original start", EndTime: "original end",
+	}
+	message, marshalErr := view.Marshal()
+	require.NoError(t, marshalErr)
+	executeImmediateCommand = func(cmd types.Cmd, _ handlersettings.HandlerSettingsFile, _ string, _ int) error {
+		return cmd.Functions.ReportStatus(ctx, types.HandlerEnvironment{}, types.NewRCMetadata(name, seq, "download", "data"), types.StatusSuccess, cmd, string(message))
+	}
+
+	exitCode, err := HandleImmediateGoalState(ctx, constants.RunCommandTestExtensionName, setting, notifier)
+	require.Equal(t, constants.ExitCode_ImmediateTaskFailed, exitCode)
+	require.ErrorIs(t, err, reportErr)
+	var executionErr *ImmediateCommandExecutionError
+	require.ErrorAs(t, err, &executionErr)
+	require.False(t, executionErr.Reported)
+	require.Equal(t, types.StatusSuccess, executionErr.Status)
+	require.Equal(t, view, executionErr.InstanceView)
+	require.Len(t, recorder.items, 1)
+	require.JSONEq(t, string(message), recorder.items[0].Status.FormattedMessage.Message)
 }
 
 type goalStateStatusRecorder struct {

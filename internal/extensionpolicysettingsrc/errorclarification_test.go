@@ -60,7 +60,7 @@ func TestPolicyScriptClarifications(t *testing.T) {
 		{handlersettings.GalleryScript, errorutil.ExtensionPolicySettings_galleryScriptNotAllowed},
 		{handlersettings.DiagnosticScript, errorutil.ExtensionPolicySettings_diagnosticScriptNotAllowed},
 		{handlersettings.CommandIdScript, errorutil.ExtensionPolicySettings_commandIdScriptNotAllowed},
-		{handlersettings.ScriptType("unknown"), errorutil.ExtensionPolicySettings_unknownScriptType},
+		{handlersettings.ScriptType("unknown"), errorutil.UnknownScriptType},
 	} {
 		t.Run(string(tc.script), func(t *testing.T) {
 			requirePolicyCode(t, CompareScriptTypeToAllowedScriptType(tc.script, AllowedScriptNone), tc.code)
@@ -77,7 +77,7 @@ func TestPolicyInitializationClarifications(t *testing.T) {
 	t.Run("empty path -2510", func(t *testing.T) {
 		mockPolicyBoundaries(t)
 		_, _, err, exit := InitializeExtensionPolicySettings(nopCtx(), "")
-		requirePolicyCode(t, err, errorutil.Internal_emptyPolicyPath)
+		requirePolicyCode(t, err, errorutil.EmptyPolicyPath)
 		require.Equal(t, constants.ExitCode_InitializeCalledWithNoPolicyPath, exit)
 	})
 	for _, tc := range []struct {
@@ -85,9 +85,9 @@ func TestPolicyInitializationClarifications(t *testing.T) {
 		code int
 		exit int
 	}{
-		{"create", errorutil.Internal_failedToCreatePolicyManager, constants.ExitCode_FailedToCreateExtensionPolicySettingsManager},
+		{"create", errorutil.FailedToCreatePolicyManager, constants.ExitCode_FailedToCreateExtensionPolicySettingsManager},
 		{"load", errorutil.ExtensionPolicySettings_policyLoadFailed, constants.ExitCode_LoadExtensionPolicySettingsFailed},
-		{"get", errorutil.Internal_failedToGetPolicySettings, constants.ExitCode_FailedToGetExtensionPolicySettings},
+		{"get", errorutil.FailedToGetPolicySettings, constants.ExitCode_FailedToGetExtensionPolicySettings},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mockPolicyBoundaries(t)
@@ -121,7 +121,7 @@ func TestPolicyInitializationClarifications(t *testing.T) {
 func TestPolicySettingsClarifications(t *testing.T) {
 	t.Run("nil policy -2514", func(t *testing.T) {
 		err, exit := ValidateHandlerSettingsAgainstPolicy(nopCtx(), makeSettings(handlersettings.InlineScript, "", "", "", ""), nil)
-		requirePolicyCode(t, err, errorutil.Internal_nilPolicySettings)
+		requirePolicyCode(t, err, errorutil.NilPolicySettings)
 		require.Equal(t, constants.ExitCode_ValidateCalledWithNilPolicy, exit)
 	})
 	t.Run("command 2515", func(t *testing.T) {
@@ -159,8 +159,8 @@ func TestPolicySettingsClarifications(t *testing.T) {
 
 func TestPolicyPreservesLowerClarifications(t *testing.T) {
 	for _, lower := range []error{
-		vmextension.NewErrorWithClarificationPtr(errorutil.CustomerInput_invalidSettingsJson, errors.New("pointer")),
-		vmextension.NewErrorWithClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("value")),
+		vmextension.NewErrorWithClarificationPtr(errorutil.InvalidSettingsJson, errors.New("pointer")),
+		vmextension.NewErrorWithClarification(errorutil.InvalidSettingsJson, errors.New("value")),
 	} {
 		for _, boundary := range []string{"create", "load", "get", "allowlist"} {
 			t.Run(fmt.Sprintf("%s/%v", boundary, lower), func(t *testing.T) {
@@ -182,7 +182,7 @@ func TestPolicyPreservesLowerClarifications(t *testing.T) {
 				} else {
 					_, _, err, _ = InitializeExtensionPolicySettings(nopCtx(), "policy.json")
 				}
-				requirePolicyCode(t, err, errorutil.CustomerInput_invalidSettingsJson)
+				requirePolicyCode(t, err, errorutil.InvalidSettingsJson)
 				require.ErrorIs(t, err, lower)
 			})
 		}

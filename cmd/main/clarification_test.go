@@ -12,10 +12,10 @@ func TestCommandLineClarifications(t *testing.T) {
 		args []string
 		code int
 	}{
-		{nil, errorutil.CustomerInput_invalidCommandLineArguments},
-		{[]string{"handler"}, errorutil.CustomerInput_invalidCommandLineArguments},
-		{[]string{"handler", "enable", "extra"}, errorutil.CustomerInput_invalidCommandLineArguments},
-		{[]string{"handler", "invalid"}, errorutil.CustomerInput_unknownCommandLineOperation},
+		{nil, errorutil.InvalidCommandLineArguments},
+		{[]string{"handler"}, errorutil.InvalidCommandLineArguments},
+		{[]string{"handler", "enable", "extra"}, errorutil.InvalidCommandLineArguments},
+		{[]string{"handler", "invalid"}, errorutil.UnknownCommandLineOperation},
 	} {
 		_, err := parseCommand(tc.args)
 		code, ok := errorutil.FindClarification(err)

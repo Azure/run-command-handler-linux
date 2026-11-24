@@ -271,7 +271,7 @@ func Test_ExecutePreStepsAndFailed(t *testing.T) {
 
 	err := executePreSteps(ctx, cmd, fakeEnv, extName, seqNum, constants.DownloadFolder)
 	require.ErrorContains(t, err, "pre-check step failed")
-	requireProcessorCode(t, err, errorutil.Internal_unclassifiedPrecheckFailure)
+	requireProcessorCode(t, err, errorutil.UnclassifiedPrecheckFailure)
 	require.ErrorContains(t, err, "expected error")
 	payload, err := os.ReadFile(filepath.Join(fakeEnv.HandlerEnvironment.StatusFolder, "testExtension.5.status"))
 	require.NoError(t, err)
@@ -279,7 +279,7 @@ func Test_ExecutePreStepsAndFailed(t *testing.T) {
 	require.NoError(t, json.Unmarshal(payload, &report))
 	require.Len(t, report, 1)
 	require.Equal(t, types.StatusError, report[0].Status.Status)
-	requireProcessorStatusCode(t, report, errorutil.Internal_unclassifiedPrecheckFailure)
+	requireProcessorStatusCode(t, report, errorutil.UnclassifiedPrecheckFailure)
 }
 
 func Test_SaveConfigurationFileInConfigFolderSuccessfully(t *testing.T) {
@@ -379,17 +379,17 @@ func Test_GetSeqNumFromEnvVariableFailedToParse(t *testing.T) {
 	fakeEnv := types.HandlerEnvironment{}
 	_, err := getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
-	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
+	requireProcessorCode(t, err, errorutil.InvalidSequenceEnvironmentVariable)
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "-")
 	_, err = getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
-	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
+	requireProcessorCode(t, err, errorutil.InvalidSequenceEnvironmentVariable)
 
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "+")
 	_, err = getSeqNum(&ctx, fakeEnv, extName)
 	require.ErrorContains(t, err, "failed to parse env variable ConfigSequenceNumber")
-	requireProcessorCode(t, err, errorutil.Internal_invalidSequenceEnvironmentVariable)
+	requireProcessorCode(t, err, errorutil.InvalidSequenceEnvironmentVariable)
 }
 
 func Test_GetSeqNumFromFailedToFind(t *testing.T) {
@@ -408,7 +408,7 @@ func Test_GetSeqNumFromFailedToFind(t *testing.T) {
 	os.Setenv(constants.ConfigSequenceNumberEnvName, "")
 	actualSeqNum, err := getSeqNum(&ctx, fakeEnv, extName)
 	require.Error(t, err)
-	requireProcessorCode(t, err, errorutil.Internal_noSequenceConfigurationFiles)
+	requireProcessorCode(t, err, errorutil.NoSequenceConfigurationFiles)
 	require.Contains(t, err.Error(), "can't find out seqnum")
 	require.Equal(t, 0, actualSeqNum)
 }

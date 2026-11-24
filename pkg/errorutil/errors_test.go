@@ -59,37 +59,79 @@ func TestEnsureClarification(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestClarificationCodeOwnership(t *testing.T) {
+	for name, tc := range map[string]struct {
+		code ErrorClarificationCode
+		want int
+	}{
+		"create data directory":          {Os_FailedToCreateDataDir, -5400},
+		"delete data directory":          {Os_FailedToDeleteDataDir, -50},
+		"open stdout":                    {Os_FailedToOpenStdOut, -51},
+		"close stdout":                   {Os_FailedToCloseStdOut, -5013},
+		"close stderr":                   {Os_FailedToCloseStdErr, -5014},
+		"terminal state JSON":            {Os_InvalidTerminalGoalStatesJson, -5208},
+		"stored sequence number":         {Os_InvalidStoredSequenceNumber, -4204},
+		"process record format":          {Os_InvalidProcessRecordFormat, -3654},
+		"process record ID":              {Os_InvalidProcessRecordId, -3655},
+		"rehydrated sequence number":     {InvalidMrseqFileSequenceNumber, -5412},
+		"handler environment JSON":       {Os_InvalidHandlerEnvironmentJson, -2403},
+		"runtime settings count":         {UnexpectedRuntimeSettingsCount, -2414},
+		"certificate thumbprint":         {MissingCertificateThumbprint, -2415},
+		"protected settings encoding":    {InvalidProtectedSettingsBase64, -2416},
+		"decrypted settings JSON":        {InvalidDecryptedSettingsJson, -2419},
+		"settings envelope":              {InvalidSettingsJson, -3900},
+		"public settings encoding":       {InvalidPublicSettingsJson, -3901},
+		"public settings envelope":       {PublicSettingsNotObject, -3902},
+		"generated script type":          {UnknownScriptType, -2508},
+		"handler invocation arguments":   {InvalidCommandLineArguments, -4700},
+		"handler invocation operation":   {UnknownCommandLineOperation, -4701},
+		"download destination open":      {FileDownload_failedToOpenDestination, -1007},
+		"download destination write":     {FileDownload_failedToWriteDestination, -1009},
+		"generated blob request":         {FileDownload_failedToCreateBlobRequest, -1011},
+		"SAS download destination open":  {FileDownload_failedToOpenSasDestination, -1019},
+		"SAS download destination write": {FileDownload_failedToWriteSasDestination, -1020},
+		"empty identity token":           {Msi_emptyToken, -1028},
+		"customer settings schema":       {InvalidHandlerSettingsJson, 2411},
+		"customer parameter":             {InvalidParameterEnvironmentVariable, 5010},
+		"customer script exit":           {CommandExecution_failureExitCode, 2},
+		"unsupported VM capability":      {Os_SystemdNotSupported, 3800},
+		"customer RunAs user":            {CommandExecution_runAsUserNotFound, 5004},
+	} {
+		t.Run(name, func(t *testing.T) { require.Equal(t, tc.want, tc.code) })
+	}
+}
+
 func TestCustomScriptClarificationCodeCompatibility(t *testing.T) {
 	for name, tc := range map[string]struct {
 		code ErrorClarificationCode
 		want int
 	}{
-		"Storage_internalServerError":                         {Storage_internalServerError, -1},
-		"Internal_badConfig":                                  {Internal_badConfig, -21},
-		"Imds_internalMsiError":                               {Imds_internalMsiError, -30},
-		"FileDownload_badRequest":                             {FileDownload_badRequest, -41},
-		"Os_FailedToDeleteDataDir":                            {Os_FailedToDeleteDataDir, -50},
-		"Os_FailedToOpenStdOut":                               {Os_FailedToOpenStdOut, -51},
-		"Os_FailedToOpenStdErr":                               {Os_FailedToOpenStdErr, -52},
-		"CommandExecution_failedUnknownError":                 {CommandExecution_failedUnknownError, 1},
-		"CommandExecution_failureExitCode":                    {CommandExecution_failureExitCode, 2},
-		"CommandExecution_interruptedByVmShutdown":            {CommandExecution_interruptedByVmShutdown, 3},
-		"CustomerInput_commandToExecuteAndScriptNotSpecified": {CustomerInput_commandToExecuteAndScriptNotSpecified, 23},
-		"CustomerInput_clientIdObjectIdBothSpecified":         {CustomerInput_clientIdObjectIdBothSpecified, 27},
-		"FileDownload_unableToCreateDownloadDirectory":        {FileDownload_unableToCreateDownloadDirectory, 50},
-		"FileDownload_accessDenied":                           {FileDownload_accessDenied, 52},
-		"FileDownload_doesNotExist":                           {FileDownload_doesNotExist, 53},
-		"FileDownload_networkingError":                        {FileDownload_networkingError, 54},
-		"FileDownload_genericError":                           {FileDownload_genericError, 55},
-		"FileDownload_exceededTimeout":                        {FileDownload_exceededTimeout, 56},
-		"Msi_notFound":                                        {Msi_notFound, 70},
-		"Msi_doesNotHaveRightPermissions":                     {Msi_doesNotHaveRightPermissions, 71},
-		"Msi_GenericRetrievalError":                           {Msi_GenericRetrievalError, 72},
-		"ExtensionPolicySettings_invalidPolicyFileFormat":     {ExtensionPolicySettings_invalidPolicyFileFormat, 80},
-		"ExtensionPolicySettings_policyLoadFailed":            {ExtensionPolicySettings_policyLoadFailed, 81},
-		"ExtensionPolicySettings_downloadedScriptNotAllowed":  {ExtensionPolicySettings_downloadedScriptNotAllowed, 82},
-		"ExtensionPolicySettings_commandToExecuteNotAllowed":  {ExtensionPolicySettings_commandToExecuteNotAllowed, 83},
-		"ExtensionPolicySettings_scriptNotAllowed":            {ExtensionPolicySettings_scriptNotAllowed, 84},
+		"Storage_serverError":                                {Storage_serverError, -1},
+		"BadConfig":                                          {BadConfig, -21},
+		"Imds_msiError":                                      {Imds_msiError, -30},
+		"FileDownload_badRequest":                            {FileDownload_badRequest, -41},
+		"Os_FailedToDeleteDataDir":                           {Os_FailedToDeleteDataDir, -50},
+		"Os_FailedToOpenStdOut":                              {Os_FailedToOpenStdOut, -51},
+		"Os_FailedToOpenStdErr":                              {Os_FailedToOpenStdErr, -52},
+		"CommandExecution_failedUnknownError":                {CommandExecution_failedUnknownError, 1},
+		"CommandExecution_failureExitCode":                   {CommandExecution_failureExitCode, 2},
+		"CommandExecution_interruptedByVmShutdown":           {CommandExecution_interruptedByVmShutdown, 3},
+		"CommandToExecuteAndScriptNotSpecified":              {CommandToExecuteAndScriptNotSpecified, 23},
+		"ClientIdObjectIdBothSpecified":                      {ClientIdObjectIdBothSpecified, 27},
+		"FileDownload_unableToCreateDownloadDirectory":       {FileDownload_unableToCreateDownloadDirectory, 50},
+		"FileDownload_accessDenied":                          {FileDownload_accessDenied, 52},
+		"FileDownload_doesNotExist":                          {FileDownload_doesNotExist, 53},
+		"FileDownload_networkingError":                       {FileDownload_networkingError, 54},
+		"FileDownload_genericError":                          {FileDownload_genericError, 55},
+		"FileDownload_exceededTimeout":                       {FileDownload_exceededTimeout, 56},
+		"Msi_notFound":                                       {Msi_notFound, 70},
+		"Msi_doesNotHaveRightPermissions":                    {Msi_doesNotHaveRightPermissions, 71},
+		"Msi_GenericRetrievalError":                          {Msi_GenericRetrievalError, 72},
+		"ExtensionPolicySettings_invalidPolicyFileFormat":    {ExtensionPolicySettings_invalidPolicyFileFormat, 80},
+		"ExtensionPolicySettings_policyLoadFailed":           {ExtensionPolicySettings_policyLoadFailed, 81},
+		"ExtensionPolicySettings_downloadedScriptNotAllowed": {ExtensionPolicySettings_downloadedScriptNotAllowed, 82},
+		"ExtensionPolicySettings_commandToExecuteNotAllowed": {ExtensionPolicySettings_commandToExecuteNotAllowed, 83},
+		"ExtensionPolicySettings_scriptNotAllowed":           {ExtensionPolicySettings_scriptNotAllowed, 84},
 	} {
 		t.Run(name, func(t *testing.T) { require.Equal(t, tc.want, tc.code) })
 	}
@@ -104,6 +146,7 @@ func TestClarificationCodesHaveUniqueSites(t *testing.T) {
 	require.NoError(t, err)
 	codes := map[string]int{}
 	values := map[int]string{}
+	allocations := map[int]string{}
 	for _, declaration := range registry.Decls {
 		group, ok := declaration.(*ast.GenDecl)
 		if !ok || group.Tok != token.CONST {
@@ -128,8 +171,30 @@ func TestClarificationCodesHaveUniqueSites(t *testing.T) {
 			code *= sign
 			require.NotZero(t, code)
 			name := value.Names[0].Name
+			require.NotContains(t, strings.ToLower(name), "internal", "clarification names must not encode the error class")
+			require.NotContains(t, strings.ToLower(name), "customerinput", "clarification names must not encode the error class")
+			switch {
+			case strings.HasPrefix(name, "HostGA_"),
+				strings.HasPrefix(name, "Service_"),
+				strings.HasPrefix(name, "Systemd_"),
+				strings.HasPrefix(name, "Os_") && name != "Os_SystemdNotSupported":
+				require.Negative(t, code, "%s is a handler/platform failure", name)
+			case strings.HasPrefix(name, "ExtensionPolicySettings_"),
+				name == "Os_SystemdNotSupported":
+				require.Positive(t, code, "%s is a customer input, policy, or VM capability failure", name)
+			}
 			if previous, exists := values[code]; exists {
 				t.Errorf("%s and %s both declare code %d", previous, name, code)
+			}
+			absoluteCode := code
+			if absoluteCode < 0 {
+				absoluteCode = -absoluteCode
+			}
+			if absoluteCode >= 1000 {
+				if previous, exists := allocations[absoluteCode]; exists {
+					t.Errorf("%s and %s reuse RunCommand allocation %d with different classifications", previous, name, absoluteCode)
+				}
+				allocations[absoluteCode] = name
 			}
 			codes[name], values[code] = code, name
 		}

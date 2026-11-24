@@ -57,7 +57,7 @@ func TestHostGAClarifications(t *testing.T) {
 		server.Close()
 		assertCode(err, want)
 	}
-	// errorutil.Internal_invalidWireServerFallbackAddress cannot be triggered: WireServerFallbackAddress is a valid URL constant.
+	// errorutil.InvalidWireServerFallbackAddress cannot be triggered: WireServerFallbackAddress is a valid URL constant.
 	_, err = (requestFactory{url: "://"}).GetRequest(ctx, "")
 	assertCode(err, errorutil.HostGA_failedToCreateVmSettings)
 	oldEnv, oldStat := readHandlerEnv, statCertificate

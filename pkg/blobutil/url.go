@@ -32,30 +32,30 @@ type AzureBlobRef struct {
 func ParseBlobURL(blobURL string) (v AzureBlobRef, err error) {
 	u, err := url.Parse(blobURL)
 	if err != nil {
-		return v, errorutil.EnsureClarification(errorutil.CustomerInput_invalidBlobUrl, errors.Wrapf(err, "cannot parse URL: %q", blobURL))
+		return v, errorutil.EnsureClarification(errorutil.InvalidBlobUrl, errors.Wrapf(err, "cannot parse URL: %q", blobURL))
 	}
 	v.Scheme = strings.ToLower(u.Scheme)
 	if v.Scheme != "http" && v.Scheme != "https" {
-		return v, errorutil.EnsureClarification(errorutil.CustomerInput_unsupportedBlobUrlScheme, fmt.Errorf("unsupported scheme in URL: %q", blobURL))
+		return v, errorutil.EnsureClarification(errorutil.UnsupportedBlobUrlScheme, fmt.Errorf("unsupported scheme in URL: %q", blobURL))
 	}
 
 	hostParts := strings.Split(u.Host, ".") // {account}.blob.{storageBase}
 	if len(hostParts) < 3 {
-		return v, errorutil.EnsureClarification(errorutil.CustomerInput_missingBlobUrlHost, fmt.Errorf("cannot parse azure blob URL: %q", blobURL))
+		return v, errorutil.EnsureClarification(errorutil.MissingBlobUrlHost, fmt.Errorf("cannot parse azure blob URL: %q", blobURL))
 	}
 	if strings.ToLower(hostParts[1]) != "blob" {
-		return v, errorutil.EnsureClarification(errorutil.CustomerInput_invalidBlobHost, fmt.Errorf("blob host not in *.blob.* format: %q", blobURL))
+		return v, errorutil.EnsureClarification(errorutil.InvalidBlobHost, fmt.Errorf("blob host not in *.blob.* format: %q", blobURL))
 	}
 
 	v.StorageBase = strings.Join(hostParts[2:], ".") // glue them back
 	if v.StorageBase == "" {
-		return v, errorutil.EnsureClarification(errorutil.CustomerInput_invalidStorageEndpoint, fmt.Errorf("cannot parse azure storage endpoint in blob URL: %q", blobURL))
+		return v, errorutil.EnsureClarification(errorutil.InvalidStorageEndpoint, fmt.Errorf("cannot parse azure storage endpoint in blob URL: %q", blobURL))
 	}
 
 	var ok bool
 	v.Container, v.Blob, ok = parseAzureContainerBlobNameFromPath(u.Path)
 	if !ok {
-		return v, errorutil.EnsureClarification(errorutil.CustomerInput_missingBlobContainerOrName, fmt.Errorf("cannot extract Azure container/blob name from: %q", blobURL))
+		return v, errorutil.EnsureClarification(errorutil.MissingBlobContainerOrName, fmt.Errorf("cannot extract Azure container/blob name from: %q", blobURL))
 	}
 
 	return v, nil

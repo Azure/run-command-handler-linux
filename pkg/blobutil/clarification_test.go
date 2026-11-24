@@ -12,12 +12,12 @@ func TestParseBlobURLClarifications(t *testing.T) {
 		url  string
 		code int
 	}{
-		{"https://%", errorutil.CustomerInput_invalidBlobUrl},
-		{"ftp://a.blob.core.windows.net/c/b", errorutil.CustomerInput_unsupportedBlobUrlScheme},
-		{"https://host/c/b", errorutil.CustomerInput_missingBlobUrlHost},
-		{"https://a.file.core.windows.net/c/b", errorutil.CustomerInput_invalidBlobHost},
-		{"https://a.blob./c/b", errorutil.CustomerInput_invalidStorageEndpoint},
-		{"https://a.blob.core.windows.net", errorutil.CustomerInput_missingBlobContainerOrName},
+		{"https://%", errorutil.InvalidBlobUrl},
+		{"ftp://a.blob.core.windows.net/c/b", errorutil.UnsupportedBlobUrlScheme},
+		{"https://host/c/b", errorutil.MissingBlobUrlHost},
+		{"https://a.file.core.windows.net/c/b", errorutil.InvalidBlobHost},
+		{"https://a.blob./c/b", errorutil.InvalidStorageEndpoint},
+		{"https://a.blob.core.windows.net", errorutil.MissingBlobContainerOrName},
 	} {
 		t.Run(tc.url, func(t *testing.T) {
 			_, err := ParseBlobURL(tc.url)

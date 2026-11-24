@@ -28,6 +28,24 @@ permissions, connectivity, policy, or VM problems. Negative codes indicate handl
 or Azure infrastructure failures. Clarification codes are separate from script
 exit codes and handler process exit codes.
 
+Classification follows the failing operation's ownership, not just whether it
+uses an OS API or reads JSON:
+
+- Handler-owned filesystem, process records, sequence numbers, terminal-status
+  caches, telemetry, and service lifecycle operations are system errors.
+- Guest-agent/platform settings envelopes, certificate metadata, protected-settings
+  encoding, and generated script types are system errors. Invalid customer-supplied
+  settings field types, scripts, parameters, URLs, identity permissions, and policy
+  violations remain user errors.
+- An unsupported VM capability (such as missing systemd) is a user error.
+  Shared CustomScript classifications retain their published signs and values,
+  including `FileDownload_unableToCreateDownloadDirectory` (`50`).
+
+The ownership correction changes formerly positive RunCommand-specific system
+codes to negative values while preserving their absolute numbers (for example,
+data-directory creation `5400` becomes `-5400`, and invalid terminal-state JSON
+`5208` becomes `-5208`). The retired positive values must not be reused.
+
 Output-blob creation or replacement failures return exit code `-108`
 (`ExitCode_OutputBlobCreateOrReplaceFailed`); error-blob creation or replacement
 failures return `-109` (`ExitCode_ErrorBlobCreateOrReplaceFailed`). Once blobs
@@ -44,6 +62,9 @@ therefore have a successful top-level deployment status and still carry its
 error clarification.
 
 Immediate commands retain the script's exit code and full terminal instance view.
+When execution or reporting produces an `ImmediateCommandExecutionError`, the task
+returns `ExitCode_ImmediateTaskFailed`; this does not replace the script's exit code
+in the retained instance view.
 An execution result already reported to the observer is not replaced by a fallback
 status. If terminal reporting fails, the fallback retries the original instance
 view and top-level status. Script failures carry the positive
@@ -51,12 +72,15 @@ view and top-level status. Script failures carry the positive
 
 Codes are declared centrally as named `ErrorClarificationCode` constants in
 [errorclarificationcodes.go](pkg/errorutil/errorclarificationcodes.go), grouped
-into system and user errors like CustomScript. Shared classifications use
-CustomScript's constant names and numeric values; additional RunCommand failure
-sites have distinct constants to preserve source-location uniqueness.
+into system and user errors like CustomScript. Constant names describe the failure
+or subsystem, not its user/system classification; classification is carried by
+the numeric sign. Shared classifications retain CustomScript's numeric values,
+but use classification-neutral names. Additional RunCommand failure sites have
+distinct constants to preserve source-location uniqueness.
 
-Each code is allocated to exactly one production classification site and must
-not be reused or renumbered. Higher layers add context without replacing a code
+Each code is allocated to exactly one production classification site. Apart from
+the ownership correction above, codes must not be reused or renumbered.
+Higher layers add context without replacing a code
 from a lower layer. The shared [error helper](pkg/errorutil/errors.go) preserves
 both pointer and value platform errors, wrapped causes, and joined errors. Tests
 check constant-value uniqueness, named usage at every classification site, test

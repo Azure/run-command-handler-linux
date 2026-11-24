@@ -31,7 +31,7 @@ func ReportInstanceView(ctx *log.Context, hEnv types.HandlerEnvironment, metadat
 func SerializeInstanceView(instanceview *types.RunCommandInstanceView) (string, error) {
 	bytes, err := instanceview.Marshal()
 	if err != nil {
-		return "", errorutil.EnsureClarification(errorutil.Internal_failedToMarshalInstanceView, fmt.Errorf("status: failed to marshal into json: %w", err))
+		return "", errorutil.EnsureClarification(errorutil.FailedToMarshalInstanceView, fmt.Errorf("status: failed to marshal into json: %w", err))
 	}
 	return string(bytes), err
 }

@@ -21,7 +21,7 @@ func TestObserverClarification(t *testing.T) {
 	err := n.Notify(types.StatusEventArgs{})
 	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
-	require.Equal(t, errorutil.Internal_failedToNotifyObserver, code)
+	require.Equal(t, errorutil.FailedToNotifyObserver, code)
 	require.ErrorIs(t, err, cause)
 	lower := errorutil.EnsureClarification(errorutil.HostGA_failedToReportImmediateStatus, cause)
 	n.Register(failingObserver{lower})

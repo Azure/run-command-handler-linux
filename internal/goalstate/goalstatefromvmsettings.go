@@ -13,7 +13,7 @@ import (
 
 func GetImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgacommunicator.IHostGACommunicator, lastProcessedETag string) ([]hostgacommunicator.ImmediateExtensionGoalState, string, error) {
 	if communicator == nil {
-		return nil, lastProcessedETag, errorutil.EnsureClarification(errorutil.Internal_nilGoalStateCommunicator, errors.New("communicator cannot be nil"))
+		return nil, lastProcessedETag, errorutil.EnsureClarification(errorutil.NilGoalStateCommunicator, errors.New("communicator cannot be nil"))
 	}
 
 	responseData, err := communicator.GetImmediateVMSettings(ctx, lastProcessedETag)

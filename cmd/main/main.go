@@ -48,14 +48,14 @@ func parseCmd(args []string) types.Cmd {
 
 func parseCommand(args []string) (types.Cmd, error) {
 	if len(args) != 2 {
-		return types.Cmd{}, errorutil.EnsureClarification(errorutil.CustomerInput_invalidCommandLineArguments, fmt.Errorf("Incorrect usage."))
+		return types.Cmd{}, errorutil.EnsureClarification(errorutil.InvalidCommandLineArguments, fmt.Errorf("Incorrect usage."))
 	}
 	op := args[1]
 	cmd, ok := commands.Cmds[op]
 
 	// If no command was found, then exit
 	if !ok {
-		return types.Cmd{}, errorutil.EnsureClarification(errorutil.CustomerInput_unknownCommandLineOperation, fmt.Errorf("Incorrect command: %q", op))
+		return types.Cmd{}, errorutil.EnsureClarification(errorutil.UnknownCommandLineOperation, fmt.Errorf("Incorrect command: %q", op))
 	}
 
 	return cmd, nil

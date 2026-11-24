@@ -719,7 +719,7 @@ func Test_downloadArtifacts_Invalid(t *testing.T) {
 		})
 
 	require.NotNil(t, err)
-	requireCommandCode(t, errorutil.Internal_invalidArtifactSpecification, err)
+	requireCommandCode(t, errorutil.InvalidArtifactSpecification, err)
 	require.Contains(t, err.Error(), "RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")
 
 	// ArtifactIds don't match
@@ -746,7 +746,7 @@ func Test_downloadArtifacts_Invalid(t *testing.T) {
 		})
 
 	require.NotNil(t, err)
-	requireCommandCode(t, errorutil.Internal_inconsistentArtifactSpecification, err)
+	requireCommandCode(t, errorutil.InconsistentArtifactSpecification, err)
 	require.Contains(t, err.Error(), "RunCommand artifact download failed. Reason: Invalid artifact specification. This is a product bug.")
 }
 

@@ -65,7 +65,7 @@ func (self *blobWithMsiToken) GetRequest() (*http.Request, error) {
 
 	request, err := http.NewRequest(http.MethodGet, self.url, nil)
 	if err != nil {
-		return nil, errorutil.EnsureClarification(errorutil.CustomerInput_invalidMsiDownloadUrl, err)
+		return nil, errorutil.EnsureClarification(errorutil.InvalidMsiDownloadUrl, err)
 	}
 
 	request.Header.Set(xMsClientRequestIdHeaderName, uuid.New().String())

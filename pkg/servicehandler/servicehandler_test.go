@@ -385,7 +385,7 @@ func TestHandlerFailsOnGettingInstalledVersionDeRegister(t *testing.T) {
 	if err == nil {
 		t.Errorf("an error should be thrown due to not being able to get the installed version")
 	}
-	requireServiceCode(t, errorutil.Internal_failedToReadServiceVersion, err)
+	requireServiceCode(t, errorutil.FailedToReadServiceVersion, err)
 
 	if !m.functionCalled.getinstalledversion_f {
 		t.Errorf("missing call to verify target version")

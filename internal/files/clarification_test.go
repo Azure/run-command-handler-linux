@@ -50,7 +50,7 @@ func TestScriptClarifications(t *testing.T) {
 	setScriptMode = func(string, os.FileMode) error { return nil }
 	ctx := log.NewContext(log.NewLogfmtLogger(io.Discard))
 	_, err := downloadAndProcessURL(ctx, "://", ".", "script", "", nil)
-	assertFileCode(t, err, errorutil.CustomerInput_invalidScriptUrl)
+	assertFileCode(t, err, errorutil.InvalidScriptUrl)
 	downloadSASBlob = func(string, string, string) (string, error) { return "", cause }
 	saveDownload = func(*log.Context, []download.Downloader, string, os.FileMode) (int64, error) { return 0, nil }
 	isScriptText = func(string) (bool, error) { return false, nil }
@@ -64,13 +64,13 @@ func TestScriptClarifications(t *testing.T) {
 	assertFileCode(t, err, errorutil.Os_FailedToMakeDownloadedFileExecutable)
 	require.ErrorIs(t, err, cause)
 	_, err = getDownloaders("", nil, download.ProdMsiDownloader{})
-	assertFileCode(t, err, errorutil.CustomerInput_emptyDownloadUrl)
+	assertFileCode(t, err, errorutil.EmptyDownloadUrl)
 	_, err = getDownloaders("https://account.blob.core.windows.net/container/script", &handlersettings.RunCommandManagedIdentity{ClientId: "client", ObjectId: "object"}, download.ProdMsiDownloader{})
-	assertFileCode(t, err, errorutil.CustomerInput_clientIdObjectIdBothSpecified)
+	assertFileCode(t, err, errorutil.ClientIdObjectIdBothSpecified)
 	_, err = UrlToFileName("%")
-	assertFileCode(t, err, errorutil.CustomerInput_invalidDownloadFileUrl)
+	assertFileCode(t, err, errorutil.InvalidDownloadFileUrl)
 	_, err = UrlToFileName("https://example.invalid/")
-	assertFileCode(t, err, errorutil.CustomerInput_missingDownloadFileName)
+	assertFileCode(t, err, errorutil.MissingDownloadFileName)
 	isScriptText = func(string) (bool, error) { return false, cause }
 	assertFileCode(t, PostProcessFile("script"), errorutil.Os_FailedToDetermineScriptFileType)
 	isScriptText = func(string) (bool, error) { return true, nil }

@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	errSourceNotSpecified = errorutil.EnsureClarification(errorutil.CustomerInput_commandToExecuteAndScriptNotSpecified, errors.New("Either 'source.script' or 'source.scriptUri' has to be specified"))
+	errSourceNotSpecified = errorutil.EnsureClarification(errorutil.CommandToExecuteAndScriptNotSpecified, errors.New("Either 'source.script' or 'source.scriptUri' has to be specified"))
 )
 
 // parseAndValidateSettings reads configuration from configFolder, decrypts it,

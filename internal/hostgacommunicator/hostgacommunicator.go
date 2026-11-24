@@ -84,7 +84,7 @@ func getOperationUri(ctx *log.Context, operationName string) (string, error) {
 	// and decide if we want to add that wire protocol address as a potential endpoint to use when provided
 	uri, err := url.Parse(WireServerFallbackAddress)
 	if err != nil {
-		return "", errorutil.EnsureClarification(errorutil.Internal_invalidWireServerFallbackAddress, errors.Wrap(err, "could not parse address "+WireServerFallbackAddress))
+		return "", errorutil.EnsureClarification(errorutil.InvalidWireServerFallbackAddress, errors.Wrap(err, "could not parse address "+WireServerFallbackAddress))
 	}
 	uri.Path = operationName
 	return uri.String(), nil

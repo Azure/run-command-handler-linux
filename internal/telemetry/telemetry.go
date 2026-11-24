@@ -106,7 +106,7 @@ func (w *telemetryEventSender) send(e telemetryEvent) (result error) {
 
 	bs, err := json.Marshal(e)
 	if err != nil {
-		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalTelemetryEvent, errors.Wrap(err, "failed to marshal telemetry event"))
+		return errorutil.EnsureClarification(errorutil.FailedToMarshalTelemetryEvent, errors.Wrap(err, "failed to marshal telemetry event"))
 	}
 
 	n, err := w.writer.Write(bs)

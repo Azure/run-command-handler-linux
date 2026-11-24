@@ -67,7 +67,7 @@ func DownloadAndProcessScript(ctx *log.Context, url, downloadDir string, cfg *ha
 func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName string, scriptSAS string, sourceManagedIdentity *handlersettings.RunCommandManagedIdentity) (string, error) {
 	var err error
 	if !urlutil.IsValidUrl(url) {
-		return "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidScriptUrl, fmt.Errorf("%s is not a valid url", url)) // url does not contain SAS to se can log it
+		return "", errorutil.EnsureClarification(errorutil.InvalidScriptUrl, fmt.Errorf("%s is not a valid url", url)) // url does not contain SAS to se can log it
 	}
 
 	targetFilePath := filepath.Join(downloadDir, fileName)
@@ -131,7 +131,7 @@ func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, fileName s
 func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandManagedIdentity, msiDownloader download.MsiDownloader) ([]download.Downloader, error) {
 
 	if fileURL == "" {
-		return nil, errorutil.EnsureClarification(errorutil.CustomerInput_emptyDownloadUrl, fmt.Errorf("fileURL is empty"))
+		return nil, errorutil.EnsureClarification(errorutil.EmptyDownloadUrl, fmt.Errorf("fileURL is empty"))
 	}
 
 	if download.IsAzureStorageBlobUri(fileURL) {
@@ -150,7 +150,7 @@ func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandM
 			// uses user-managed identity
 			msiProvider = msiDownloader.GetMsiProviderByObjectId(fileURL, managedIdentity.ObjectId)
 		default:
-			return nil, errorutil.EnsureClarification(errorutil.CustomerInput_clientIdObjectIdBothSpecified, fmt.Errorf("use either ClientId or ObjectId for managed identity. Not both"))
+			return nil, errorutil.EnsureClarification(errorutil.ClientIdObjectIdBothSpecified, fmt.Errorf("use either ClientId or ObjectId for managed identity. Not both"))
 		}
 
 		_, msiError := msiProvider()
@@ -178,7 +178,7 @@ func getDownloaders(fileURL string, managedIdentity *handlersettings.RunCommandM
 func UrlToFileName(fileURL string) (string, error) {
 	u, err := url.Parse(fileURL)
 	if err != nil {
-		return "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidDownloadFileUrl, errors.Wrapf(err, "unable to parse URL: %q", fileURL))
+		return "", errorutil.EnsureClarification(errorutil.InvalidDownloadFileUrl, errors.Wrapf(err, "unable to parse URL: %q", fileURL))
 	}
 
 	s := strings.Split(u.Path, "/")
@@ -188,7 +188,7 @@ func UrlToFileName(fileURL string) (string, error) {
 			return fn, nil
 		}
 	}
-	return "", errorutil.EnsureClarification(errorutil.CustomerInput_missingDownloadFileName, fmt.Errorf("cannot extract file name from URL: %q", fileURL))
+	return "", errorutil.EnsureClarification(errorutil.MissingDownloadFileName, fmt.Errorf("cannot extract file name from URL: %q", fileURL))
 }
 
 // postProcessFile determines if path is a script file based on heuristics

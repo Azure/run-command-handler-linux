@@ -61,7 +61,7 @@ func HttpClientDo(request *http.Request) (*http.Response, error) {
 func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, error) {
 	request, err := downloader.GetRequest()
 	if err != nil {
-		return -1, nil, errorutil.EnsureClarification(errorutil.Internal_failedToCreateDownloadRequest, errors.Wrapf(err, "failed to create http request"))
+		return -1, nil, errorutil.EnsureClarification(errorutil.FailedToCreateDownloadRequest, errors.Wrapf(err, "failed to create http request"))
 	}
 	requestID := request.Header.Get(xMsClientRequestIdHeaderName)
 	if len(requestID) > 0 {
@@ -102,10 +102,10 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 			errString = fmt.Sprintf("%s: %s", MsiDownload403ErrorString, forbiddenError)
 			return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Msi_doesNotHaveRightPermissions, errors.New(errString+requestIdSuffix))
 		case http.StatusInternalServerError:
-			return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Imds_internalMsiError, errors.New(errString+requestIdSuffix))
+			return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Imds_msiError, errors.New(errString+requestIdSuffix))
 		default:
 			if response.StatusCode >= http.StatusInternalServerError {
-				return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Imds_downloadInternalServerError, errors.New(errString+requestIdSuffix))
+				return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Imds_downloadServerError, errors.New(errString+requestIdSuffix))
 			}
 			return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Msi_GenericRetrievalError, errors.New(errString+requestIdSuffix))
 		}
@@ -138,10 +138,10 @@ func Download(ctx *log.Context, downloader Downloader) (int, io.ReadCloser, erro
 			errString = fmt.Sprintf("RunCommand failed to download the file from %s due to an issue with storage. The response code and message returned were: %q",
 				hostname,
 				response.Status)
-			return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Storage_internalServerError, errors.New(errString+requestIdSuffix))
+			return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.Storage_serverError, errors.New(errString+requestIdSuffix))
 		default:
 			if response.StatusCode >= http.StatusInternalServerError {
-				return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.FileDownload_internalServerError, errors.New(errString+requestIdSuffix))
+				return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.FileDownload_serverError, errors.New(errString+requestIdSuffix))
 			}
 			return response.StatusCode, nil, errorutil.EnsureClarification(errorutil.FileDownload_genericError, errors.New(errString+requestIdSuffix))
 		}

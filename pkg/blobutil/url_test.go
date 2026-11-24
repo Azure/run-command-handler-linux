@@ -13,9 +13,9 @@ func TestParseBlobURL_badURL(t *testing.T) {
 		url  string
 		code errorutil.ErrorClarificationCode
 	}{
-		{"", errorutil.CustomerInput_unsupportedBlobUrlScheme},
-		{" http://a.b.c/d/e", errorutil.CustomerInput_invalidBlobUrl},
-		{"http://a.b.c/d/e  ", errorutil.CustomerInput_invalidBlobHost},
+		{"", errorutil.UnsupportedBlobUrlScheme},
+		{" http://a.b.c/d/e", errorutil.InvalidBlobUrl},
+		{"http://a.b.c/d/e  ", errorutil.InvalidBlobHost},
 	} {
 		_, err := blobutil.ParseBlobURL(tc.url)
 		require.NotNil(t, err, "invalid URL: %q", tc.url)
@@ -30,11 +30,11 @@ func TestParseBlobURL_badHost(t *testing.T) {
 		url  string
 		code errorutil.ErrorClarificationCode
 	}{ // bad URL formats are already captured by json-schema
-		{"http://1/c/blob.txt", errorutil.CustomerInput_missingBlobUrlHost},
-		{"http://1.blob/c/blob.txt", errorutil.CustomerInput_missingBlobUrlHost},
-		{"http://1.blob./c/blob.txt", errorutil.CustomerInput_invalidStorageEndpoint},
-		{"http://1..blob./c/blob.txt", errorutil.CustomerInput_invalidBlobHost},
-		{"http://1.notblob.a/c/blob.txt", errorutil.CustomerInput_invalidBlobHost},
+		{"http://1/c/blob.txt", errorutil.MissingBlobUrlHost},
+		{"http://1.blob/c/blob.txt", errorutil.MissingBlobUrlHost},
+		{"http://1.blob./c/blob.txt", errorutil.InvalidStorageEndpoint},
+		{"http://1..blob./c/blob.txt", errorutil.InvalidBlobHost},
+		{"http://1.notblob.a/c/blob.txt", errorutil.InvalidBlobHost},
 	} {
 		_, err := blobutil.ParseBlobURL(tc.url)
 		require.NotNil(t, err, "bad host: %q", tc.url)
@@ -71,7 +71,7 @@ func TestParseBlobURL_unsupportedScheme(t *testing.T) {
 		require.Contains(t, err.Error(), "unsupported scheme in URL", "url: %q")
 		code, ok := errorutil.FindClarification(err)
 		require.True(t, ok)
-		require.Equal(t, errorutil.CustomerInput_unsupportedBlobUrlScheme, code)
+		require.Equal(t, errorutil.UnsupportedBlobUrlScheme, code)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestParseBlobURL_containerMissing(t *testing.T) {
 	require.NotNil(t, err, "missing blob/container name")
 	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
-	require.Equal(t, errorutil.CustomerInput_missingBlobContainerOrName, code)
+	require.Equal(t, errorutil.MissingBlobContainerOrName, code)
 	require.Contains(t, err.Error(), "cannot extract Azure container/blob name")
 }
 

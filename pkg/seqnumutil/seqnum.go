@@ -22,7 +22,7 @@ const (
 func FindSequenceNumberFromConfig(path, fileExtension string, extensionName string) (int, error) {
 	g, err := filepath.Glob(filepath.Join(path, fmt.Sprintf("%s.*%s", extensionName, fileExtension)))
 	if err != nil {
-		return 0, errorutil.EnsureClarification(errorutil.Internal_failedToReadSequenceConfigurationDirectory, err)
+		return 0, errorutil.EnsureClarification(errorutil.FailedToReadSequenceConfigurationDirectory, err)
 	}
 	seqs := make([]int, 0, len(g))
 	for _, v := range g {
@@ -40,7 +40,7 @@ func FindSequenceNumberFromConfig(path, fileExtension string, extensionName stri
 		seqs = append(seqs, i)
 	}
 	if len(seqs) == 0 {
-		return 0, errorutil.EnsureClarification(errorutil.Internal_noSequenceConfigurationFiles, fmt.Errorf("can't find out seqnum from %s, not enough files", path))
+		return 0, errorutil.EnsureClarification(errorutil.NoSequenceConfigurationFiles, fmt.Errorf("can't find out seqnum from %s, not enough files", path))
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(seqs)))
 	return seqs[0], nil

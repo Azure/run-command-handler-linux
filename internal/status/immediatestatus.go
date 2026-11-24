@@ -183,7 +183,7 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
 	if err != nil {
-		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalImmediateStatus, fmt.Errorf("status: failed to marshal immediate status into json: %w", err))
+		return errorutil.EnsureClarification(errorutil.FailedToMarshalImmediateStatus, fmt.Errorf("status: failed to marshal immediate status into json: %w", err))
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())

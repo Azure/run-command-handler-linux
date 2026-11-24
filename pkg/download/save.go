@@ -30,7 +30,7 @@ func SaveTo(ctx *log.Context, downloaders []Downloader, dst string, mode os.File
 
 	body, err := WithRetries(ctx, downloaders, ActualSleep)
 	if err != nil {
-		return 0, errorutil.EnsureClarification(errorutil.Internal_failedToDownloadToFile, errors.Wrapf(err, "failed to download file '%s'", dst))
+		return 0, errorutil.EnsureClarification(errorutil.FailedToDownloadToFile, errors.Wrapf(err, "failed to download file '%s'", dst))
 	}
 	defer body.Close()
 

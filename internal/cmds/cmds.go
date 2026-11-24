@@ -662,7 +662,7 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersi
 				seqNo := parts[1]
 				seqNoAsInt, parseErr := strconv.Atoi(seqNo)
 				if parseErr != nil {
-					return errorutil.EnsureClarification(errorutil.Internal_invalidStatusFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in status filename"))
+					return errorutil.EnsureClarification(errorutil.InvalidStatusFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in status filename"))
 				}
 				mrSeqFileName := extensionName + constants.MrSeqFileExtension
 				mrSeqFilePath := filepath.Join(updateToVersionDirectory, mrSeqFileName)
@@ -701,7 +701,7 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersi
 
 					currentSeqNo, parseErr := strconv.Atoi(string(contents))
 					if parseErr != nil {
-						return errorutil.EnsureClarification(errorutil.Internal_invalidMrseqFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in mrseq file"))
+						return errorutil.EnsureClarification(errorutil.InvalidMrseqFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in mrseq file"))
 					}
 					if seqNoAsInt > currentSeqNo {
 						err = commandWriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
@@ -752,7 +752,7 @@ func copyFiles(ctx log.Logger, fileExtensionSuffix string, extensionSubdirectory
 	if upgradeFromVersionDirectory == "" || upgradeToVersionDirectory == "" {
 		errMessage := "oldExtesionDirectory or newExtensionDirectory is empty"
 		extensionEvents.LogErrorEvent("copyfiles", errMessage)
-		return nil, errorutil.EnsureClarification(errorutil.Internal_emptyUpgradeDirectories, errors.New(errMessage))
+		return nil, errorutil.EnsureClarification(errorutil.EmptyUpgradeDirectories, errors.New(errMessage))
 	}
 
 	// Check if the directory exists
@@ -872,7 +872,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 				ctx.Log("error", errorMessage)
 				extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
 				if allErr == nil {
-					allErr = errorutil.EnsureClarification(errorutil.Internal_invalidDummyStatusSequenceNumber, errors.Wrap(err, errorMessage))
+					allErr = errorutil.EnsureClarification(errorutil.InvalidDummyStatusSequenceNumber, errors.Wrap(err, errorMessage))
 				}
 				continue
 			}
@@ -881,7 +881,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 			ctx.Log("error", errorMessage)
 			extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
 			if allErr == nil {
-				allErr = errorutil.EnsureClarification(errorutil.Internal_emptyDummyStatusSequenceFile, errors.New(errorMessage))
+				allErr = errorutil.EnsureClarification(errorutil.EmptyDummyStatusSequenceFile, errors.New(errorMessage))
 			}
 			continue
 		}
@@ -893,7 +893,7 @@ func createDummyStatusFilesIfNeeded(ctx log.Logger, mrseqFilesNameList *list.Lis
 			ctx.Log("error", errorMessage)
 			extensionEvents.LogErrorEvent("createdummystatusfiles", errorMessage)
 			if allErr == nil {
-				allErr = errorutil.EnsureClarification(errorutil.Internal_invalidDummyStatusSequenceFileName, errors.New(errorMessage))
+				allErr = errorutil.EnsureClarification(errorutil.InvalidDummyStatusSequenceFileName, errors.New(errorMessage))
 			}
 			continue
 		}
@@ -1072,7 +1072,7 @@ func decodeScript(script string) (string, string, error) {
 	// scripts must be base64 encoded
 	s, err := base64.StdEncoding.DecodeString(script)
 	if err != nil {
-		return "", "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidEmbeddedScriptBase64, errors.Wrap(err, "failed to decode script"))
+		return "", "", errorutil.EnsureClarification(errorutil.InvalidEmbeddedScriptBase64, errors.Wrap(err, "failed to decode script"))
 	}
 
 	// scripts may be gzip'ed
@@ -1086,7 +1086,7 @@ func decodeScript(script string) (string, string, error) {
 
 	n, err := io.Copy(w, r)
 	if err != nil {
-		return "", "", errorutil.EnsureClarification(errorutil.CustomerInput_invalidCompressedScript, errors.Wrap(err, "failed to decompress script"))
+		return "", "", errorutil.EnsureClarification(errorutil.InvalidCompressedScript, errors.Wrap(err, "failed to decompress script"))
 	}
 
 	w.Flush()
@@ -1102,7 +1102,7 @@ func createOrReplaceAppendBlobUsingManagedIdentity(blobUri string, managedIdenti
 		if managedIdentity.ClientId != "" {
 			ID = managedIdentity.ClientId
 		} else if managedIdentity.ObjectId != "" { //ObjectId is not supported by azidentity.NewManagedIdentityCredential
-			return nil, errorutil.EnsureClarification(errorutil.CustomerInput_outputIdentityObjectIdNotSupported, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead"))
+			return nil, errorutil.EnsureClarification(errorutil.OutputIdentityObjectIdNotSupported, errors.New("Managed identity's ObjectId is not supported. Use ClientId instead"))
 		}
 	}
 

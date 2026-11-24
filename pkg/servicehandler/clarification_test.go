@@ -24,7 +24,7 @@ func TestServiceHandlerClarifications(t *testing.T) {
 	t.Setenv(constants.VersionEnvName, installedTargetVersion)
 	ctx := log.NewContext(log.NewLogfmtLogger(io.Discard))
 	cause := errors.New("manager failure")
-	for _, want := range []int{errorutil.Service_failedToStart, errorutil.Service_failedToStop, errorutil.Service_failedToEnable, errorutil.Service_failedToDisable, errorutil.Service_failedToReloadDaemon, errorutil.Service_failedToCheckActivity, errorutil.Service_failedToCheckEnabled, errorutil.Service_failedToCheckInstalled, errorutil.Service_failedToRemoveOldConfiguration, errorutil.Service_failedToCreateConfiguration, errorutil.Service_failedToUnregister, errorutil.Internal_failedToReadServiceVersion} {
+	for _, want := range []int{errorutil.Service_failedToStart, errorutil.Service_failedToStop, errorutil.Service_failedToEnable, errorutil.Service_failedToDisable, errorutil.Service_failedToReloadDaemon, errorutil.Service_failedToCheckActivity, errorutil.Service_failedToCheckEnabled, errorutil.Service_failedToCheckInstalled, errorutil.Service_failedToRemoveOldConfiguration, errorutil.Service_failedToCreateConfiguration, errorutil.Service_failedToUnregister, errorutil.FailedToReadServiceVersion} {
 		m := getManagerMock()
 		fail := func(string, *log.Context) error { return cause }
 		h := NewHandler(m, NewConfiguration("test.service"), ctx)
@@ -63,7 +63,7 @@ func TestServiceHandlerClarifications(t *testing.T) {
 		case errorutil.Service_failedToUnregister:
 			m.removeUnitConfiguration_f = fail
 			err = h.DeRegister(ctx)
-		case errorutil.Internal_failedToReadServiceVersion:
+		case errorutil.FailedToReadServiceVersion:
 			m.getInstalledVersion_f = func(string, *log.Context) (string, error) { return "", cause }
 			_, err = h.GetInstalledVersion(ctx)
 		}

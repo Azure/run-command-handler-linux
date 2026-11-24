@@ -21,7 +21,7 @@ func TestStatusReporterClarifications(t *testing.T) {
 	t.Cleanup(func() { statusHTTPClient = oldClient })
 	ctx := log.NewContext(log.NewLogfmtLogger(io.Discard))
 	cause := errors.New("transport failure")
-	for _, want := range []int{errorutil.HostGA_failedToCreateStatusRequest, errorutil.HostGA_failedToSendStatusRequest, errorutil.HostGA_statusUploadReturnedErrorStatus, errorutil.Internal_emptyStatusUpload} {
+	for _, want := range []int{errorutil.HostGA_failedToCreateStatusRequest, errorutil.HostGA_failedToSendStatusRequest, errorutil.HostGA_statusUploadReturnedErrorStatus, errorutil.EmptyStatusUpload} {
 		statusHTTPClient = &http.Client{Transport: statusTransport(func(*http.Request) (*http.Response, error) {
 			if want == errorutil.HostGA_failedToSendStatusRequest {
 				return nil, cause
@@ -34,7 +34,7 @@ func TestStatusReporterClarifications(t *testing.T) {
 		}
 		var resp *http.Response
 		var err error
-		if want == errorutil.Internal_emptyStatusUpload {
+		if want == errorutil.EmptyStatusUpload {
 			resp, err = NewGuestInformationServiceClient(endpoint).ReportStatus(ctx, "")
 		} else {
 			resp, err = ReportStatus(ctx, endpoint, content)

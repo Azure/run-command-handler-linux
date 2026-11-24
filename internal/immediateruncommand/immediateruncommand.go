@@ -93,9 +93,6 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 	var goalStateKeys []types.GoalStateKey
 	for _, s := range goalStates {
 		for _, setting := range s.Settings {
-			if err := validateGoalStateSettings(setting); err != nil {
-				return newEtag, err
-			}
 			if setting.ExtensionState != nil {
 				goalStateKeys = append(goalStateKeys, types.GoalStateKey{HandlerName: s.Name, ExtensionName: *setting.ExtensionName, SeqNumber: *setting.SeqNo, RuntimeSettingsState: *setting.ExtensionState})
 			}
@@ -197,13 +194,6 @@ func reportImmediateGoalStateFailure(ctx *log.Context, notifier *observer.Notifi
 	return goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView)
 }
 
-func validateGoalStateSettings(s settings.SettingsCommon) error {
-	if s.ExtensionName == nil || s.SeqNo == nil || s.ExtensionState == nil {
-		return errorutil.EnsureClarification(errorutil.Internal_incompleteFetchedGoalState, errors.New("goal state is missing extension name, sequence number or state"))
-	}
-	return nil
-}
-
 func newConcurrencyLimitError(maxTasksToFetch int, state settings.SettingsCommon) error {
 	return errorutil.EnsureClarification(errorutil.CommandExecution_concurrentGoalStateLimitExceeded, fmt.Errorf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *state.ExtensionName, *state.SeqNo))
 }
@@ -213,11 +203,6 @@ func getGoalStatesToProcess(goalStates []hostgacommunicator.ImmediateExtensionGo
 	var newGoalStates []immediateGoalState
 	var skippedGoalStates []immediateGoalState
 	for _, el := range goalStates {
-		for _, s := range el.Settings {
-			if err := validateGoalStateSettings(s); err != nil {
-				return nil, nil, err
-			}
-		}
 		validSignature, err := el.ValidateSignature()
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to validate goal state signature")

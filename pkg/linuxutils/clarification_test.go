@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
@@ -52,8 +53,8 @@ func TestLinuxFilesystemClarifications(t *testing.T) {
 		openDirectory, removeDirectory, removeFile, truncateFile = oldOpen, oldRemoveDir, oldRemove, oldTruncate
 	})
 	cause := errors.New("filesystem failure")
-	for _, want := range []int{errorutil.Os_FailedToOpenCleanupParentDirectory, errorutil.Os_FailedToReadCleanupParentDirectory, errorutil.Os_FailedToDeleteScriptDirectory, errorutil.Internal_emptyCleanupFilePattern, errorutil.Os_FailedToOpenSettingsCleanupDirectory, errorutil.Internal_invalidCleanupFilePattern, errorutil.Os_FailedToReadSettingsCleanupDirectory, errorutil.Os_FailedToDeleteSettingsFile, errorutil.Os_FailedToTruncateSettingsFile} {
-		t.Run(string(rune(want+5000)), func(t *testing.T) {
+	for _, want := range []int{errorutil.Os_FailedToOpenCleanupParentDirectory, errorutil.Os_FailedToReadCleanupParentDirectory, errorutil.Os_FailedToDeleteScriptDirectory, errorutil.EmptyCleanupFilePattern, errorutil.Os_FailedToOpenSettingsCleanupDirectory, errorutil.InvalidCleanupFilePattern, errorutil.Os_FailedToReadSettingsCleanupDirectory, errorutil.Os_FailedToDeleteSettingsFile, errorutil.Os_FailedToTruncateSettingsFile} {
+		t.Run(strconv.Itoa(want), func(t *testing.T) {
 			openDirectory = func(string) (directoryReader, error) {
 				if want == errorutil.Os_FailedToOpenCleanupParentDirectory || want == errorutil.Os_FailedToOpenSettingsCleanupDirectory {
 					return nil, cause
@@ -70,13 +71,15 @@ func TestLinuxFilesystemClarifications(t *testing.T) {
 			logger := &filesystemErrorLogger{}
 			ctx := log.NewContext(logger)
 			var err error
-			if want >= errorutil.Os_FailedToOpenCleanupParentDirectory && want <= errorutil.Os_FailedToDeleteScriptDirectory {
+			if want == errorutil.Os_FailedToOpenCleanupParentDirectory ||
+				want == errorutil.Os_FailedToReadCleanupParentDirectory ||
+				want == errorutil.Os_FailedToDeleteScriptDirectory {
 				err = TryDeleteDirectories(ctx, "test")
 			} else {
 				pattern := "test"
-				if want == errorutil.Internal_emptyCleanupFilePattern {
+				if want == errorutil.EmptyCleanupFilePattern {
 					pattern = ""
-				} else if want == errorutil.Internal_invalidCleanupFilePattern {
+				} else if want == errorutil.InvalidCleanupFilePattern {
 					pattern = "["
 				}
 				err = tryClearRegexMatchingFiles(ctx, "test", pattern, want != errorutil.Os_FailedToTruncateSettingsFile)
@@ -88,7 +91,8 @@ func TestLinuxFilesystemClarifications(t *testing.T) {
 			code, ok := errorutil.FindClarification(err)
 			require.True(t, ok, "%v", err)
 			require.Equal(t, want, code)
-			if want > 0 {
+			require.Negative(t, code)
+			if want != errorutil.EmptyCleanupFilePattern && want != errorutil.InvalidCleanupFilePattern {
 				require.ErrorIs(t, err, cause)
 			}
 		})
@@ -154,8 +158,8 @@ func TestMostRecentCleanupClarifications(t *testing.T) {
 		{"read scripts", "downloads", true, "settings", errorutil.Os_FailedToReadCleanupParentDirectory},
 		{"open settings", "config", false, "settings", errorutil.Os_FailedToOpenSettingsCleanupDirectory},
 		{"read settings", "config", true, "settings", errorutil.Os_FailedToReadSettingsCleanupDirectory},
-		{"empty pattern", "", false, "", errorutil.Internal_emptyCleanupFilePattern},
-		{"invalid pattern", "", false, "[", errorutil.Internal_invalidCleanupFilePattern},
+		{"empty pattern", "", false, "", errorutil.EmptyCleanupFilePattern},
+		{"invalid pattern", "", false, "[", errorutil.InvalidCleanupFilePattern},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			openDirectory = func(name string) (directoryReader, error) {

@@ -88,17 +88,17 @@ func TestHandlerEnvironmentClarifications(t *testing.T) {
 func TestSettingsJSONClarifications(t *testing.T) {
 	t.Run("marshal -2410", func(t *testing.T) {
 		err := unmarshalSettings(make(chan int), new(interface{}))
-		requireSettingsCode(t, err, errorutil.Internal_failedToMarshalHandlerSettings)
+		requireSettingsCode(t, err, errorutil.FailedToMarshalHandlerSettings)
 		var unsupported *json.UnsupportedTypeError
 		require.ErrorAs(t, err, &unsupported)
 	})
 	t.Run("unmarshal 2411", func(t *testing.T) {
 		err := UnmarshalHandlerSettings(map[string]interface{}{"timeoutInSeconds": "bad"}, nil, new(PublicSettings), new(ProtectedSettings))
-		requireSettingsCode(t, err, errorutil.CustomerInput_invalidHandlerSettingsJson)
+		requireSettingsCode(t, err, errorutil.InvalidHandlerSettingsJson)
 		var mismatch *json.UnmarshalTypeError
 		require.ErrorAs(t, err, &mismatch)
 		err = UnmarshalHandlerSettings(nil, map[string]interface{}{"runAsPassword": 12}, new(PublicSettings), new(ProtectedSettings))
-		requireSettingsCode(t, err, errorutil.CustomerInput_invalidHandlerSettingsJson)
+		requireSettingsCode(t, err, errorutil.InvalidHandlerSettingsJson)
 	})
 	for _, tc := range []struct {
 		name    string
@@ -107,8 +107,8 @@ func TestSettingsJSONClarifications(t *testing.T) {
 		code    int
 	}{
 		{"read 2412", "", os.ErrPermission, errorutil.Os_FailedToReadHandlerSettings},
-		{"parse config", "{", nil, errorutil.Internal_badConfig},
-		{"count 2414", "{}", nil, errorutil.CustomerInput_unexpectedRuntimeSettingsCount},
+		{"parse config", "{", nil, errorutil.BadConfig},
+		{"count 2414", "{}", nil, errorutil.UnexpectedRuntimeSettingsCount},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mockSettingsMachine(t)
@@ -126,9 +126,9 @@ func TestSettingsJSONClarifications(t *testing.T) {
 			return []byte(`{"runtimeSettings":[{"handlerSettings":{}}]}`), nil
 		}
 		_, err := ParseAndValidateSettings(log.NewContext(log.NewNopLogger()), "config.settings")
-		requireSettingsCode(t, err, errorutil.CustomerInput_commandToExecuteAndScriptNotSpecified)
+		requireSettingsCode(t, err, errorutil.CommandToExecuteAndScriptNotSpecified)
 		require.ErrorIs(t, err, errSourceNotSpecified)
-		requireSettingsCode(t, HandlerSettings{}.validate(), errorutil.CustomerInput_commandToExecuteAndScriptNotSpecified)
+		requireSettingsCode(t, HandlerSettings{}.validate(), errorutil.CommandToExecuteAndScriptNotSpecified)
 		require.NoError(t, (HandlerSettings{PublicSettings: PublicSettings{InstallAsService: true}}).validate())
 	})
 }
@@ -141,13 +141,13 @@ func TestProtectedSettingsClarifications(t *testing.T) {
 	t.Run("thumbprint 2415", func(t *testing.T) {
 		hs := encrypted
 		hs.SettingsCertThumbprint = ""
-		requireSettingsCode(t, unmarshalProtectedSettings("config", hs, new(interface{})), errorutil.CustomerInput_missingCertificateThumbprint)
+		requireSettingsCode(t, unmarshalProtectedSettings("config", hs, new(interface{})), errorutil.MissingCertificateThumbprint)
 	})
 	t.Run("base64 2416", func(t *testing.T) {
 		hs := encrypted
 		hs.ProtectedSettingsBase64 = "!"
 		err := unmarshalProtectedSettings("config", hs, new(interface{}))
-		requireSettingsCode(t, err, errorutil.CustomerInput_invalidProtectedSettingsBase64)
+		requireSettingsCode(t, err, errorutil.InvalidProtectedSettingsBase64)
 		var cause base64.CorruptInputError
 		require.ErrorAs(t, err, &cause)
 	})
@@ -182,7 +182,7 @@ func TestProtectedSettingsClarifications(t *testing.T) {
 			return []byte("{"), "", nil
 		}
 		err := unmarshalProtectedSettings("config", encrypted, new(interface{}))
-		requireSettingsCode(t, err, errorutil.CustomerInput_invalidDecryptedSettingsJson)
+		requireSettingsCode(t, err, errorutil.InvalidDecryptedSettingsJson)
 		var syntax *json.SyntaxError
 		require.ErrorAs(t, err, &syntax)
 	})
@@ -210,8 +210,8 @@ func TestArtifactClarifications(t *testing.T) {
 		protected []ProtectedArtifactSource
 		code      int
 	}{
-		{"count -2421", nil, errorutil.Internal_invalidArtifactSpecification},
-		{"id -2422", []ProtectedArtifactSource{{ArtifactId: 2}}, errorutil.Internal_inconsistentArtifactSpecification},
+		{"count -2421", nil, errorutil.InvalidArtifactSpecification},
+		{"id -2422", []ProtectedArtifactSource{{ArtifactId: 2}}, errorutil.InconsistentArtifactSpecification},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			hs := HandlerSettings{
@@ -226,14 +226,14 @@ func TestArtifactClarifications(t *testing.T) {
 
 func TestSettingsPreserveLowerClarification(t *testing.T) {
 	for _, lower := range []error{
-		vmextension.NewErrorWithClarificationPtr(errorutil.CustomerInput_invalidSettingsJson, errors.New("lower pointer")),
-		vmextension.NewErrorWithClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("lower value")),
+		vmextension.NewErrorWithClarificationPtr(errorutil.InvalidSettingsJson, errors.New("lower pointer")),
+		vmextension.NewErrorWithClarification(errorutil.InvalidSettingsJson, errors.New("lower value")),
 	} {
 		t.Run(fmt.Sprint(lower), func(t *testing.T) {
 			mockSettingsMachine(t)
 			readSettingsFile = func(string) ([]byte, error) { return nil, fmt.Errorf("file boundary: %w", lower) }
 			_, _, err := readSettings("config.settings")
-			requireSettingsCode(t, err, errorutil.CustomerInput_invalidSettingsJson)
+			requireSettingsCode(t, err, errorutil.InvalidSettingsJson)
 			require.ErrorIs(t, err, lower)
 		})
 	}

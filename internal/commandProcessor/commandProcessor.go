@@ -112,7 +112,7 @@ func processHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 	instView.Output = stdout
 	instView.Error = stderr
 	if cmdInvokeError != nil {
-		cmdInvokeError = errorutil.EnsureClarification(errorutil.Internal_unclassifiedCommandFailure, cmdInvokeError)
+		cmdInvokeError = errorutil.EnsureClarification(errorutil.UnclassifiedCommandFailure, cmdInvokeError)
 		ctx.Log("event", "failed to handle", "error", cmdInvokeError)
 		instView.ExecutionMessage = "Execution failed: " + cmdInvokeError.Error()
 		instView.ExecutionState = types.Failed
@@ -175,7 +175,7 @@ func executePreSteps(ctx *log.Context, cmd types.Cmd, hEnv types.HandlerEnvironm
 		if err := cmd.Functions.Pre(ctx, hEnv, metadata, cmd); err != nil {
 			ctx.Log("event", "pre-check failed", "error", err)
 			if !errors.Is(err, types.ErrAlreadyProcessed) {
-				err = errorutil.EnsureClarification(errorutil.Internal_unclassifiedPrecheckFailure, err)
+				err = errorutil.EnsureClarification(errorutil.UnclassifiedPrecheckFailure, err)
 				view := types.RunCommandInstanceView{
 					ExecutionState:     types.Failed,
 					ExecutionMessage:   "Pre-check failed: " + err.Error(),
@@ -228,7 +228,7 @@ func getSeqNum(ctx **log.Context, hEnv types.HandlerEnvironment, extensionName s
 		if err != nil {
 			msg := fmt.Sprintf("failed to parse env variable ConfigSequenceNumber: %v", seqNumVariable)
 			(*ctx).Log("message", msg, "error", err)
-			return seqNum, errorutil.EnsureClarification(errorutil.Internal_invalidSequenceEnvironmentVariable, errors.Wrap(err, msg))
+			return seqNum, errorutil.EnsureClarification(errorutil.InvalidSequenceEnvironmentVariable, errors.Wrap(err, msg))
 		}
 	}
 
@@ -255,7 +255,7 @@ func storeConfigSettingsFileForLocalExecution(ctx *log.Context, hs handlersettin
 
 	content, err := marshalSettings(hs)
 	if err != nil {
-		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalLocalSettings, errors.Wrap(err, "could not marshal handler settings file"))
+		return errorutil.EnsureClarification(errorutil.FailedToMarshalLocalSettings, errors.Wrap(err, "could not marshal handler settings file"))
 	}
 
 	err = writeSettingsFile(configFilePath, content, 0644)

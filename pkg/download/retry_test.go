@@ -49,7 +49,7 @@ func TestWithRetries_failing_validateNumberOfCalls(t *testing.T) {
 
 	bd := new(badDownloader)
 	_, err := download.WithRetries(nopLog(), []download.Downloader{bd}, new(sleepRecorder).Sleep)
-	requireDownloadCode(t, errorutil.Internal_failedToCreateDownloadRequest, err)
+	requireDownloadCode(t, errorutil.FailedToCreateDownloadRequest, err)
 	require.Contains(t, err.Error(), "expected error", "error is preserved")
 	require.EqualValues(t, 3, bd.calls, "calls exactly expRetryN times")
 }

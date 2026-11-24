@@ -136,7 +136,7 @@ func CompareScriptTypeToAllowedScriptType(scriptType handlersettings.ScriptType,
 			return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_commandIdScriptNotAllowed, fmt.Errorf("commandId scripts are not allowed by policy"))
 		}
 	default:
-		return errorutil.EnsureClarification(errorutil.ExtensionPolicySettings_unknownScriptType, fmt.Errorf("unknown script type: %v", scriptType))
+		return errorutil.EnsureClarification(errorutil.UnknownScriptType, fmt.Errorf("unknown script type: %v", scriptType))
 	}
 	return nil
 }

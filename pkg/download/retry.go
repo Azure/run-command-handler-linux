@@ -61,7 +61,7 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 			if downloadErrors != nil {
 				// Unwrap only the latest cause so older pointer classifications
 				// cannot shadow its value classification. Is retains prior causes.
-				downloadErrors = errorutil.EnsureClarification(errorutil.Internal_failedToAggregateDownloadAttempts, retryFailure{n + 1, err, downloadErrors})
+				downloadErrors = errorutil.EnsureClarification(errorutil.FailedToAggregateDownloadAttempts, retryFailure{n + 1, err, downloadErrors})
 			} else {
 				downloadErrors = err
 			}
@@ -93,7 +93,7 @@ func WithRetries(ctx *log.Context, downloaders []Downloader, sf SleepFunc) (io.R
 		}
 	}
 	if downloadErrors == nil {
-		return nil, errorutil.EnsureClarification(errorutil.Internal_noDownloaders, errors.New("no downloaders supplied"))
+		return nil, errorutil.EnsureClarification(errorutil.NoDownloaders, errors.New("no downloaders supplied"))
 	}
 	return nil, downloadErrors
 }

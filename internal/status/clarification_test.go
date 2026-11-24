@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// errorutil.Internal_failedToMarshalTerminalGoalStates, errorutil.Internal_failedToMarshalStatusReport and errorutil.Internal_failedToMarshalImmediateStatus cannot be raised: their JSON payloads contain only
+// errorutil.FailedToMarshalTerminalGoalStates, errorutil.FailedToMarshalStatusReport and errorutil.FailedToMarshalImmediateStatus cannot be raised: their JSON payloads contain only
 // strings, integers and slices of those structs (no custom marshalers).
-// errorutil.Internal_unexpectedStatusItemCount cannot be raised: NewStatusReport always constructs exactly one item.
-// errorutil.Internal_failedToMarshalInstanceView in instanceview.SerializeInstanceView likewise marshals only scalar
+// errorutil.UnexpectedStatusItemCount cannot be raised: NewStatusReport always constructs exactly one item.
+// errorutil.FailedToMarshalInstanceView in instanceview.SerializeInstanceView likewise marshals only scalar
 // fields; ClarificationError is explicitly excluded from JSON.
 
 type mockTemporaryStatus struct{ closeErr error }
@@ -44,7 +44,7 @@ func mockStatusFilesystem(t *testing.T) {
 func TestStatusFilesystemClarifications(t *testing.T) {
 	failure := errors.New("mock disk failure")
 	ctx := log.NewContext(log.NewNopLogger())
-	for _, code := range []int{errorutil.Os_FailedToCreateTemporaryStatusFile, errorutil.Os_FailedToCloseTemporaryStatusFile, errorutil.Os_FailedToWriteTemporaryStatusFile, errorutil.Os_FailedToPublishStatusFile, errorutil.Os_FailedToWriteTerminalGoalStates, errorutil.Os_FailedToPublishTerminalGoalStates, errorutil.Os_FailedToReadTerminalGoalStates, errorutil.Os_InvalidTerminalGoalStatesJson, errorutil.Os_FailedToStatTerminalGoalStates, errorutil.Internal_invalidGoalStateRemovalState} {
+	for _, code := range []int{errorutil.Os_FailedToCreateTemporaryStatusFile, errorutil.Os_FailedToCloseTemporaryStatusFile, errorutil.Os_FailedToWriteTemporaryStatusFile, errorutil.Os_FailedToPublishStatusFile, errorutil.Os_FailedToWriteTerminalGoalStates, errorutil.Os_FailedToPublishTerminalGoalStates, errorutil.Os_FailedToReadTerminalGoalStates, errorutil.Os_InvalidTerminalGoalStatesJson, errorutil.Os_FailedToStatTerminalGoalStates, errorutil.InvalidGoalStateRemovalState} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			mockStatusFilesystem(t)
 			var err error
@@ -69,7 +69,7 @@ func TestStatusFilesystemClarifications(t *testing.T) {
 				err = SaveStatusReport("/mock", "command", 1, []byte("[]"))
 			case errorutil.Os_FailedToWriteTerminalGoalStates, errorutil.Os_FailedToPublishTerminalGoalStates:
 				err = SaveGoalStatesInTerminalStatus(ctx, nil)
-			case errorutil.Internal_invalidGoalStateRemovalState:
+			case errorutil.InvalidGoalStateRemovalState:
 				err = RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx, []types.GoalStateKey{{RuntimeSettingsState: "invalid"}})
 			default:
 				_, err = GetGoalStatesInTerminalStatus(ctx)
@@ -83,7 +83,7 @@ func TestStatusFilesystemClarifications(t *testing.T) {
 
 func TestClarificationsInManagedAndImmediateStatus(t *testing.T) {
 	for _, topLevel := range []types.StatusType{types.StatusSuccess, types.StatusError} {
-		for _, code := range []int{errorutil.CommandExecution_failureExitCode, errorutil.Internal_unclassifiedCommandFailure} {
+		for _, code := range []int{errorutil.CommandExecution_failureExitCode, errorutil.UnclassifiedCommandFailure} {
 			t.Run(string(topLevel)+strconv.Itoa(code), func(t *testing.T) {
 				mockStatusFilesystem(t)
 				ctx := log.NewContext(log.NewNopLogger())

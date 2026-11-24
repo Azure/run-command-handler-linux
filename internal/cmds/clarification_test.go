@@ -175,7 +175,7 @@ func TestLifecycleClarifications(t *testing.T) {
 }
 
 func TestRehydrationClarifications(t *testing.T) {
-	for _, code := range []int{errorutil.Os_FailedToOpenRehydrationStatusDirectory, errorutil.Os_FailedToReadRehydrationStatusDirectory, errorutil.Internal_invalidStatusFileSequenceNumber, errorutil.Os_FailedToRehydrateSequenceNumber, errorutil.Os_FailedToStatRehydrationSequenceFile, errorutil.Os_FailedToReadRehydrationSequenceFile, errorutil.Internal_invalidMrseqFileSequenceNumber, errorutil.Os_FailedToUpdateRehydratedSequenceFile} {
+	for _, code := range []int{errorutil.Os_FailedToOpenRehydrationStatusDirectory, errorutil.Os_FailedToReadRehydrationStatusDirectory, errorutil.InvalidStatusFileSequenceNumber, errorutil.Os_FailedToRehydrateSequenceNumber, errorutil.Os_FailedToStatRehydrationSequenceFile, errorutil.Os_FailedToReadRehydrationSequenceFile, errorutil.InvalidMrseqFileSequenceNumber, errorutil.Os_FailedToUpdateRehydratedSequenceFile} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			mockCommandDependencies(t)
 			failure := errors.New("injected failure")
@@ -186,7 +186,7 @@ func TestRehydrationClarifications(t *testing.T) {
 				commandOpen = func(string) (commandFile, error) { return nil, failure }
 			case errorutil.Os_FailedToReadRehydrationStatusDirectory:
 				directory.dirErr = failure
-			case errorutil.Internal_invalidStatusFileSequenceNumber:
+			case errorutil.InvalidStatusFileSequenceNumber:
 				directory.entries = []os.DirEntry{mockCommandEntry("command.invalid.status")}
 			case errorutil.Os_FailedToRehydrateSequenceNumber:
 				commandStat = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
@@ -195,7 +195,7 @@ func TestRehydrationClarifications(t *testing.T) {
 				commandStat = func(string) (os.FileInfo, error) { return nil, failure }
 			case errorutil.Os_FailedToReadRehydrationSequenceFile:
 				commandReadFile = func(string) ([]byte, error) { return nil, failure }
-			case errorutil.Internal_invalidMrseqFileSequenceNumber:
+			case errorutil.InvalidMrseqFileSequenceNumber:
 				commandReadFile = func(string) ([]byte, error) { return []byte("invalid"), nil }
 			case errorutil.Os_FailedToUpdateRehydratedSequenceFile:
 				commandWriteFile = func(string, []byte, os.FileMode) error { return failure }
@@ -208,7 +208,7 @@ func TestRehydrationClarifications(t *testing.T) {
 }
 
 func TestStateCopyClarifications(t *testing.T) {
-	for _, code := range []int{errorutil.Os_FailedToCreateUpgradeStatusDirectory, errorutil.Internal_emptyUpgradeDirectories, errorutil.Os_FailedToOpenUpgradeSourceDirectory, errorutil.Os_FailedToReadUpgradeSourceDirectory, errorutil.Os_FailedToOpenUpgradeSourceFile, errorutil.Os_FailedToCreateUpgradeDestinationFile, errorutil.Os_FailedToCopyUpgradeStateFile} {
+	for _, code := range []int{errorutil.Os_FailedToCreateUpgradeStatusDirectory, errorutil.EmptyUpgradeDirectories, errorutil.Os_FailedToOpenUpgradeSourceDirectory, errorutil.Os_FailedToReadUpgradeSourceDirectory, errorutil.Os_FailedToOpenUpgradeSourceFile, errorutil.Os_FailedToCreateUpgradeDestinationFile, errorutil.Os_FailedToCopyUpgradeStateFile} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			mockCommandDependencies(t)
 			failure := errors.New("injected failure")
@@ -220,7 +220,7 @@ func TestStateCopyClarifications(t *testing.T) {
 				subdir = "status"
 				commandOpen = func(string) (commandFile, error) { return nil, failure }
 				commandMkdir = func(string, os.FileMode) error { return failure }
-			case errorutil.Internal_emptyUpgradeDirectories:
+			case errorutil.EmptyUpgradeDirectories:
 				source = ""
 			case errorutil.Os_FailedToOpenUpgradeSourceDirectory:
 				commandOpen = func(string) (commandFile, error) { return nil, failure }
@@ -248,18 +248,18 @@ func TestStateCopyClarifications(t *testing.T) {
 }
 
 func TestDummyStatusClarifications(t *testing.T) {
-	for _, code := range []int{errorutil.Os_FailedToReadDummyStatusSequenceFile, errorutil.Internal_invalidDummyStatusSequenceNumber, errorutil.Internal_emptyDummyStatusSequenceFile, errorutil.Internal_invalidDummyStatusSequenceFileName} {
+	for _, code := range []int{errorutil.Os_FailedToReadDummyStatusSequenceFile, errorutil.InvalidDummyStatusSequenceNumber, errorutil.EmptyDummyStatusSequenceFile, errorutil.InvalidDummyStatusSequenceFileName} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			mockCommandDependencies(t)
 			filename := "command.mrseq"
 			switch code {
 			case errorutil.Os_FailedToReadDummyStatusSequenceFile:
 				commandReadFile = func(string) ([]byte, error) { return nil, errors.New("read failed") }
-			case errorutil.Internal_invalidDummyStatusSequenceNumber:
+			case errorutil.InvalidDummyStatusSequenceNumber:
 				commandReadFile = func(string) ([]byte, error) { return []byte("invalid"), nil }
-			case errorutil.Internal_emptyDummyStatusSequenceFile:
+			case errorutil.EmptyDummyStatusSequenceFile:
 				commandReadFile = func(string) ([]byte, error) { return nil, nil }
-			case errorutil.Internal_invalidDummyStatusSequenceFileName:
+			case errorutil.InvalidDummyStatusSequenceFileName:
 				filename = "invalid"
 			}
 			names := list.New()
@@ -273,7 +273,7 @@ func TestDummyStatusClarifications(t *testing.T) {
 
 func TestScriptDecodeClarifications(t *testing.T) {
 	_, _, err := decodeScript("not base64!")
-	requireCommandCode(t, errorutil.CustomerInput_invalidEmbeddedScriptBase64, err)
+	requireCommandCode(t, errorutil.InvalidEmbeddedScriptBase64, err)
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
 	_, err = writer.Write([]byte("script"))
@@ -281,17 +281,17 @@ func TestScriptDecodeClarifications(t *testing.T) {
 	require.NoError(t, writer.Close())
 	truncated := compressed.Bytes()[:compressed.Len()-8]
 	_, _, err = decodeScript(base64.StdEncoding.EncodeToString(truncated))
-	requireCommandCode(t, errorutil.CustomerInput_invalidCompressedScript, err)
+	requireCommandCode(t, errorutil.InvalidCompressedScript, err)
 }
 
 func TestManagedBlobClarifications(t *testing.T) {
-	for _, code := range []int{errorutil.CustomerInput_outputIdentityObjectIdNotSupported, errorutil.Storage_failedToCreateManagedAppendBlobClient, errorutil.Storage_failedToCreateManagedAppendBlob, errorutil.Imds_failedToCreateManagedIdentityCredential} {
+	for _, code := range []int{errorutil.OutputIdentityObjectIdNotSupported, errorutil.Storage_failedToCreateManagedAppendBlobClient, errorutil.Storage_failedToCreateManagedAppendBlob, errorutil.Imds_failedToCreateManagedIdentityCredential} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			mockCommandDependencies(t)
 			failure := errors.New("injected Azure failure")
 			var identity *handlersettings.RunCommandManagedIdentity
 			switch code {
-			case errorutil.CustomerInput_outputIdentityObjectIdNotSupported:
+			case errorutil.OutputIdentityObjectIdNotSupported:
 				identity = &handlersettings.RunCommandManagedIdentity{ObjectId: "unsupported"}
 			case errorutil.Storage_failedToCreateManagedAppendBlobClient:
 				newAppendBlobClient = func(string, azcore.TokenCredential, *appendblob.ClientOptions) (*appendblob.Client, error) {

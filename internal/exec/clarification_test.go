@@ -52,7 +52,7 @@ func TestExecutionClarificationErrors(t *testing.T) {
 		code  int
 		setup func(*handlersettings.HandlerSettings, *clarificationFile, *clarificationFile)
 	}{
-		{errorutil.Internal_incorrectRunAsScriptPath, func(cfg *handlersettings.HandlerSettings, _, _ *clarificationFile) {
+		{errorutil.IncorrectRunAsScriptPath, func(cfg *handlersettings.HandlerSettings, _, _ *clarificationFile) {
 			cfg.PublicSettings.RunAsUser = "user"
 		}},
 		{errorutil.Os_FailedToCreateRunAsDirectory, func(cfg *handlersettings.HandlerSettings, _, _ *clarificationFile) {
@@ -96,7 +96,7 @@ func TestExecutionClarificationErrors(t *testing.T) {
 				return &clarificationFile{}, nil
 			}
 		}},
-		{errorutil.CustomerInput_invalidParameterEnvironmentVariable, func(cfg *handlersettings.HandlerSettings, _, _ *clarificationFile) {
+		{errorutil.InvalidParameterEnvironmentVariable, func(cfg *handlersettings.HandlerSettings, _, _ *clarificationFile) {
 			cfg.PublicSettings.Parameters = []handlersettings.ParameterDefinition{{Name: "parameter", Value: "value"}, {Name: "next", Value: "value"}}
 			calls := 0
 			setEnvironment = func(string, string) error { calls++; require.Equal(t, 1, calls); return failure }
@@ -143,7 +143,7 @@ func TestExecutionClarificationErrors(t *testing.T) {
 			out, stderr := &clarificationFile{}, &clarificationFile{}
 			test.setup(&cfg, out, stderr)
 			path := constants.DataDir + "/download/script.sh"
-			if test.code == errorutil.Internal_incorrectRunAsScriptPath {
+			if test.code == errorutil.IncorrectRunAsScriptPath {
 				path = "/unexpected/script.sh"
 			}
 			_, err := Exec(testContext, path, "/mock/workdir", out, stderr, &cfg)
@@ -182,12 +182,12 @@ func TestOutputFileClarificationErrors(t *testing.T) {
 
 func TestExecutionPreservesLowerClarification(t *testing.T) {
 	mockExecution(t)
-	cause := errorutil.EnsureClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("lower failure"))
+	cause := errorutil.EnsureClarification(errorutil.InvalidSettingsJson, errors.New("lower failure"))
 	runCommand = func(*osexec.Cmd) error { return cause }
 	_, err := Exec(testContext, "unused", "/mock", &clarificationFile{}, &clarificationFile{}, &handlersettings.HandlerSettings{})
 	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
-	require.Equal(t, errorutil.CustomerInput_invalidSettingsJson, code)
+	require.Equal(t, errorutil.InvalidSettingsJson, code)
 	require.ErrorIs(t, err, cause)
 }
 

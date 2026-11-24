@@ -38,7 +38,7 @@ func (b *badDownloader) GetRequest() (*http.Request, error) {
 
 func TestDownload_wrapsGetRequestError(t *testing.T) {
 	_, _, err := download.Download(testctx, new(badDownloader))
-	requireDownloadCode(t, errorutil.Internal_failedToCreateDownloadRequest, err)
+	requireDownloadCode(t, errorutil.FailedToCreateDownloadRequest, err)
 	require.NotNil(t, err)
 	require.EqualError(t, err, "failed to create http request: expected error")
 }
@@ -60,8 +60,8 @@ func TestDownload_wrapsCommonErrorCodes(t *testing.T) {
 	}{
 		{http.StatusNotFound, errorutil.FileDownload_doesNotExist},
 		{http.StatusForbidden, errorutil.FileDownload_accessDenied},
-		{http.StatusInternalServerError, errorutil.Storage_internalServerError},
-		{http.StatusBadGateway, errorutil.FileDownload_internalServerError},
+		{http.StatusInternalServerError, errorutil.Storage_serverError},
+		{http.StatusBadGateway, errorutil.FileDownload_serverError},
 		{http.StatusBadRequest, errorutil.FileDownload_badRequest},
 		{http.StatusUnauthorized, errorutil.FileDownload_accessDenied},
 	} {
@@ -122,7 +122,7 @@ func TestDowload_msiDownloaderErrorMessage(t *testing.T) {
 	// Should use default error message for any error code other than 400, 401, 403, 404, and 409
 	msiDownloader500 := download.NewBlobWithMsiDownload(srv.URL+"/status/500", mockMsiProvider)
 	returnCode, body, err = download.Download(testctx, msiDownloader500)
-	requireDownloadCode(t, errorutil.Imds_internalMsiError, err)
+	requireDownloadCode(t, errorutil.Imds_msiError, err)
 	fmt.Println(err.Error())
 	require.Contains(t, err.Error(), "Use either a public script URI that points to .sh file", "error string doesn't contain full message")
 	require.Contains(t, err.Error(), "For more information, see https://aka.ms/RunCommandManagedLinux", "error string doesn't contain full message")

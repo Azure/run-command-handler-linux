@@ -114,7 +114,7 @@ func SaveGoalStatesInTerminalStatus(ctx *log.Context, newStatusInTerminalState [
 	}
 	rootStatusJson, err := json.MarshalIndent(cachedStatuses, "", "\t")
 	if err != nil {
-		return errorutil.EnsureClarification(errorutil.Internal_failedToMarshalTerminalGoalStates, fmt.Errorf("status: failed to marshal status report into json: %w", err))
+		return errorutil.EnsureClarification(errorutil.FailedToMarshalTerminalGoalStates, fmt.Errorf("status: failed to marshal status report into json: %w", err))
 	}
 
 	ctx.Log("message", "writing the content to the temporary status file")
@@ -211,7 +211,7 @@ func RemoveDisabledAndUpdatedGoalStatesInLocalStatusFile(ctx *log.Context, goalS
 					}
 				}
 			} else {
-				return errorutil.EnsureClarification(errorutil.Internal_invalidGoalStateRemovalState, errors.New(fmt.Sprintf("goal state %v is not disabled. Cannot remove it from the statusInTerminalState list", goalStateKey)))
+				return errorutil.EnsureClarification(errorutil.InvalidGoalStateRemovalState, errors.New(fmt.Sprintf("goal state %v is not disabled. Cannot remove it from the statusInTerminalState list", goalStateKey)))
 			}
 		}
 
@@ -244,7 +244,7 @@ func GetSingleStatusItem(ctx *log.Context, statusType types.StatusType, c types.
 	ctx.Log("message", "creating json to report status")
 	statusReport := types.NewStatusReport(statusType, c.Name, msg, extName, clarificationErrors...)
 	if len(statusReport) != 1 {
-		return types.StatusItem{}, errorutil.EnsureClarification(errorutil.Internal_unexpectedStatusItemCount, errors.New("expected a single status item"))
+		return types.StatusItem{}, errorutil.EnsureClarification(errorutil.UnexpectedStatusItemCount, errors.New("expected a single status item"))
 	}
 	return statusReport[0], nil
 }
@@ -258,5 +258,5 @@ func MarshalStatusReportIntoJson(statusReport types.StatusReport, indent bool) (
 		b, err = json.Marshal(statusReport)
 	}
 
-	return b, errorutil.EnsureClarification(errorutil.Internal_failedToMarshalStatusReport, err)
+	return b, errorutil.EnsureClarification(errorutil.FailedToMarshalStatusReport, err)
 }

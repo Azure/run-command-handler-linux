@@ -144,5 +144,5 @@ func (handler *Handler) DeRegister(ctx *log.Context) error {
 
 func (handler *Handler) GetInstalledVersion(ctx *log.Context) (string, error) {
 	version, err := handler.manager.GetInstalledVersion(handler.config.Name, ctx)
-	return version, errorutil.EnsureClarification(errorutil.Internal_failedToReadServiceVersion, err)
+	return version, errorutil.EnsureClarification(errorutil.FailedToReadServiceVersion, err)
 }

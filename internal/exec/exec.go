@@ -83,7 +83,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 		if !strings.HasPrefix(scriptPath, constants.DataDir) {
 			errMessage := "Failed to determine RunAs script path. Contact ICM team AzureRT\\Extensions for this service error."
 			ctx.Log("message", errMessage)
-			return constants.ExitCode_RunAsIncorrectScriptPath, errorutil.EnsureClarification(errorutil.Internal_incorrectRunAsScriptPath, errors.New(errMessage))
+			return constants.ExitCode_RunAsIncorrectScriptPath, errorutil.EnsureClarification(errorutil.IncorrectRunAsScriptPath, errors.New(errMessage))
 		}
 
 		// Gets suffix "download/<runcommandName>/0/script.sh"
@@ -223,7 +223,7 @@ func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, erro
 		if value != "" {
 			if name != "" { // Named parameters are set as environmental setting
 				if err := setEnvironment(name, value); err != nil {
-					return commandArgs, errorutil.EnsureClarification(errorutil.CustomerInput_invalidParameterEnvironmentVariable, errors.Wrap(err, "failed to set parameter environment variable"))
+					return commandArgs, errorutil.EnsureClarification(errorutil.InvalidParameterEnvironmentVariable, errors.Wrap(err, "failed to set parameter environment variable"))
 				}
 			} else { // Unnamed parameters go to command args
 				commandArgs += " " + value

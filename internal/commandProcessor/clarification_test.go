@@ -82,14 +82,14 @@ func TestCommandFailurePreservesClarificationAndDeploymentBehavior(t *testing.T)
 }
 
 func TestProcessorClarificationErrors(t *testing.T) {
-	for _, code := range []int{errorutil.Internal_unclassifiedCommandFailure, errorutil.Internal_invalidSequenceEnvironmentVariable, errorutil.Internal_failedToMarshalLocalSettings, errorutil.Os_FailedToWriteLocalSettings, errorutil.Os_FailedToDeleteRuntimePolicy} {
+	for _, code := range []int{errorutil.UnclassifiedCommandFailure, errorutil.InvalidSequenceEnvironmentVariable, errorutil.FailedToMarshalLocalSettings, errorutil.Os_FailedToWriteLocalSettings, errorutil.Os_FailedToDeleteRuntimePolicy} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			mockProcessor(t)
 			failure := errors.New("injected failure")
 			ctx := log.NewContext(log.NewNopLogger())
 			var err error
 			switch code {
-			case errorutil.Internal_unclassifiedCommandFailure:
+			case errorutil.UnclassifiedCommandFailure:
 				readHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
 					cfg := handlersettings.HandlerSettings{}
 					cfg.PublicSettings.TreatFailureAsDeploymentFailure = true
@@ -102,16 +102,16 @@ func TestProcessorClarificationErrors(t *testing.T) {
 					ReportStatus: func(ctx *log.Context, _ types.HandlerEnvironment, metadata types.RCMetadata, state types.StatusType, cmd types.Cmd, message string) error {
 						report := processorStatusReport(t, ctx, metadata, state, cmd, message)
 						if state != types.StatusTransitioning {
-							requireProcessorStatusCode(t, report, errorutil.Internal_unclassifiedCommandFailure)
+							requireProcessorStatusCode(t, report, errorutil.UnclassifiedCommandFailure)
 						}
 						return nil
 					},
 				})
 				err = ProcessHandlerCommandWithDetails(ctx, cmd, types.HandlerEnvironment{}, "command", 1, "download", "/mock")
-			case errorutil.Internal_invalidSequenceEnvironmentVariable:
+			case errorutil.InvalidSequenceEnvironmentVariable:
 				t.Setenv(constants.ConfigSequenceNumberEnvName, "invalid")
 				_, err = getSeqNum(&ctx, types.HandlerEnvironment{}, "command")
-			case errorutil.Internal_failedToMarshalLocalSettings:
+			case errorutil.FailedToMarshalLocalSettings:
 				marshalSettings = func(interface{}) ([]byte, error) { return nil, failure }
 				err = storeConfigSettingsFileForLocalExecution(ctx, handlersettings.HandlerSettingsFile{}, types.HandlerEnvironment{}, "command", 1)
 			case errorutil.Os_FailedToWriteLocalSettings:
@@ -175,8 +175,8 @@ func TestPrecheckClarificationStatus(t *testing.T) {
 		original error
 		code     int
 	}{
-		{errors.New("unclassified precheck failure"), errorutil.Internal_unclassifiedPrecheckFailure},
-		{errorutil.EnsureClarification(errorutil.CustomerInput_invalidSettingsJson, errors.New("classified precheck failure")), errorutil.CustomerInput_invalidSettingsJson},
+		{errors.New("unclassified precheck failure"), errorutil.UnclassifiedPrecheckFailure},
+		{errorutil.EnsureClarification(errorutil.InvalidSettingsJson, errors.New("classified precheck failure")), errorutil.InvalidSettingsJson},
 		// Already processed is intentional control flow, not a production failure.
 		{types.ErrAlreadyProcessed, 0},
 	} {

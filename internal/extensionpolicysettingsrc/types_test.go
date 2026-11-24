@@ -238,14 +238,14 @@ func TestCompareScriptTypeToAllowedScriptType(t *testing.T) {
 			scriptType: handlersettings.ScriptType("made-up"),
 			allowed:    AllowAll,
 			wantErr:    "unknown script type: made-up",
-			wantCode:   errorutil.ExtensionPolicySettings_unknownScriptType,
+			wantCode:   errorutil.UnknownScriptType,
 		},
 		{
 			name:       "'none' script currently treated as unknown",
 			scriptType: handlersettings.NoneScript,
 			allowed:    AllowAll,
 			wantErr:    "unknown script type: None",
-			wantCode:   errorutil.ExtensionPolicySettings_unknownScriptType,
+			wantCode:   errorutil.UnknownScriptType,
 		},
 	}
 

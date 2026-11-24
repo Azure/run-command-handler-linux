@@ -99,7 +99,7 @@ func tryClearRegexMatchingFiles(ctx *log.Context, directory string, regexFileNam
 
 func tryClearRegexMatchingFilesExcept(ctx *log.Context, directory string, regexFileNamePattern string, exceptFileName string, deleteFiles bool) error {
 	if regexFileNamePattern == "" {
-		return errorutil.EnsureClarification(errorutil.Internal_emptyCleanupFilePattern, errors.New("empty regexFileNamePattern argument"))
+		return errorutil.EnsureClarification(errorutil.EmptyCleanupFilePattern, errors.New("empty regexFileNamePattern argument"))
 	}
 
 	// Check if the directory exists
@@ -111,7 +111,7 @@ func tryClearRegexMatchingFilesExcept(ctx *log.Context, directory string, regexF
 
 	regex, err := regexp.Compile(regexFileNamePattern)
 	if err != nil {
-		return errorutil.EnsureClarification(errorutil.Internal_invalidCleanupFilePattern, errors.Wrap(err, "could not parse given regular expression"))
+		return errorutil.EnsureClarification(errorutil.InvalidCleanupFilePattern, errors.Wrap(err, "could not parse given regular expression"))
 	}
 
 	dirEntries, err := directoryFDRef.ReadDir(0)

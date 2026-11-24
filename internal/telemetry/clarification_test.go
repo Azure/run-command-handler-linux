@@ -64,7 +64,7 @@ func TestTelemetryClarifications(t *testing.T) {
 		writer failingTelemetryWriter
 	}{
 		{code: errorutil.Os_FailedToCloseTelemetryWriter, writer: failingTelemetryWriter{closeErr: cause}},
-		{code: errorutil.Internal_failedToMarshalTelemetryEvent, event: telemetryEvent{Parameters: []interface{}{make(chan int)}}},
+		{code: errorutil.FailedToMarshalTelemetryEvent, event: telemetryEvent{Parameters: []interface{}{make(chan int)}}},
 		{code: errorutil.Os_FailedToWriteTelemetryEvent, writer: failingTelemetryWriter{writeErr: cause}},
 		{code: errorutil.Os_ShortTelemetryEventWrite, writer: failingTelemetryWriter{short: true}},
 	} {

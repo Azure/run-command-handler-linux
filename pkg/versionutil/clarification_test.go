@@ -13,5 +13,5 @@ func TestVersionClarification(t *testing.T) {
 	_, err := ExtractFromServiceDefinition("invalid", log.NewContext(log.NewLogfmtLogger(io.Discard)))
 	code, ok := errorutil.FindClarification(err)
 	require.True(t, ok)
-	require.Equal(t, errorutil.Internal_invalidServiceDefinition, code)
+	require.Equal(t, errorutil.InvalidServiceDefinition, code)
 }
