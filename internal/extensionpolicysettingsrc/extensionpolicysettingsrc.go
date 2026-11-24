@@ -84,7 +84,7 @@ func ValidateHandlerSettingsAgainstPolicy(ctx *log.Context, settings *handlerset
 func ValidateScriptTypeAgainstPolicy(ctx *log.Context, scriptType handlersettings.ScriptType, allowedScriptTypesString string) error {
 	allowedScriptTypes, parseErr := StringToAllowedScriptTypeFlag(allowedScriptTypesString)
 	if parseErr != nil && allowedScriptTypesString != "" {
-		return fmt.Errorf("script type %s is not allowed by policy: invalid allowed script types: %w", scriptType, parseErr)
+		return fmt.Errorf("cannot validate script type %s: policy contains an invalid LimitScripts value: %w", scriptType, parseErr)
 	}
 	// Compare the script type of the command with the allowed script types in the policy.
 	err := CompareScriptTypeToAllowedScriptType(scriptType, allowedScriptTypes)

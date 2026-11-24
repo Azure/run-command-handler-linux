@@ -38,7 +38,10 @@ func TestPolicyFormatClarifications(t *testing.T) {
 		_, err := StringToAllowedScriptTypeFlag("unknown")
 		requirePolicyCode(t, err, errorutil.ExtensionPolicySettings_invalidPolicyFileFormat)
 		requirePolicyCode(t, (RCv2ExtensionPolicySettings{LimitScripts: "unknown"}).ValidateFormat(), errorutil.ExtensionPolicySettings_invalidPolicyFileFormat)
-		requirePolicyCode(t, ValidateScriptTypeAgainstPolicy(nopCtx(), handlersettings.InlineScript, "unknown"), errorutil.ExtensionPolicySettings_invalidPolicyFileFormat)
+		err = ValidateScriptTypeAgainstPolicy(nopCtx(), handlersettings.InlineScript, "unknown")
+		requirePolicyCode(t, err, errorutil.ExtensionPolicySettings_invalidPolicyFileFormat)
+		require.EqualError(t, err, "cannot validate script type Inline: policy contains an invalid LimitScripts value: Unknown script type in policy: unknown")
+		require.NotContains(t, err.Error(), "is not allowed by policy")
 	})
 	t.Run("download allowlist 2501", func(t *testing.T) {
 		err := (RCv2ExtensionPolicySettings{LimitScripts: "inline", DownloadedScriptsAllowlist: []string{"hash"}}).ValidateFormat()
