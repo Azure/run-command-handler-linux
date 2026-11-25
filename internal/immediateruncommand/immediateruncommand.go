@@ -14,6 +14,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
 	"github.com/Azure/run-command-handler-linux/pkg/counterutil"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 )
@@ -118,7 +119,9 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 
 				notifier := &observer.Notifier{}
 				notifier.Register(&goalStateEventObserver)
-				notifier.Notify(status)
+				if err := notifier.Notify(status); err != nil {
+					ctx.Log("error", "failed to notify initial goal state status", "message", err)
+				}
 				startTime := time.Now().UTC().Format(time.RFC3339)
 				exitCode, err := goalstate.HandleImmediateGoalState(ctx, state.handlerName, state.SettingsCommon, notifier)
 
@@ -129,16 +132,9 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 				// For successful goal states, the status is reported by the usual workflow
 				if err != nil {
 					ctx.Log("error", "failed to execute goal state", "message", err)
-					instView := types.RunCommandInstanceView{
-						ExecutionState:   types.Failed,
-						ExecutionMessage: "Execution failed",
-						ExitCode:         exitCode,
-						Output:           "",
-						Error:            err.Error(),
-						StartTime:        startTime,
-						EndTime:          time.Now().UTC().Format(time.RFC3339),
+					if reportErr := reportImmediateGoalStateFailure(ctx, notifier, statusKey, startTime, exitCode, err); reportErr != nil {
+						ctx.Log("error", "failed to report final goal state status", "message", reportErr)
 					}
-					goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView)
 
 				}
 			}(newGoalStates[idx])
@@ -156,23 +152,50 @@ func processImmediateRunCommandGoalStates(ctx *log.Context, communicator hostgac
 			notifier := &observer.Notifier{}
 			notifier.Register(&goalStateEventObserver)
 
-			errorMsg := fmt.Sprintf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *skippedGoalState.ExtensionName, *skippedGoalState.SeqNo)
+			skippedErr := newConcurrencyLimitError(maxTasksToFetch, skippedGoalState.SettingsCommon)
 			instView := types.RunCommandInstanceView{
-				ExecutionState:   types.Failed,
-				ExecutionMessage: "Execution was skipped due to reaching the maximum concurrent tasks",
-				ExitCode:         constants.ExitCode_SkippedImmediateGoalState,
-				Output:           "",
-				Error:            errorMsg,
-				StartTime:        time.Now().UTC().Format(time.RFC3339),
-				EndTime:          time.Now().UTC().Format(time.RFC3339),
+				ExecutionState:     types.Failed,
+				ExecutionMessage:   "Execution was skipped due to reaching the maximum concurrent tasks",
+				ExitCode:           constants.ExitCode_SkippedImmediateGoalState,
+				Output:             "",
+				Error:              skippedErr.Error(),
+				ClarificationError: skippedErr,
+				StartTime:          time.Now().UTC().Format(time.RFC3339),
+				EndTime:            time.Now().UTC().Format(time.RFC3339),
 			}
-			goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusSkipped, &instView)
+			if err := goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusSkipped, &instView); err != nil {
+				ctx.Log("error", "failed to report skipped goal state status", "message", err)
+			}
 		}
 	} else {
 		ctx.Log("message", "no goal states were skipped")
 	}
 
 	return newEtag, nil
+}
+
+func reportImmediateGoalStateFailure(ctx *log.Context, notifier *observer.Notifier, statusKey types.GoalStateKey, startTime string, exitCode int, err error) error {
+	var executionErr *goalstate.ImmediateCommandExecutionError
+	if errors.As(err, &executionErr) {
+		if executionErr.Reported {
+			return nil
+		}
+		return goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, executionErr.Status, &executionErr.InstanceView)
+	}
+	instView := types.RunCommandInstanceView{
+		ExecutionState:     types.Failed,
+		ExecutionMessage:   "Execution failed",
+		ExitCode:           exitCode,
+		Error:              err.Error(),
+		StartTime:          startTime,
+		EndTime:            time.Now().UTC().Format(time.RFC3339),
+		ClarificationError: err,
+	}
+	return goalstate.ReportFinalStatusForImmediateGoalState(ctx, notifier, statusKey, types.StatusError, &instView)
+}
+
+func newConcurrencyLimitError(maxTasksToFetch int, state settings.SettingsCommon) error {
+	return errorutil.EnsureClarification(errorutil.CommandExecution_concurrentGoalStateLimitExceeded, fmt.Errorf("Exceeded concurrent goal state processing limit. Allowed new goal state count: %d. Extension: %s, SeqNumber: %d", maxTasksToFetch, *state.ExtensionName, *state.SeqNo))
 }
 
 // Get the goal states that have not been processed yet

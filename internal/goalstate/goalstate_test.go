@@ -2,6 +2,7 @@ package goalstate
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/settings"
 	"github.com/Azure/run-command-handler-linux/internal/status"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
@@ -105,7 +107,7 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 	err = os.Mkdir(tempDir+"/status", 0755)
 	require.NoError(t, err, "Failed to create status directory")
 
-	os.Setenv(constants.ExtensionPathEnvName, tempDir)
+	t.Setenv(constants.ExtensionPathEnvName, tempDir)
 
 	ctx.Log("msg", "Creating status observer")
 	obs := &status.StatusObserver{}
@@ -125,13 +127,14 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 
 	errorMsg := "Test error message"
 	instView := types.RunCommandInstanceView{
-		ExecutionState:   types.Failed,
-		ExecutionMessage: "Execution failed",
-		ExitCode:         constants.ExitCode_SkippedImmediateGoalState,
-		Output:           "",
-		Error:            errorMsg,
-		StartTime:        time.Now().UTC().Format(time.RFC3339),
-		EndTime:          time.Now().UTC().Format(time.RFC3339),
+		ExecutionState:     types.Failed,
+		ExecutionMessage:   "Execution failed",
+		ExitCode:           constants.ExitCode_SkippedImmediateGoalState,
+		Output:             "",
+		Error:              errorMsg,
+		ClarificationError: errorutil.EnsureClarification(errorutil.CommandExecution_concurrentGoalStateLimitExceeded, errors.New(errorMsg)),
+		StartTime:          time.Now().UTC().Format(time.RFC3339),
+		EndTime:            time.Now().UTC().Format(time.RFC3339),
 	}
 
 	err = ReportFinalStatusForImmediateGoalState(ctx, notifier, goalStateKey, types.StatusSkipped, &instView)
@@ -153,6 +156,7 @@ func Test_handleSkippedImmediateGoalState_NotifyObserver(t *testing.T) {
 	require.Equal(t, goalStateKey.HandlerName, latestStatus.HandlerName)
 	require.Equal(t, "Enable", latestStatus.Status.Operation, "Operation should be equal")
 	require.Equal(t, types.StatusSkipped, latestStatus.Status.Status, "Status should be equal")
+	requireGoalStateStatusCode(t, latestStatus.Status, errorutil.CommandExecution_concurrentGoalStateLimitExceeded)
 
 	json, err := json.Marshal(instView)
 	require.Nil(t, err, "Marshal should not return an error")

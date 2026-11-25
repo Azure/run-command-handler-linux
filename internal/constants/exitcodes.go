@@ -13,6 +13,8 @@ const (
 	ExitCode_RunAsUserNotAllowedByExtensionPolicy              = -105
 	ExitCode_DownloadedScriptBlockedByExtensionPolicy          = -106
 	ExitCode_OutputBlobSpecifiedButNotAllowedByExtensionPolicy = -107
+	ExitCode_OutputBlobCreateOrReplaceFailed                   = -108
+	ExitCode_ErrorBlobCreateOrReplaceFailed                    = -109
 
 	// Service Errors (-200s):
 	ExitCode_CreateDataDirectoryFailed                    = -200

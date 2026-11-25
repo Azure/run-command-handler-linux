@@ -3,6 +3,7 @@ package download
 import (
 	"testing"
 
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,6 +16,7 @@ func Test_urlDownload_GetRequest_badURL(t *testing.T) {
 	d := NewURLDownload(u)
 	r, err := d.GetRequest()
 	require.NotNil(t, err, u)
+	requireDownloadCode(t, errorutil.FileDownload_invalidRequestUrl, err)
 	require.Contains(t, err.Error(), "invalid URL", u)
 	require.Nil(t, r, u)
 }

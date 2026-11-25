@@ -9,6 +9,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/internal/hostgacommunicator"
 	"github.com/Azure/run-command-handler-linux/internal/types"
+	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
 	"github.com/Azure/run-command-handler-linux/pkg/statusreporter"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -64,7 +65,7 @@ func (o *StatusObserver) OnNotify(status types.StatusEventArgs) error {
 	o.ctx.Log("message", fmt.Sprintf("Processing status event for goal state with key %v", status.StatusKey))
 	o.goalStateEventMap.Store(status.StatusKey, status.TopLevelStatus)
 	// The local copy is for debugging only; HTTP reporting remains authoritative.
-	if status.TopLevelStatus != (types.StatusItem{}) {
+	if item := status.TopLevelStatus; item.Version != 0 || item.TimestampUTC != "" || item.Status.Name != "" || item.Status.Operation != "" || item.Status.Status != "" || item.Status.FormattedMessage != (types.FormattedMessage{}) || len(item.Status.Substatuses) > 0 {
 		if err := saveImmediateStatusToLocalFile(status); err != nil {
 			o.ctx.Log("message", "failed to save local immediate status debug copy; continuing HTTP reporting",
 				"goalState", status.StatusKey, "error", err)
@@ -100,7 +101,7 @@ func (o *StatusObserver) getImmediateTopLevelStatusToReport() ImmediateTopLevelS
 		goalStateKey := key.(types.GoalStateKey)
 		statusByHandler[goalStateKey.HandlerName] = []ImmediateStatus{}
 		if goalStateKey.RuntimeSettingsState != "disabled" {
-			if value.(types.StatusItem) != (types.StatusItem{}) {
+			if item := value.(types.StatusItem); item.Version != 0 || item.TimestampUTC != "" || item.Status.Name != "" || item.Status.Operation != "" || item.Status.Status != "" || item.Status.FormattedMessage != (types.FormattedMessage{}) || len(item.Status.Substatuses) > 0 {
 				o.ctx.Log("message", fmt.Sprintf("Goal state %v is not empty. Processing it.", goalStateKey))
 				statusItem := value.(types.StatusItem)
 				immediateStatus := ImmediateStatus{
@@ -182,19 +183,19 @@ func (o *StatusObserver) reportImmediateStatus(immediateStatus ImmediateTopLevel
 	o.ctx.Log("message", "Marshalling immediate status into json")
 	rootStatusJson, err := json.Marshal(immediateStatus)
 	if err != nil {
-		return fmt.Errorf("status: failed to marshal immediate status into json: %v", err)
+		return errorutil.EnsureClarification(errorutil.FailedToMarshalImmediateStatus, fmt.Errorf("status: failed to marshal immediate status into json: %w", err))
 	}
 
 	o.ctx.Log("message", "create request to upload status to: "+o.Reporter.GetPutStatusUri())
 	response, err := o.Reporter.ReportStatus(o.ctx, string(rootStatusJson))
 
-	o.ctx.Log("message", fmt.Sprintf("Status received from request to %v: %v", response.Request.URL, response.Status))
 	if err != nil {
-		return errors.Wrap(err, "failed to report status to HGAP")
+		return errorutil.EnsureClarification(errorutil.HostGA_failedToReportImmediateStatus, errors.Wrap(err, "failed to report status to HGAP"))
 	}
+	o.ctx.Log("message", fmt.Sprintf("Status received from request: %v", response.Status))
 
 	if response.StatusCode != 200 {
-		return errors.New("failed to report status with error code " + response.Status)
+		return errorutil.EnsureClarification(errorutil.HostGA_immediateStatusReturnedErrorStatus, errors.New("failed to report status with error code "+response.Status))
 	}
 
 	return nil
