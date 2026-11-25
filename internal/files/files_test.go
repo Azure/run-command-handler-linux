@@ -227,7 +227,7 @@ func Test_saveScriptFile(t *testing.T) {
 
 	var content = "echo"
 	var filePath = filepath.Join(tmpDir, "script.sh")
-	err = SaveScriptFile(filePath, content)
+	err = SaveScriptFile(log.NewContext(log.NewNopLogger()), filePath, content)
 	require.Nil(t, err)
 	result, err := ioutil.ReadFile(filePath)
 	require.Nil(t, err)

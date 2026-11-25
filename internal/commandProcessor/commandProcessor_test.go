@@ -127,9 +127,7 @@ func Test_ProcessImmediateHandlerCommand_CleanupAfterFinalStatus(t *testing.T) {
 				},
 			})
 			err := ProcessImmediateHandlerCommand(cmd, cleanupTestSettings(test.policy), name, seq)
-			if test.scriptFails && test.policy {
-				require.ErrorContains(t, err, "script failed")
-			} else if !test.scriptFails && test.reportFails {
+			if !test.scriptFails && test.reportFails {
 				require.ErrorContains(t, err, "status reporting failed")
 			} else {
 				require.NoError(t, err)

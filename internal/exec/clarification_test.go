@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/Azure/run-command-handler-linux/internal/constants"
 	"github.com/Azure/run-command-handler-linux/internal/handlersettings"
 	"github.com/Azure/run-command-handler-linux/pkg/errorutil"
+	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,11 +98,6 @@ func TestExecutionClarificationErrors(t *testing.T) {
 				return &clarificationFile{}, nil
 			}
 		}},
-		{errorutil.InvalidParameterEnvironmentVariable, func(cfg *handlersettings.HandlerSettings, _, _ *clarificationFile) {
-			cfg.PublicSettings.Parameters = []handlersettings.ParameterDefinition{{Name: "parameter", Value: "value"}, {Name: "next", Value: "value"}}
-			calls := 0
-			setEnvironment = func(string, string) error { calls++; require.Equal(t, 1, calls); return failure }
-		}},
 		{errorutil.CommandExecution_failedUnknownError, func(_ *handlersettings.HandlerSettings, _, _ *clarificationFile) {
 			runCommand = func(*osexec.Cmd) error { return failure }
 		}},
@@ -120,16 +117,6 @@ func TestExecutionClarificationErrors(t *testing.T) {
 			openScriptFile = func(_ string, flag int, _ os.FileMode) (scriptFile, error) {
 				file := &clarificationFile{}
 				if flag&os.O_CREATE == 0 {
-					file.closeErr = failure
-				}
-				return file, nil
-			}
-		}},
-		{errorutil.Os_FailedToCloseRunAsScript, func(cfg *handlersettings.HandlerSettings, _, _ *clarificationFile) {
-			cfg.PublicSettings.RunAsUser = "user"
-			openScriptFile = func(_ string, flag int, _ os.FileMode) (scriptFile, error) {
-				file := &clarificationFile{}
-				if flag&os.O_CREATE != 0 {
 					file.closeErr = failure
 				}
 				return file, nil
@@ -217,5 +204,113 @@ func TestExecutionInjectedSuccess(t *testing.T) {
 			require.True(t, out.closed)
 			require.True(t, stderr.closed)
 		})
+	}
+}
+
+func TestRunAsScriptCloseFailureIsBestEffort(t *testing.T) {
+	for _, scriptFails := range []bool{false, true} {
+		t.Run(strconv.FormatBool(scriptFails), func(t *testing.T) {
+			mockExecution(t)
+			dest := &clarificationFile{closeErr: errors.New("close failed")}
+			openScriptFile = func(_ string, flag int, _ os.FileMode) (scriptFile, error) {
+				if flag&os.O_CREATE != 0 {
+					return dest, nil
+				}
+				return &clarificationFile{}, nil
+			}
+			executed := false
+			runCommand = func(command *osexec.Cmd) error {
+				executed = true
+				require.Contains(t, command.Args[2], "sudo -n -u user")
+				if scriptFails {
+					return errors.New("script failed")
+				}
+				return nil
+			}
+			commandExitStatus = func(error) (int, bool, bool) { return 12, false, true }
+			cfg := handlersettings.HandlerSettings{}
+			cfg.PublicSettings.RunAsUser = "user"
+			var output bytes.Buffer
+			ctx := log.NewContext(log.NewLogfmtLogger(&output))
+			exitCode, err := Exec(ctx, constants.DataDir+"/download/script.sh", "/mock", &clarificationFile{}, &clarificationFile{}, &cfg)
+			require.True(t, executed)
+			require.True(t, dest.closed)
+			require.Contains(t, output.String(), "clarificationCode="+strconv.Itoa(errorutil.Os_FailedToCloseRunAsScript))
+			if scriptFails {
+				require.Equal(t, 12, exitCode)
+				code, ok := errorutil.FindClarification(err)
+				require.True(t, ok)
+				require.Equal(t, errorutil.CommandExecution_failureExitCode, code)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, constants.ExitCode_Okay, exitCode)
+			}
+		})
+	}
+}
+
+func TestEnvironmentSetupBestEffort(t *testing.T) {
+	for _, lastEnvironmentFails := range []bool{false, true} {
+		for _, scriptFails := range []bool{false, true} {
+			t.Run(strconv.FormatBool(lastEnvironmentFails)+"/"+strconv.FormatBool(scriptFails), func(t *testing.T) {
+				mockExecution(t)
+				failure := errors.New("setenv failed")
+				var names []string
+				setEnvironment = func(name, value string) error {
+					names = append(names, name)
+					if name == "first" || lastEnvironmentFails {
+						return failure
+					}
+					return nil
+				}
+				cfg := handlersettings.HandlerSettings{}
+				cfg.PublicSettings.Parameters = []handlersettings.ParameterDefinition{
+					{Name: "first", Value: "one"}, {Value: "argument"},
+				}
+				cfg.ProtectedSettings.ProtectedParameters = []handlersettings.ParameterDefinition{
+					{Name: "last", Value: "two"}, {Value: "protectedargument"},
+				}
+				var output bytes.Buffer
+				ctx := log.NewContext(log.NewLogfmtLogger(&output))
+				args, err := setEnvironmentVariables(ctx, &cfg)
+				require.Equal(t, " argument protectedargument", args)
+				require.Equal(t, []string{"first", "last"}, names)
+				if lastEnvironmentFails {
+					require.ErrorIs(t, err, failure)
+				} else {
+					require.NoError(t, err, "the helper must preserve its original last-error contract")
+				}
+				names = nil
+				output.Reset()
+				executed := false
+				runCommand = func(command *osexec.Cmd) error {
+					executed = true
+					require.Equal(t, "script.sh argument protectedargument", command.Args[2])
+					if scriptFails {
+						return errors.New("script failed")
+					}
+					return nil
+				}
+				commandExitStatus = func(error) (int, bool, bool) { return 12, false, true }
+				exitCode, err := Exec(ctx, "script.sh", "/mock", &clarificationFile{}, &clarificationFile{}, &cfg)
+				require.True(t, executed)
+				require.Equal(t, []string{"first", "last"}, names)
+				require.Contains(t, output.String(), "clarificationCode="+strconv.Itoa(errorutil.InvalidParameterEnvironmentVariable))
+				expectedLogs := 1
+				if lastEnvironmentFails {
+					expectedLogs++
+				}
+				require.Equal(t, expectedLogs, bytes.Count(output.Bytes(), []byte("clarificationCode=")))
+				if scriptFails {
+					require.Equal(t, 12, exitCode)
+					code, ok := errorutil.FindClarification(err)
+					require.True(t, ok)
+					require.Equal(t, errorutil.CommandExecution_failureExitCode, code)
+				} else {
+					require.NoError(t, err)
+					require.Equal(t, constants.ExitCode_Okay, exitCode)
+				}
+			})
+		}
 	}
 }

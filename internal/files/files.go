@@ -217,7 +217,7 @@ func PostProcessFile(path string) error {
 	return nil
 }
 
-func SaveScriptFile(filePath string, content string) error {
+func SaveScriptFile(ctx *log.Context, filePath string, content string) error {
 	const mode = 0500 // scripts should have execute permissions
 	file, err := openScriptFile(filePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
 	if err != nil {
@@ -225,8 +225,13 @@ func SaveScriptFile(filePath string, content string) error {
 	}
 	_, err = file.WriteString(content)
 	closeErr := file.Close()
+	if closeErr != nil {
+		closeErr = errorutil.EnsureClarification(errorutil.Os_FailedToCloseEmbeddedScript, errors.Wrap(closeErr, "failed to close the file: "+filePath))
+		code, _ := errorutil.FindClarification(closeErr)
+		ctx.Log("message", "failed to close embedded script", "filename", filePath, "error", closeErr, "clarificationCode", code)
+	}
 	if err != nil {
 		return errorutil.EnsureClarification(errorutil.Os_FailedToWriteEmbeddedScript, errors.Wrap(err, "failed to write to the file: "+filePath))
 	}
-	return errorutil.EnsureClarification(errorutil.Os_FailedToCloseEmbeddedScript, errors.Wrap(closeErr, "failed to close the file: "+filePath))
+	return nil
 }

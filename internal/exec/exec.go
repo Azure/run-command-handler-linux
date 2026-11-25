@@ -51,6 +51,7 @@ var (
 //
 // On error, an exit code may be returned if it is an exit code error.
 // Given stdout and stderr will be closed upon returning.
+// Environment setup failures are logged without stopping script execution.
 func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, cfg *handlersettings.HandlerSettings) (exitCode int, resultErr error) {
 	defer func() {
 		if err := stdout.Close(); err != nil && resultErr == nil {
@@ -67,10 +68,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 
 	scriptPath := cmd
 
-	commandArgs, err := SetEnvironmentVariables(cfg)
-	if err != nil {
-		return constants.ExitCode_CommandExecutionFailed, err
-	}
+	commandArgs, err := setEnvironmentVariables(ctx, cfg)
 	// Add command args if any. Unnamed arguments go in 'commandArgs'. Named arguments are set as environment variables so the'd be available within the script.
 	cmd = cmd + commandArgs
 
@@ -159,7 +157,9 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 			return constants.ExitCode_RunAsScriptFileChangePermissionsFailed, errorutil.EnsureClarification(errorutil.Os_FailedToChangeRunAsScriptPermissions, errors.Wrap(runAsScriptChmodError, errMessage))
 		}
 		if err := destScriptFile.Close(); err != nil {
-			return constants.ExitCode_RunAsCreateRunAsScriptFileFailed, errorutil.EnsureClarification(errorutil.Os_FailedToCloseRunAsScript, errors.Wrap(err, "failed to close RunAs script"))
+			err = errorutil.EnsureClarification(errorutil.Os_FailedToCloseRunAsScript, errors.Wrap(err, "failed to close RunAs script"))
+			code, _ := errorutil.FindClarification(err)
+			ctx.Log("message", "failed to close RunAs script", "filename", runAsScriptFilePath, "error", err, "clarificationCode", code)
 		}
 
 		// Execute the command as RunAsUser. -n for non-interactive mode (do not prompt for password)
@@ -208,6 +208,11 @@ func createRunAsScriptFile(path string) (scriptFile, error) {
 }
 
 func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, error) {
+	return setEnvironmentVariables(log.NewContext(log.NewLogfmtLogger(os.Stderr)), cfg)
+}
+
+func setEnvironmentVariables(ctx *log.Context, cfg *handlersettings.HandlerSettings) (string, error) {
+	var err error
 	commandArgs := ""
 	parameters := []handlersettings.ParameterDefinition{}
 	if cfg.PublicSettings.Parameters != nil && len(cfg.PublicSettings.Parameters) > 0 {
@@ -222,8 +227,11 @@ func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, erro
 		value := parameters[i].Value
 		if value != "" {
 			if name != "" { // Named parameters are set as environmental setting
-				if err := setEnvironment(name, value); err != nil {
-					return commandArgs, errorutil.EnsureClarification(errorutil.InvalidParameterEnvironmentVariable, errors.Wrap(err, "failed to set parameter environment variable"))
+				err = setEnvironment(name, value)
+				if err != nil {
+					err = errorutil.EnsureClarification(errorutil.InvalidParameterEnvironmentVariable, errors.Wrap(err, "failed to set parameter environment variable"))
+					code, _ := errorutil.FindClarification(err)
+					ctx.Log("message", "failed to set parameter environment variable", "error", err, "clarificationCode", code)
 				}
 			} else { // Unnamed parameters go to command args
 				commandArgs += " " + value
@@ -231,7 +239,7 @@ func SetEnvironmentVariables(cfg *handlersettings.HandlerSettings) (string, erro
 		}
 	}
 
-	return commandArgs, nil
+	return commandArgs, err
 }
 
 // ExecCmdInDir executes the given command in given directory and saves output

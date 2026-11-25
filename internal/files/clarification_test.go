@@ -2,6 +2,7 @@ package files
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -81,19 +82,44 @@ func TestScriptClarifications(t *testing.T) {
 	err = PostProcessFile("script")
 	assertFileCode(t, err, errorutil.Os_FailedToWritePostprocessedScript)
 	require.ErrorIs(t, err, cause, "write errors must not be overwritten by rename")
-	for _, want := range []int{errorutil.Os_FailedToOpenEmbeddedScript, errorutil.Os_FailedToWriteEmbeddedScript, errorutil.Os_FailedToCloseEmbeddedScript} {
+	for _, want := range []int{errorutil.Os_FailedToOpenEmbeddedScript, errorutil.Os_FailedToWriteEmbeddedScript} {
 		openScriptFile = func(string, int, os.FileMode) (scriptWriter, error) {
 			if want == errorutil.Os_FailedToOpenEmbeddedScript {
 				return nil, cause
 			}
-			if want == errorutil.Os_FailedToWriteEmbeddedScript {
-				return fakeScriptWriter{writeErr: cause}, nil
-			}
-			return fakeScriptWriter{closeErr: cause}, nil
+			return fakeScriptWriter{writeErr: cause}, nil
 		}
-		err := SaveScriptFile("script", "content")
+		err := SaveScriptFile(ctx, "script", "content")
 		assertFileCode(t, err, want)
 		require.ErrorIs(t, err, cause)
+	}
+}
+
+func TestSaveScriptFileCloseFailureIsBestEffort(t *testing.T) {
+	oldOpen := openScriptFile
+	t.Cleanup(func() { openScriptFile = oldOpen })
+	for _, writeFails := range []bool{false, true} {
+		t.Run(fmt.Sprint(writeFails), func(t *testing.T) {
+			closeCause := errors.New("close failed")
+			writeCause := errors.New("write failed")
+			var writeErr error
+			if writeFails {
+				writeErr = writeCause
+			}
+			openScriptFile = func(string, int, os.FileMode) (scriptWriter, error) {
+				return fakeScriptWriter{writeErr: writeErr, closeErr: closeCause}, nil
+			}
+			logger := &fileErrorLogger{}
+			err := SaveScriptFile(log.NewContext(logger), "script", "content")
+			assertFileCode(t, logger.err, errorutil.Os_FailedToCloseEmbeddedScript)
+			require.ErrorIs(t, logger.err, closeCause)
+			if writeFails {
+				assertFileCode(t, err, errorutil.Os_FailedToWriteEmbeddedScript)
+				require.ErrorIs(t, err, writeCause)
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 }
 

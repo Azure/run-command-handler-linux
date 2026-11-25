@@ -181,13 +181,14 @@ func TestRehydrationClarifications(t *testing.T) {
 			failure := errors.New("injected failure")
 			directory := &mockCommandFile{entries: []os.DirEntry{mockCommandEntry("command.5.status")}}
 			commandOpen = func(string) (commandFile, error) { return directory, nil }
+			writeCalls := 0
 			switch code {
 			case errorutil.Os_FailedToOpenRehydrationStatusDirectory:
 				commandOpen = func(string) (commandFile, error) { return nil, failure }
 			case errorutil.Os_FailedToReadRehydrationStatusDirectory:
 				directory.dirErr = failure
 			case errorutil.InvalidStatusFileSequenceNumber:
-				directory.entries = []os.DirEntry{mockCommandEntry("command.invalid.status")}
+				directory.entries = []os.DirEntry{mockCommandEntry("command.invalid.status"), mockCommandEntry("command.5.status")}
 			case errorutil.Os_FailedToRehydrateSequenceNumber:
 				commandStat = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 				commandWriteFile = func(string, []byte, os.FileMode) error { return failure }
@@ -200,8 +201,27 @@ func TestRehydrationClarifications(t *testing.T) {
 			case errorutil.Os_FailedToUpdateRehydratedSequenceFile:
 				commandWriteFile = func(string, []byte, os.FileMode) error { return failure }
 			}
-			ctx := log.NewContext(log.NewNopLogger())
+			if code == errorutil.InvalidStatusFileSequenceNumber || code == errorutil.InvalidMrseqFileSequenceNumber {
+				commandWriteFile = func(_ string, contents []byte, _ os.FileMode) error {
+					writeCalls++
+					require.Equal(t, "5", string(contents))
+					return nil
+				}
+			}
+			var output bytes.Buffer
+			ctx := log.NewContext(log.NewLogfmtLogger(&output))
 			err := rehydrateMrSeqFilesForProblematicUpgrades(ctx, "/mock/old", "/mock/new", createExtensionEventManager(ctx, types.HandlerEnvironment{}))
+			if code == errorutil.InvalidStatusFileSequenceNumber || code == errorutil.InvalidMrseqFileSequenceNumber {
+				require.NoError(t, err)
+				if code == errorutil.InvalidStatusFileSequenceNumber {
+					require.Contains(t, output.String(), "filename=command.invalid.status")
+				} else {
+					require.Contains(t, output.String(), "invalid sequence number in mrseq file")
+				}
+				require.Contains(t, output.String(), "clarificationCode="+strconv.Itoa(code))
+				require.Equal(t, 1, writeCalls, "rehydration must continue after a parsing failure")
+				return
+			}
 			requireCommandCode(t, code, err)
 		})
 	}

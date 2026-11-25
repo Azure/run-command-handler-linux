@@ -121,7 +121,7 @@ func processHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		instView.ClarificationError = cmdInvokeError
 		statusToReport := types.StatusSuccess
 
-		// Fail the extension status and handler invocation only when deployment failure is enabled and the command has a non-zero failure exit code.
+		// Fail the extension status only when deployment failure is enabled and the command has a non-zero failure exit code.
 		cfg, err := readHandlerSettings(hEnv.HandlerEnvironment.ConfigFolder, extensionName, seqNum, ctx)
 		if err == nil && cfg.PublicSettings.TreatFailureAsDeploymentFailure && cmd.FailExitCode != 0 {
 			statusToReport = types.StatusError
@@ -130,10 +130,7 @@ func processHandlerCommandWithDetails(ctx *log.Context, cmd types.Cmd, hEnv type
 		if reportErr := instanceview.ReportInstanceView(ctx, hEnv, metadata, statusToReport, cmd, &instView); reportErr != nil {
 			ctx.Log("event", "failed to report execution error", "error", reportErr)
 		}
-		if statusToReport == types.StatusError {
-			return errors.Wrapf(cmdInvokeError, "command execution failed")
-		}
-		return nil
+		return errors.Wrapf(err, "command execution failed")
 	} else { // No error. Succeeded
 		instView.ExecutionMessage = "Execution completed"
 		instView.ExecutionState = types.Succeeded

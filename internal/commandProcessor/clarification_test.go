@@ -32,11 +32,12 @@ func TestCommandFailurePreservesClarificationAndDeploymentBehavior(t *testing.T)
 			t.Run(strconv.FormatBool(treatAsFailure)+strconv.FormatBool(settingsFailure), func(t *testing.T) {
 				mockProcessor(t)
 				cause := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("original script error"))
+				settingsErr := errorutil.EnsureClarification(errorutil.InvalidSettingsJson, errors.New("settings read failed"))
 				readHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
 					cfg := handlersettings.HandlerSettings{}
 					cfg.PublicSettings.TreatFailureAsDeploymentFailure = treatAsFailure
 					if settingsFailure {
-						return cfg, errors.New("settings read failed")
+						return cfg, settingsErr
 					}
 					return cfg, nil
 				}
@@ -59,8 +60,10 @@ func TestCommandFailurePreservesClarificationAndDeploymentBehavior(t *testing.T)
 				expected := types.StatusSuccess
 				if treatAsFailure && !settingsFailure {
 					expected = types.StatusError
-					require.ErrorIs(t, err, cause)
-					requireProcessorCode(t, err, errorutil.CommandExecution_failureExitCode)
+				}
+				if settingsFailure {
+					require.ErrorIs(t, err, settingsErr)
+					requireProcessorCode(t, err, errorutil.InvalidSettingsJson)
 				} else {
 					require.NoError(t, err)
 				}
@@ -108,6 +111,8 @@ func TestProcessorClarificationErrors(t *testing.T) {
 					},
 				})
 				err = ProcessHandlerCommandWithDetails(ctx, cmd, types.HandlerEnvironment{}, "command", 1, "download", "/mock")
+				require.NoError(t, err, "command failure must remain in the status report, not the handler return")
+				return
 			case errorutil.InvalidSequenceEnvironmentVariable:
 				t.Setenv(constants.ConfigSequenceNumberEnvName, "invalid")
 				_, err = getSeqNum(&ctx, types.HandlerEnvironment{}, "command")
@@ -132,7 +137,7 @@ func TestProcessorClarificationErrors(t *testing.T) {
 	}
 }
 
-func TestReportingFailureDoesNotReplaceCommandError(t *testing.T) {
+func TestReportingFailureDoesNotChangeInvocationFailureReturn(t *testing.T) {
 	mockProcessor(t)
 	cause := errorutil.EnsureClarification(errorutil.CommandExecution_failureExitCode, errors.New("script failed"))
 	readHandlerSettings = func(string, string, int, *log.Context) (handlersettings.HandlerSettings, error) {
@@ -157,10 +162,7 @@ func TestReportingFailureDoesNotReplaceCommandError(t *testing.T) {
 		},
 	})
 	err := ProcessHandlerCommandWithDetails(log.NewContext(log.NewNopLogger()), cmd, types.HandlerEnvironment{}, "command", 1, "download", "/mock")
-	require.ErrorIs(t, err, cause)
-	code, ok := errorutil.FindClarification(err)
-	require.True(t, ok)
-	require.Equal(t, errorutil.CommandExecution_failureExitCode, code)
+	require.NoError(t, err)
 }
 
 func requireProcessorCode(t *testing.T, err error, want int) {

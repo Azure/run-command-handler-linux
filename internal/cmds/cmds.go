@@ -662,7 +662,7 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersi
 				seqNo := parts[1]
 				seqNoAsInt, parseErr := strconv.Atoi(seqNo)
 				if parseErr != nil {
-					return errorutil.EnsureClarification(errorutil.InvalidStatusFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in status filename"))
+					ctx.Log("message", "invalid sequence number in status filename", "filename", statusFileName, "error", errorutil.EnsureClarification(errorutil.InvalidStatusFileSequenceNumber, parseErr), "clarificationCode", errorutil.InvalidStatusFileSequenceNumber)
 				}
 				mrSeqFileName := extensionName + constants.MrSeqFileExtension
 				mrSeqFilePath := filepath.Join(updateToVersionDirectory, mrSeqFileName)
@@ -701,7 +701,7 @@ func rehydrateMrSeqFilesForProblematicUpgrades(ctx *log.Context, updateFromVersi
 
 					currentSeqNo, parseErr := strconv.Atoi(string(contents))
 					if parseErr != nil {
-						return errorutil.EnsureClarification(errorutil.InvalidMrseqFileSequenceNumber, errors.Wrap(parseErr, "invalid sequence number in mrseq file"))
+						ctx.Log("message", "invalid sequence number in mrseq file", "filename", mrSeqFilePath, "error", errorutil.EnsureClarification(errorutil.InvalidMrseqFileSequenceNumber, parseErr), "clarificationCode", errorutil.InvalidMrseqFileSequenceNumber)
 					}
 					if seqNoAsInt > currentSeqNo {
 						err = commandWriteFile(mrSeqFilePath, []byte(seqNo), os.FileMode(0600))
@@ -1032,7 +1032,7 @@ func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerset
 		scenario = "embedded-script"
 		// Save the script to a file
 		scriptFilePath = filepath.Join(dir, "script.sh")
-		err := files.SaveScriptFile(scriptFilePath, cfg.Script())
+		err := files.SaveScriptFile(ctx, scriptFilePath, cfg.Script())
 		if err != nil {
 			ctx.Log("event", "failed to save script to file", "error", err, "file", scriptFilePath)
 			return errors.Wrap(err, "failed to save script to file"), constants.ExitCode_SaveScriptFailed
